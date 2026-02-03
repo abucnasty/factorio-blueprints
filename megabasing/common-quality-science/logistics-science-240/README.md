@@ -1,10 +1,10 @@
 ---
 title: Logistics Science (240/s)
-authors: [Syvkal]
-version: "1.0"
-posted: 2025-09-07
-video: https://www.youtube.com/watch?v=2ENY4AjjdqE
-factoriobin: https://factoriobin.com/post/gyv13q
+authors: [Syvkal, abucnasty]
+version: "1.2"
+posted: 2026-02-03
+video: https://youtu.be/hhn6a_TgCOQ
+factoriobin: https://factoriobin.com/post/fn0xtt
 ---
 
-- designed by Syvkal
+- designed by Syvkal, modified by abucnasty, clocks by abucnasty
