@@ -43,3 +43,6 @@ test/*.js
 dist
 
 *.csv
+# Wrangler local secrets and state
+.dev.vars
+.wrangler

@@ -1,12 +1,12 @@
-name = "factorio-lfs"
+name = "factorio-blueprints-lfs"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 
-# R2 bucket binding — create the bucket first with:
-#   wrangler r2 bucket create factorio-benchmarks-lfs
+# R2 bucket binding. The bucket already exists in the account; it is not
+# created by this config or by CI.
 [[r2_buckets]]
 binding = "R2_BUCKET"
-bucket_name = "factorio-benchmarks-lfs"
+bucket_name = "factorio-blueprints-lfs"
 
 # Secrets (never commit these — set them once via CLI):
 #   wrangler secret put LFS_UPLOAD_TOKEN
