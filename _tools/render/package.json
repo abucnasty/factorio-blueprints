@@ -1,0 +1,25 @@
+{
+  "name": "factorio-blueprints-render",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Render in-game screenshots of Factorio blueprints by driving the real game",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "render": "bin/render.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "render": "node bin/render.js",
+    "test": "node --test \"test/*.test.js\"",
+    "check:lua": "node test/check-lua.js"
+  },
+  "dependencies": {
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "luaparse": "^0.3.1"
+  }
+}

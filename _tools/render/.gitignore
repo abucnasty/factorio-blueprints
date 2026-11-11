@@ -1,0 +1,3 @@
+node_modules/
+# work directories kept with --keep-work or after a failure, when placed here with --work-dir
+.work/
