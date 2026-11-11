@@ -1,0 +1,3 @@
+-- An empty scenario for the render launcher to start a server on (--start-server-load-scenario
+-- blueprint-vault-render/stage), so no prepared save is needed. Blueprints are built on surfaces of their own by
+-- the mod's control.lua; the map the scenario generates is only where the joining client's character stands.

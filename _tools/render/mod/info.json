@@ -1,0 +1,11 @@
+{
+    "name": "blueprint-vault-render",
+    "version": "0.1.0",
+    "title": "Blueprint Vault Render",
+    "author": "abucnasty",
+    "contact": "https://github.com/abucnasty/factorio-blueprints",
+    "homepage": "https://github.com/abucnasty/factorio-blueprints/tree/main/_tools/render",
+    "description": "Tool mod, not published to the mod portal. Builds blueprints on clean lab-tile surfaces so the render launcher (_tools/render) can take in-game screenshots of them. Adapted from clock-generator-recorder (abucnasty/clock-generator, MIT).",
+    "factorio_version": "2.1",
+    "dependencies": ["base >= 2.1.0", "? elevated-rails", "? quality", "? space-age"]
+}
