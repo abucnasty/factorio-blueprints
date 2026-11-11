@@ -1,0 +1,14 @@
+{
+  "autoPullOnBoot": true,
+  "autoPullInterval": 10,
+  "autoSaveInterval": 2,
+  "autoBackupAfterFileChange": true,
+  "differentIntervalCommitAndPush": false,
+  "pullBeforePush": true,
+  "disablePush": false,
+  "syncMethod": "merge",
+  "commitMessage": "update vault ({{numFiles}} files)",
+  "autoCommitMessage": "update vault ({{numFiles}} files)",
+  "listChangedFilesInMessageBody": true,
+  "disablePopupsForNoChanges": true
+}
