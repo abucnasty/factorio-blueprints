@@ -7,8 +7,8 @@
   "pullBeforePush": true,
   "disablePush": false,
   "syncMethod": "merge",
-  "commitMessage": "update vault ({{numFiles}} files)",
-  "autoCommitMessage": "update vault ({{numFiles}} files)",
+  "commitMessage": "sync edits from obsidian",
+  "autoCommitMessage": "sync edits from obsidian",
   "listChangedFilesInMessageBody": true,
   "disablePopupsForNoChanges": true
 }
