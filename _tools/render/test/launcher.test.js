@@ -68,6 +68,15 @@ test("a book renders one image per blueprint, numbered in book order, and the ga
     assert.ok(shots.every(shot => shot.show_entity_info === true && shot.show_gui === false && shot.surface.startsWith("blueprint-render-")));
 });
 
+test("without --work-dir, a temporary work directory is used and removed after success", async t => {
+    const env = await setup(t);
+    const input = path.join(env.dir, "bp.txt");
+    await fs.writeFile(input, encodeBlueprintString({ blueprint: row("x", 2) }));
+    const report = await render({ ...options(env), input, workDir: undefined }, () => {});
+    assert.deepEqual(await fs.readdir(env.out), ["0.jpg"]);
+    await assert.rejects(fs.access(report.work_dir));
+});
+
 test("a large build is captured as a grid and stitched", async t => {
     const env = await setup(t);
     const input = path.join(env.dir, "big.txt");
@@ -92,6 +101,14 @@ test("a server that dies at start fails the run with its output, and leaves noth
     await assert.rejects(render({ ...options(env), input }, () => {}), /server exited \(code 1[\s\S]*fake server failed to start/);
     await assertNothingRunning(env.work);
     await assert.rejects(fs.access(env.out));
+});
+
+test("an executable that cannot be started fails clearly", async t => {
+    const env = await setup(t);
+    const input = path.join(env.dir, "bp.txt");
+    await fs.writeFile(input, encodeBlueprintString({ blueprint: row("x", 1) }));
+    await fs.chmod(path.join(env.root, "bin", "x64", "factorio"), 0o644);
+    await assert.rejects(render({ ...options(env), input }, () => {}), /Could not start Factorio: .*EACCES/);
 });
 
 test("a server that never opens RCON times out and is killed", async t => {

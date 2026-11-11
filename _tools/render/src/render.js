@@ -138,10 +138,11 @@ export async function render(options, log) {
         succeeded = true;
     } finally {
         await session?.close();
-        if (succeeded && !options.keepWork && !chosen) await fsp.rm(workDir, { recursive: true, force: true });
-        else log(`Work directory kept: ${workDir} (logs: server-output.log, client-output.log, server/factorio-current.log, client/factorio-current.log)`);
+        if (!succeeded) log(`Work directory kept: ${workDir} (logs: server-output.log, client-output.log, server/factorio-current.log, client/factorio-current.log)`);
     }
     report.removed = await publishImages(options.out, images);
     for (const image of report.images) log(`Wrote ${path.join(options.out, `${image.number}.jpg`)} (${image.width}×${image.height})`);
+    if (options.keepWork || chosen) log(`Work directory kept: ${workDir}`);
+    else await fsp.rm(workDir, { recursive: true, force: true });
     return report;
 }

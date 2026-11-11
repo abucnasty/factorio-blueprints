@@ -6,6 +6,7 @@
 // recording, warm-up, the sidecar mod, the recording cache. Changed: the server starts the mod's scenario instead of
 // a prepared save, and the mod directory holds only this tool's mod, the game's own mods and mods the user opts in to.
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import dgram from "node:dgram";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -37,10 +38,15 @@ const running = new Set();
 function track(child) {
     running.add(child);
     child.once("exit", () => running.delete(child));
+    // a failed spawn (no such file, not executable) emits "error" and may never emit "exit"
+    child.on("error", error => {
+        child.startError ??= error;
+        running.delete(child);
+    });
     return child;
 }
 
-const isRunning = child => child.exitCode === null && child.signalCode === null;
+const isRunning = child => !child.startError && child.exitCode === null && child.signalCode === null;
 
 /** Kill every Factorio process this launcher started, at once. Safe to call from a signal or exit handler. */
 export function killAll() {
@@ -53,7 +59,7 @@ export function killAll() {
 
 /** Stop one process: politely first, then by force; resolves when it has exited */
 async function stop(child, graceMs) {
-    if (!isRunning(child)) return;
+    if (!isRunning(child) || child.pid === undefined) return;
     const exited = new Promise(resolve => child.once("exit", resolve));
     try { child.kill(graceMs > 0 ? "SIGTERM" : "SIGKILL"); } catch { /* already gone */ }
     if (graceMs > 0 && await Promise.race([exited.then(() => true), sleep(graceMs).then(() => false)]) === false) {
@@ -280,7 +286,7 @@ export class Session {
         const dirs = await prepareWorkDir(options);
         const deadline = Date.now() + options.timeoutSeconds * 1000;
         const rconPort = await freeTcpPort();
-        const rconPassword = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+        const rconPassword = randomBytes(18).toString("base64url");
         const gamePort = await freeUdpPort();
         const serverLog = path.join(workDir, "server-output.log");
         const clientLog = path.join(workDir, "client-output.log");
@@ -315,6 +321,9 @@ export class Session {
 
     /** Throws with the end of the logs once either game process is gone */
     assertRunning() {
+        for (const child of [this.server, this.client]) {
+            if (child?.startError) throw new Error(`Could not start Factorio: ${child.startError.message}`);
+        }
         if (!isRunning(this.server)) {
             throw new Error(`The Factorio server exited (code ${this.server.exitCode}, signal ${this.server.signalCode}). End of its output (${this.serverLog}):\n${tail(this.serverLog)}`);
         }
