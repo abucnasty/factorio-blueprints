@@ -91,7 +91,11 @@ bytes. There is exactly one implementation of the writer, in
 
 - One branch per unit of work, named for what it does (`vault-skeleton`,
   `in-game-render`). No generated or random names.
-- Changes reach `main` only through a pull request the owner merges.
+- Tooling changes (anything under `_tools/`, `.github/`, `.obsidian/` or the
+  LFS config) reach `main` only through a pull request the owner merges.
+- Blueprint and notes edits made in the vault are committed and pushed to
+  `main` directly by the vault's sync. `main` therefore has no branch
+  protection that blocks direct pushes.
 - Commit messages say what changed and why, in lowercase imperative.
 
 ## Secrets
