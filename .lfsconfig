@@ -1,2 +1,4 @@
 [lfs]
 	url = https://factorio-blueprints-lfs.abucnasty.workers.dev
+	; the worker has no lock api; without this every push prints a warning
+	locksverify = false
