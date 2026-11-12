@@ -59,3 +59,36 @@ export {
   parentFolder,
   selfAndAncestors,
 } from "./blueprint-folder.ts";
+
+export { bookTree, displayLabel, findNode, flattenTree } from "./book-tree.ts";
+export type { BookNode } from "./book-tree.ts";
+
+export { coverUrl, DEFAULT_LINK_BASE, encodePath, renderUrl, stringUrl } from "./links.ts";
+
+export {
+  applyGeneratedBlock,
+  BLOCK_END,
+  BLOCK_START,
+  escapeInline,
+  generatedBlockLines,
+} from "./generated-block.ts";
+export type { BlockInput, BlockUpdate } from "./generated-block.ts";
+
+export { sha256Hex } from "./sha256.ts";
+export {
+  blueprintHash,
+  comparePaths,
+  parseRenderManifest,
+  RENDER_MANIFEST,
+  renderState,
+  renderStateLabel,
+  renderTargets,
+  writeRenderManifest,
+} from "./render-state.ts";
+export type {
+  EntryRenderState,
+  FolderRenderState,
+  RenderManifest,
+  RenderManifestEntry,
+  RenderTarget,
+} from "./render-state.ts";
