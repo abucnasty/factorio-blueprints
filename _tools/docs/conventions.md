@@ -73,7 +73,8 @@ previous_paths: [old/folder/path]   # optional, old folder paths, for link redir
 ```
 
 Generated keys, written by the plugin from `blueprint.json` and
-overwritten each time (do not edit them; `index.json` computes its own):
+overwritten each time (do not edit them; `index.json` has the same numbers
+under `blueprint.counts` and `blueprint.factorioVersion`):
 
 ```yaml
 entities: 1234                # blueprints and books, even when 0
