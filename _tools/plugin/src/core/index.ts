@@ -68,10 +68,11 @@ export { coverUrl, DEFAULT_LINK_BASE, encodePath, renderUrl, stringUrl } from ".
 export {
   applyGeneratedBlock,
   escapeInline,
+  expandedBlockLines,
   findGeneratedBlock,
   generatedBlockLines,
 } from "./generated-block.ts";
-export type { BlockInput, BlockUpdate } from "./generated-block.ts";
+export type { BlockInput, BlockUpdate, ExpandedBlockInput, ExpandedBlockNode } from "./generated-block.ts";
 
 export { sha256Hex } from "./sha256.ts";
 export {
@@ -93,5 +94,3 @@ export type {
 export { applyStatsToNote, blueprintStats, STATS_KEYS } from "./stats.ts";
 export type { BlueprintStats } from "./stats.ts";
 
-export { bookBody, planBookImport, similarity } from "./book-split.ts";
-export type { BookPlan, ExistingFolder, PlanEntry, PlanStatus } from "./book-split.ts";

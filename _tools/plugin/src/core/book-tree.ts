@@ -20,8 +20,6 @@ export interface BookNode {
   label: string;
   /** Entries of a book, in slot order; empty for anything else. */
   children: BookNode[];
-  /** The entry's own value without its index, as a blueprint.json would hold it: { "blueprint": … }. */
-  value: Record<string, unknown>;
 }
 
 const KIND_KEYS: [string, BlueprintKind][] = [
@@ -80,7 +78,6 @@ function node(value: unknown, slots: number[]): BookNode | undefined {
       kind,
       label,
       children: [],
-      value: { [key]: body },
     };
     const entries = body["blueprints"];
     if (kind === "blueprint-book" && Array.isArray(entries)) {

@@ -43,15 +43,68 @@ export function generatedBlockLines(input: BlockInput): string[] | undefined {
   return inner.length === 0 ? undefined : inner;
 }
 
+/** An entry of an expanded book, for its notes' contents list. */
+export interface ExpandedBlockNode {
+  /** Slot path from the root book, e.g. [0, 1]. */
+  slots: number[];
+  kind: BookNode["kind"];
+  /** Text shown: the plain label, or e.g. "Blueprint (slot 3)". */
+  title: string;
+  /** Path of the entry's folder relative to the note's folder, e.g. "0-any/1-480". */
+  relativeFolder: string;
+  children: ExpandedBlockNode[];
+}
+
+export interface ExpandedBlockInput {
+  base: string;
+  /** Vault path of the root book: entries are addressed from it. */
+  root: string;
+  title: string;
+  /** Cover image URL, or undefined without a render. */
+  cover: string | undefined;
+  /** The entries under the note's folder (empty for a leaf). */
+  nodes: ExpandedBlockNode[];
+}
+
+/**
+ * The block of a note inside an expanded book (the book's own note, or a
+ * leaf's): cover line, then for a book a list linking each entry's note by
+ * name and its string.
+ */
+export function expandedBlockLines(input: ExpandedBlockInput): string[] | undefined {
+  const inner: string[] = [];
+  if (input.cover !== undefined) inner.push(`![${escapeInline(input.title)}](${input.cover})`);
+  if (input.nodes.length > 0) {
+    if (inner.length > 0) inner.push("");
+    const visit = (n: ExpandedBlockNode, depth: number) => {
+      const note = "./" + [...n.relativeFolder.split("/").filter((x) => x !== ""), "README.md"].map(encodeLinkSegment).join("/");
+      const kind = n.kind === "blueprint-book" ? "book" : "string";
+      const url = stringUrl(input.base, input.root, n.slots);
+      inner.push(`${"  ".repeat(depth)}- [${escapeInline(n.title)}](${note}) ([${kind}](${url}))`);
+      for (const c of n.children) visit(c, depth + 1);
+    };
+    for (const n of input.nodes) visit(n, 0);
+  }
+  return inner.length === 0 ? undefined : inner;
+}
+
+/** A relative link segment: percent-encoded where Markdown or URLs need it (spaces, parentheses, …). */
+function encodeLinkSegment(segment: string): string {
+  return encodeURIComponent(segment).replace(/\(/g, "%28").replace(/\)/g, "%29");
+}
+
 export type BlockUpdate =
   | { status: "unchanged" | "inserted" | "replaced" | "removed"; text: string }
   | { status: "invalid"; text: string; reason: string };
 
-/** A line that is exactly one image of an http(s) URL ending in /cover.jpg. */
-const COVER_LINE = /^!\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\/cover\.jpg\)[ \t]*$/;
-/** A list item ending in a link to an http(s) URL ending in .txt: `- [label](url)` or `- label ([book](url))`. */
+/** A line that is exactly one image of an http(s) URL ending in /cover.jpg or /renders/<slot path>.jpg. */
+const COVER_LINE = /^!\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\/(?:cover|renders\/\d+(?:\/\d+)*)\.jpg\)[ \t]*$/;
+/**
+ * A list item ending in a link to an http(s) URL ending in .txt: exactly
+ * `- [label](url)`, or anything followed by ` ([book](url))` or ` ([string](url))`.
+ */
 const LIST_ITEM =
-  /^[ \t]*- (?:\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\.txt\)|.*\(\[book\]\(https?:\/\/[^\s()]+\.txt\)\))[ \t]*$/;
+  /^[ \t]*- (?:\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\.txt\)|.*\(\[(?:book|string)\]\(https?:\/\/[^\s()]+\.txt\)\))[ \t]*$/;
 
 interface Line {
   /** Text without its line ending. */
