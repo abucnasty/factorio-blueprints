@@ -1,0 +1,24 @@
+{
+  "entries": {
+    "0": {
+      "file": "0.jpg",
+      "height": 614,
+      "sha256": "99d9d8d30f72a782fd94b3dbd33c1e4cbd14b8a2e5b1c2c0c8679b8005517b58",
+      "width": 4094
+    },
+    "1": {
+      "file": "1.jpg",
+      "height": 614,
+      "sha256": "91f5469cebde4662e0be35356b256bf4697824a1e5d89487014a87d676e970b1",
+      "width": 4094
+    },
+    "2": {
+      "file": "2.jpg",
+      "height": 614,
+      "sha256": "f3d783cfa4dbf2c09ba2eb0f26a9db4475c96ec844c1243789ea17fd044d4867",
+      "width": 4094
+    }
+  },
+  "rendered_at": "2026-11-12T06:12:11.258Z",
+  "schema": 1
+}
