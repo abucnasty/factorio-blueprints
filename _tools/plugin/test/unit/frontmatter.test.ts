@@ -53,6 +53,12 @@ describe("readNotesMeta", () => {
     const meta = readNotesMeta(DEFAULT_NOTES_TEMPLATE);
     assert.deepStrictEqual(meta, { authors: [], version: "1", deprecated: false, previous_paths: [] });
     assert.ok(!("title" in meta) && !("posted" in meta) && !("video" in meta));
+    assert.deepStrictEqual(readNotesMeta('---\ntitle: X\nvideo:\nfactoriobin: ""\ndeprecated:\nprevious_paths:\n---\n'), {
+      title: "X",
+      authors: [],
+      deprecated: false,
+      previous_paths: [],
+    });
     assert.equal(readNotesMeta('---\ntitle: ""\nversion: 4\nauthors: solo\n---\n').version, "4");
     assert.deepStrictEqual(readNotesMeta("---\nauthors: solo\n---\n").authors, ["solo"]);
   });
@@ -89,7 +95,7 @@ describe("updateFrontmatter", () => {
 
   test("fills empty template fields", () => {
     const out = updateFrontmatter(DEFAULT_NOTES_TEMPLATE, { title: "Mall", posted: "2026-11-12", authors: ["a", "b c"] });
-    assert.ok(out.startsWith('---\ntitle: Mall\nauthors: [a, b c]\nversion: "1"\nposted: 2026-11-12\nvideo:\n'));
+    assert.equal(out, '---\ntitle: Mall\nauthors: [a, b c]\nversion: "1"\nposted: 2026-11-12\n---\n');
     assert.equal(readNotesMeta(out).posted, "2026-11-12");
   });
 
@@ -128,6 +134,12 @@ test("bumpVersion", () => {
   assert.equal(bumpVersion("beta"), undefined);
 });
 
+test("the template has the four keys and an empty body", () => {
+  assert.equal(DEFAULT_NOTES_TEMPLATE, '---\ntitle:\nauthors: []\nversion: "1"\nposted:\n---\n');
+  assert.deepStrictEqual(Object.keys(readFrontmatter(DEFAULT_NOTES_TEMPLATE)), ["title", "authors", "version", "posted"]);
+  assert.equal(splitFrontmatter(DEFAULT_NOTES_TEMPLATE).body, "");
+});
+
 test("built-in template matches _tools/templates/blueprint-notes.md", () => {
   const repoTemplate = readFileSync(join(import.meta.dirname, "..", "..", "..", "templates", "blueprint-notes.md"), "utf8");
   assert.equal(DEFAULT_NOTES_TEMPLATE, repoTemplate);
@@ -143,5 +155,5 @@ test("fillNotesTemplate", () => {
     deprecated: false,
     previous_paths: [],
   });
-  assert.ok(out.endsWith("- v1: first version.\n"));
+  assert.equal(out, '---\ntitle: Mall\nauthors: []\nversion: "1"\nposted: 2026-11-12\n---\n');
 });
