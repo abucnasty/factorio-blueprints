@@ -4,9 +4,10 @@ Turns a blueprint (or every blueprint in a book) into a JPEG made by the real ga
 Factorio takes a screenshot with alt-mode on, and the PNG is converted to JPEG. One image per blueprint:
 `<out>/0.jpg`, `<out>/1.jpg`, …
 
-**Status: partly verified in the real game.** A first run on Linux with Factorio 2.1 (Space Age enabled) rendered
-the two ordinary smoke-test blueprints; the space platform one built nothing, which led to the platform strategy
-below (not yet run). See [what is verified and what is not](#verified-and-unverified) and the
+**Status: ordinary blueprints verified in the real game; space platform blueprints not yet.** Two runs on Linux with
+Factorio 2.1 (Space Age enabled) rendered the ordinary smoke-test blueprints correctly (research, backdrop, icons).
+Platform blueprints built nothing in both runs; the third version below lays their tiles for real and comes with a
+diagnosis matrix that shows the game's own verdict if it still fails. See [what is verified and what is not](#verified-and-unverified) and the
 [next test on your machine](#test-this-on-your-machine).
 
 The process control, RCON client, screenshot call and JPEG settings are ported from the game harness of
@@ -76,7 +77,7 @@ The config file is JSON at `~/.config/factorio-blueprints/render.json` (Linux, o
 (macOS), or wherever `--config` / `FACTORIO_RENDER_CONFIG` points. Example:
 `{ "factorio": "/home/me/factorio" }`.
 
-Other options: `--save <file>` (start from a copy of a save instead of the scenario), `--work-dir <empty dir>`,
+Other options: `--save <file>` (start from a copy of a save instead of the scenario), `--work-dir <empty dir>`, `--diagnose` (run the placement experiment matrix for every blueprint),
 `--keep-work`, `--json` (the run's report on stdout; progress always goes to stderr).
 
 Exit status: `0` every blueprint has an image; `2` at least one blueprint got none (empty, or nothing of it could
@@ -116,9 +117,30 @@ prototype but by no planet (thrusters, asteroid collectors; modded ones too), or
 over a tile with the `empty_space` collision layer (platform foundation: its item's `place_as_tile` condition is
 inverted on that layer). The log prints which rule matched. Every attempt is logged and reported (`attempts` in
 `--json`) with its counts, problems and diagnostics, and the image's `strategy` says which one made it. When
-`build_blueprint` places no ghosts at all, the attempt says so explicitly, naming the surface kind and any underlay.
-`defines.build_mode.superforced` is not tried: it only differs from `forced` in clearing obstructions, and a fresh
-surface has none, so it could not explain or fix a refusal.
+`build_blueprint` places no ghosts at all, the attempt says so explicitly, naming the surface kind and how many of
+its tiles were laid. `superforced` is not used for rendering (it only differs from `forced` in clearing
+obstructions, and a fresh surface has none); the diagnosis matrix tries it, and `normal`, as experiments.
+
+**Diagnosis matrix.** Whenever an attempt gets zero ghosts for a blueprint with entities, and for every blueprint
+with `--diagnose`, the mod runs a fixed set of experiments on scratch surfaces (a lab surface and a paused scratch
+platform, removed afterwards) and logs one line each: `[diagnose] <what> | <where>: N entity ghosts, M tile ghosts`.
+Every experiment is wrapped, so an error in one is printed and the rest still run.
+
+- *What*: the full blueprint; tiles only; entities only; the full blueprint without its hub (if it has one).
+- *Where*: plain lab tiles; lab with `empty-space` laid under the spot; lab with the blueprint's foundation tile laid
+  for real under the spot; a platform far from its hub; a platform far from its hub with real foundation; a platform
+  at its hub; a platform at its hub with real foundation.
+- Build modes `normal` and `superforced` for the full blueprint on a platform with real foundation.
+- Each entity kind alone (no tiles, up to 30 kinds) on real foundation, on the lab and on the platform.
+- For each entity kind, the game's own verdict from `LuaSurface::can_place_entity` on real foundation, on the lab and
+  on the platform: as a blueprint ghost (`entity-ghost` with `build_check_type.blueprint_ghost`, `forced`) and as an
+  entity (`build_check_type.script`).
+
+How to read it: tile ghosts only "with empty space under" means foundation ghosts need empty space; entity ghosts only
+"with real foundation" means entity ghosts need real tiles; zero everywhere for "full" but not for "entities only" or
+single kinds points at the tiles or one entity kind refusing the whole blueprint; a difference between "far" and "at
+hub" means placement must touch the existing platform; `can_place_entity` saying yes while the build gives zero ghosts
+means `build_blueprint` itself refuses, not the placement rules.
 
 **Ordinary stage.** A new surface per blueprint (`game.create_surface`) with lab tiles
 (`generate_with_lab_tiles`: no terrain, resources, decoratives or enemies), `always_day`, no clouds and
@@ -137,28 +159,40 @@ background (no backdrop is laid there). Asteroids and asteroid chunks are remove
 before every screenshot; nothing on the platform is powered, so collectors and turrets do nothing. Afterwards the
 platform is scheduled for deletion with `LuaSpacePlatform::destroy`, which removes its surface.
 
-- A blueprint **with a hub** is lined up with the platform's own hub, as pasting a ship onto a new platform does: a
-  probe build far from the hub shows where the blueprint lands, the build position is shifted so the blueprint's hub
-  falls on the platform's hub, and the result is checked. The platform's hub stands in for the blueprint's (it is not
-  listed as missing) and is part of the picture.
-- A blueprint **without a hub** (a module) is built 64 tiles clear of the hub and its starter foundation, so they
-  are outside the frame. The starter hub is not removed: a platform whose hub dies is deleted, so removing it is not
-  safe; the cost is only that the platform exists for a few seconds out of frame.
+**How a platform blueprint is placed** (also used on the ordinary stage for blueprints with tiles that need
+something special under them, such as foundation or landfill): its tiles are laid for real with `set_tiles` at a
+chosen offset, so nothing depends on tile-ghost rules. The blueprint is then built (`forced`) at a first guess, the
+offset at which its entity ghosts actually landed is read from the ghosts, and if it differs the ghosts are removed
+and the build is repeated, moved by the difference (at most 4 builds). The game's ghosts decide where things land;
+no placement rule of `build_blueprint` is assumed, and no far-away probe build is needed.
+
+- A blueprint **with a hub**: the offset puts the blueprint's hub on the platform's hub, as pasting a ship onto a new
+  platform does. The platform's hub stands in for the blueprint's (not listed as missing) and is in the picture;
+  diagnostics say whether the hub lined up.
+- A blueprint **without a hub** (a module): the offset puts it 64 tiles clear of the hub and its starter foundation.
+  If the game then refuses every entity, a 1-tile strip of real foundation is laid from the blueprint to the starter
+  foundation, the build is retried, and the strip is removed again before the screenshot (diagnostics show
+  `joined_to_starter`). The starter hub is never removed: a platform whose hub dies is deleted.
 
 All of this happens per blueprint; any error inside one attempt is caught in the game and reported, and the next
 strategy or blueprint carries on. Screenshots on both stages are taken at `daytime = 0` (noon) with `hide_clouds`
 and `hide_fog` (the latter also hides space dust in front of a platform).
 
-**Placement.** The blueprint is built in `forced` mode. Tiles that cannot go on lab tiles get the tile they need
-laid under the whole area first: landfill gets the first tile of its item's `tile_condition` (water), platform
-foundation gets `empty-space` (any tile with the layer its inverted condition asks for). Tile ghosts are revived
-first, then entities, rolling stock last (after rails); modules and other item requests are inserted directly so
-alt-mode shows them. Underlay the blueprint does not cover is turned back into the checkerboard
-(`build_checkerboard`, one tile at a time) before the backdrop is laid. Mining drills get a resource they can mine
+**Placement.** The blueprint is built in `forced` mode. Ordinary blueprints (no tiles, or tiles such as concrete
+that go on lab tiles) are built as ghosts on the lab floor and revived; this path is verified. Blueprints with tiles
+that need something special under them (from their item's `place_as_tile` rule: landfill needs water, foundation
+needs empty space) are placed as described above, with their tiles laid for real. Tile ghosts are revived first,
+then entities, rolling stock last (after rails); modules and other item requests are inserted directly so alt-mode
+shows them. Mining drills get a resource they can mine
 under them (iron ore or crude oil first; ordinary stage only). Nothing aborts the run: per attempt, the report lists
 entities that could not be revived (`failed`), entities that never got a ghost (`missing`) and problems; the plain
 log prints all of them too, with the counts (`failed: none; missing: 1× thruster`) and a `diagnostics` line
-(surface kind, underlay, ghost count, backdrop, hub).
+(surface kind, method, tiles laid, builds, ghost count, backdrop, hub).
+
+**Run log and report.** Every run writes its full log (`render.log`, the same lines as the terminal) and its report
+(`report.json`, the same as `--json`) into the work directory. The work directory is kept whenever a blueprint got
+no image or the run failed (and with `--work-dir` or `--keep-work`), and the last lines of the output name both
+files, so a problem never needs a second run just to capture output.
 
 **Framing.** The frame is the built entities' bounding boxes (and placed tiles) plus 2 tiles of margin.
 1. Zoom to fit: the largest pixels-per-tile up to 48 (as in the proven harness) at which the frame fits one
@@ -203,8 +237,8 @@ and the hash-based skipping of up-to-date images (the render is an explicit comm
 
 ## Test this on your machine
 
-From a clone, on Linux with Factorio 2.1 installed. Replace `~/factorio` with your install folder (Steam:
-`~/.steam/steam/steamapps/common/Factorio`). Space Age must be enabled for the platform tests.
+From a clone, on Linux with Factorio 2.1 and Space Age. Replace `~/factorio` with your install folder (Steam:
+`~/.steam/steam/steamapps/common/Factorio`).
 
 ```bash
 git fetch origin && git checkout in-game-render && git pull
@@ -214,80 +248,69 @@ npm test                     # offline tests, under a minute; all should pass
 npm run check:lua            # Lua syntax and globals check
 rm -rf /tmp/render-test
 
-# 1. The smoke-test book: two ordinary blueprints, a planner, and a platform module without a hub
-node bin/render.js --factorio ~/factorio --input test/fixtures/smoke-book.json --out /tmp/render-test/smoke \
-  --work-dir /tmp/render-test/smoke-work --json > /tmp/render-test/smoke-report.json
+# 1. The smoke-test book: two ordinary blueprints (already right), a planner, a platform module without a hub
+node bin/render.js --factorio ~/factorio --input test/fixtures/smoke-book.json \
+  --out /tmp/render-test/smoke --work-dir /tmp/render-test/smoke-work --diagnose
 
 # 2. A tiny ship with its own hub, thruster, asteroid collector and chest
-node bin/render.js --factorio ~/factorio --input test/fixtures/platform-ship.json --out /tmp/render-test/ship \
-  --work-dir /tmp/render-test/ship-work --json > /tmp/render-test/ship-report.json
+node bin/render.js --factorio ~/factorio --input test/fixtures/platform-ship.json \
+  --out /tmp/render-test/ship --work-dir /tmp/render-test/ship-work --diagnose
+
+# 3. Your real ship: 1920SPS (Heisenberg MK3A), 2550 entities, 6991 foundation tiles
+node bin/render.js --factorio ~/factorio --input test/fixtures/heisenberg-ship.txt \
+  --out /tmp/render-test/heisenberg --work-dir /tmp/render-test/heisenberg-work --diagnose
 ```
 
-What should happen in each run: "Starting the Factorio server", "opening the game window", a window that loads
-for 1–3 minutes and joins, then `Researched all technologies (N); recipes still disabled: 0` (a small number is
-fine), then per blueprint a block like:
+`test/fixtures/heisenberg-ship.txt` is your public blueprint string from factoriobin post `akka5t`, unchanged.
+`--diagnose` adds the experiment matrix for every blueprint; it takes a little longer (for the Heisenberg ship
+perhaps a minute or two). Each run ends with `Run log: …/render.log` and `Report: …/report.json`.
 
-```
-Blueprint 2 "smoke 3 (Space Age): …" (2 entities, 100 tiles)
-  space platform blueprint: thruster can only be built on a space platform (surface conditions); …; trying platform, then ordinary
-  [platform] built 2 entities, 100 tiles; failed: none; missing: none
-  [platform] diagnostics: {"surface_kind":"space platform","ghosts":…}
-  [platform] capturing … px at 48.0 px/tile
-```
+What to look for:
 
-and the window closes by itself. Check:
+- `smoke/0.jpg`, `smoke/1.jpg`: as last time (your grid, no crossed-out recipe icons, no status icons).
+- `smoke/2.jpg`: the 10×10 foundation with thruster and chest on a space background, no hub in the picture; the log
+  says `[platform] built 2 entities, 100 tiles` and `"method":"real tiles, then entities landed on them"`. If
+  `joined_to_starter` appears in its diagnostics, the game wanted the module connected to the platform.
+- `ship/0.jpg` and `heisenberg/0.jpg`: the ship on a space background with the hub where the blueprint has it;
+  diagnostics `"hub":"lined up with the platform's hub"`; the `failed`/`missing` counts in the log should be
+  small (asteroid collectors are the most likely to be listed).
+- Exit status 0 (`echo $?`), or 2 with the reasons in the log.
 
-- `smoke/0.jpg`: two assemblers with gear and copper-cable recipe icons, **neither crossed out** (the red
-  crossed-out circle of the first run must be gone), inserters, a pole and a belt; no "no power" icons.
-- `smoke/0.jpg` and `smoke/1.jpg`: the floor is **your grid**: alternating `lab-dark-1` and black refined concrete
-  squares, one tile each, in the same pattern as the plain lab checkerboard of the first run (where the darker lab
-  square was, black concrete now is). Blueprint tiles (the refined concrete pad in `1.jpg`) sit on top.
-- `smoke/1.jpg`: as in the first run (drill on iron ore, burner inserter, chest, stone furnace, no "no fuel" icons).
-- `smoke/2.jpg` (new): the 10×10 foundation with the thruster and a chest **on a space background**, with no hub
-  or other foundation in the picture. The log says `[platform]`.
-- `ship/0.jpg`: the ship on a space background: its foundation, the hub where the blueprint has it, the thruster at
-  the bottom left, the asteroid collector at the bottom right edge, the chest top right. No asteroids. The log's
-  diagnostics should say `"hub":"lined up with the platform's hub"`. The asteroid collector may be listed as missing
-  or failed (its edge rule is the least certain part); say if so.
-- Exit status 0 for both (`echo $?` right after each command), or 2 with a reason in the log.
+**Send back**, for each of the three runs: `render.log` and `report.json` from its work folder
+(`/tmp/render-test/*-work/`), and the images. Only if a run failed outright, also `server-output.log`,
+`client-output.log`, `server/factorio-current.log` and `client/factorio-current.log` from the same folder.
+Clean up with `rm -rf /tmp/render-test`. Nothing else on the machine is written to.
 
-Then, if those look right, the real ones (save each string into a text file first):
-
-3. A medium blueprint, the Military Science (240/s) string from its factoriobin post, saved as `military.txt`:
-   `node bin/render.js --factorio ~/factorio --input military.txt --out /tmp/render-test/military --work-dir /tmp/render-test/military-work`
-4. A large book, `docs/blueprints/purple-science.txt` from factorio-benchmarks (133 KB):
-   `node bin/render.js --factorio ~/factorio --input purple-science.txt --out /tmp/render-test/purple --work-dir /tmp/render-test/purple-work --json > /tmp/render-test/purple-report.json`
-   (zoom-to-fit, and for builds wider than about 510 tiles the stitched grid: the log then says "in N screenshots").
-5. One of your real space platform ships from the catalog.
-
-**Send back** the terminal output (stderr) of every command, the `*-report.json` files, the images, and if a run
-failed, from its work folder: `server-output.log`, `client-output.log`, `server/factorio-current.log`,
-`client/factorio-current.log`. Clean up with `rm -rf /tmp/render-test`. Nothing else on the machine is written to.
+Later, once platforms work: a medium blueprint (the Military Science (240/s) string saved as `military.txt`) and the
+large purple-science book from factorio-benchmarks, as `--input` with their own `--out` and `--work-dir`.
 
 ## Verified and unverified
 
-**Verified in the real game** (Linux, Factorio 2.1, Space Age enabled; first run of the smoke book):
+**Verified in the real game** (Linux, Factorio 2.1, Space Age enabled; two runs of the smoke book):
 
 - the server starting on the mod's scenario (no save needed), RCON, the client joining, process shutdown;
 - blueprint strings sent in parts over RCON, `import_stack`, `build_blueprint` in forced mode, reviving ghosts,
   refined concrete tiles on a lab floor, iron ore placed under an electric mining drill;
 - screenshots of a surface the player is not on, the 120-tick wait for small builds, framing at 48 px/tile, PNG to
   JPEG;
-- the status-icon flags: no "no power" icons on assemblers and inserters, no "no fuel" icons on a burner inserter and
-  a stone furnace.
+- the status-icon flags (no "no power" or "no fuel" icons);
+- `research_all_technologies` plus `enable_all_recipes`: 254 technologies, 0 recipes disabled, no crossed-out recipe
+  icons;
+- the backdrop: `lab-dark-1` and `black-refined-concrete` in the game's own checker pattern;
+- inspection: the platform rule matched the ship for all four reasons; creating a space platform worked (the server
+  log names its surface); the plain log carries every count, problem and diagnostic.
+- What failed: `build_blueprint` placed no ghosts at all, not even tile ghosts, for platform blueprints: on a lab
+  surface with real foundation laid under it (run 1), on a real platform far from the hub, and on a lab surface with
+  `empty-space` under it (run 2).
 
 **Not yet run**, most likely to break first:
 
-1. **Space platforms**: `create_space_platform`, `apply_starter_pack`, `paused`, building foundation and entities
-   from ghosts on empty space, the hub alignment (probe build far away, then shift), the 64-tile clearance for
-   modules, asteroid clearing, `destroy` removing the surface, and whether the screenshot shows the space background.
-   If the platform strategy fails, the ordinary fallback now lays `empty-space` under platform foundation, which
-   is what the game's own Factoriopedia simulations do; the log shows both attempts.
-2. **Research and recipes**: `research_all_technologies` plus `enable_all_recipes` removing the crossed-out recipe
-   icon.
-3. **The backdrop**: replacing lab tiles with `black-refined-concrete` (a hidden tile) and keeping the pattern.
-4. **Underlays on ordinary surfaces** (water under landfill, empty space under foundation) and resetting the rest
-   with `build_checkerboard` one tile at a time; asteroid collectors and other entities with tile rules.
+1. **Platform blueprints with real tiles**: whether `build_blueprint` accepts entity ghosts on foundation laid with
+   `set_tiles` (on a platform, at the hub, and on a lab surface); the landing loop; hub alignment; joining a module
+   to the starter foundation. The diagnosis matrix runs automatically if it fails and should say why.
+2. **The diagnosis matrix itself** on a large ship (time taken; `set_blueprint_entities` on subsets).
+3. Asteroid clearing, `paused`, `destroy` removing the surface, and whether the screenshot shows the space background.
+4. Landfill blueprints on the ordinary stage (now real landfill tiles plus the landing loop).
 5. **Timing for large builds**: a client that lags behind ignores `force_render` (documented); 120 ticks have only
    been tried on small builds.
 6. **Grid stitching** and anti-aliasing above 2048 px are tested only on synthetic images.
@@ -301,6 +324,7 @@ failed, from its work folder: `server-output.log`, `client-output.log`, `server/
 completeness, JPEG conversion and stitching, mod directory isolation, arguments, and the launcher against
 `test/fake-factorio.js` (a stand-in executable that speaks RCON, writes PNGs into the client's `script-output` in
 two steps, and can crash, hang or stall) including checks that no process survives, the strategy order and
-fallback, the plain-log lines, research before building and the backdrop option. `npm run check:lua` parses the
+fallback, the plain-log lines, research before building, the backdrop option, the diagnosis trigger and the
+persisted `render.log` / `report.json`. `npm run check:lua` parses the
 mod as Lua 5.2 with luaparse and rejects unknown globals; it cannot check API calls, which were checked by hand
 against https://lua-api.factorio.com/latest/ (2.1.24) and the clock-generator harness.
