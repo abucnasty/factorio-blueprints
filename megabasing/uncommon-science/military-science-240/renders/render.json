@@ -1,0 +1,18 @@
+{
+  "entries": {
+    "0": {
+      "file": "0.jpg",
+      "height": 1848,
+      "sha256": "2410c37b1d3b871eed51f135f3dc406dcf9d3889bc8524ec6e6cb4a7ab62aedf",
+      "width": 4094
+    },
+    "1": {
+      "file": "1.jpg",
+      "height": 1510,
+      "sha256": "34a2710a76e1a8ff6490d953e999a8b3441a263c9e0d058753fd090b31c048f2",
+      "width": 4094
+    }
+  },
+  "rendered_at": "2026-11-12T06:21:46.701Z",
+  "schema": 1
+}
