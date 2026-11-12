@@ -10,6 +10,8 @@ blueprints: 70
 factorio_version: "2.0.55"
 ---
 
+![Pollution Control](https://blueprints.abucnasty.dev/general/miscellaneous/pollution-control/cover.jpg)
+
 - Tools ([book](https://blueprints.abucnasty.dev/general/miscellaneous/pollution-control/0.txt))
   - [Pipe Block](https://blueprints.abucnasty.dev/general/miscellaneous/pollution-control/0/0.txt)
   - [Wall Block](https://blueprints.abucnasty.dev/general/miscellaneous/pollution-control/0/1.txt)
