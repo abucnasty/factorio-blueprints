@@ -126,7 +126,20 @@ export interface ProcessResult {
   stderr: string;
   /** Why it could not start, when code is -1. */
   error?: string;
+  /**
+   * Set when the program was started outside a Flatpak sandbox (through
+   * flatpak-spawn --host): the app id, and why the host start failed, if it
+   * did.
+   */
+  sandbox?: { appId: string; failure?: SandboxFailure };
 }
+
+/**
+ * no-permission: the app may not start programs outside its sandbox;
+ * command-not-found: the host has no such program (not on its PATH);
+ * launcher-missing: flatpak-spawn is not in the sandbox.
+ */
+export type SandboxFailure = "no-permission" | "command-not-found" | "launcher-missing";
 
 export interface ProcessRunner {
   /** Run a program with an argument array (no shell). */

@@ -5,7 +5,7 @@ import { App, FileSystemAdapter, normalizePath, Notice, TFile } from "obsidian";
 import type { Host, NoticeKind, Settings } from "../commands/host.ts";
 import { commitAndSync, lfsAvailable } from "../git/commit-and-sync.ts";
 import { createGitRunner, defaultGitBinary, nodePathExists } from "../git/node-runner.ts";
-import { nodeProcessRunner } from "../process/node-process.ts";
+import { processRunnerForThisApp } from "../process/flatpak.ts";
 import { CreateBlueprintModal, PickModal, UpdateBlueprintModal } from "./modals.ts";
 import { GIT_BINARY_KEY } from "./settings.ts";
 
@@ -23,7 +23,7 @@ export function createObsidianHost(app: App, settings: Settings, openSettings?: 
     settings,
     today: () => localDate(new Date()),
     vaultPath: vaultDir,
-    processes: vaultDir === undefined ? undefined : nodeProcessRunner,
+    processes: vaultDir === undefined ? undefined : processRunnerForThisApp(),
     files: {
       exists: (path) => adapter.exists(p(path)),
       read: (path) => adapter.read(p(path)),
