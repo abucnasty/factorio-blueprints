@@ -1119,24 +1119,24 @@ var PAIR = /* @__PURE__ */ Symbol.for("yaml.pair");
 var SCALAR = /* @__PURE__ */ Symbol.for("yaml.scalar");
 var SEQ = /* @__PURE__ */ Symbol.for("yaml.seq");
 var NODE_TYPE = /* @__PURE__ */ Symbol.for("yaml.node.type");
-var isAlias = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === ALIAS;
-var isDocument = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === DOC;
-var isMap = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === MAP;
-var isPair = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === PAIR;
-var isScalar = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === SCALAR;
-var isSeq = (node) => !!node && typeof node === "object" && node[NODE_TYPE] === SEQ;
-function isCollection(node) {
-  if (node && typeof node === "object")
-    switch (node[NODE_TYPE]) {
+var isAlias = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === ALIAS;
+var isDocument = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === DOC;
+var isMap = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === MAP;
+var isPair = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === PAIR;
+var isScalar = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === SCALAR;
+var isSeq = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === SEQ;
+function isCollection(node2) {
+  if (node2 && typeof node2 === "object")
+    switch (node2[NODE_TYPE]) {
       case MAP:
       case SEQ:
         return true;
     }
   return false;
 }
-function isNode(node) {
-  if (node && typeof node === "object")
-    switch (node[NODE_TYPE]) {
+function isNode(node2) {
+  if (node2 && typeof node2 === "object")
+    switch (node2[NODE_TYPE]) {
       case ALIAS:
       case MAP:
       case SCALAR:
@@ -1145,104 +1145,104 @@ function isNode(node) {
     }
   return false;
 }
-var hasAnchor = (node) => (isScalar(node) || isCollection(node)) && !!node.anchor;
+var hasAnchor = (node2) => (isScalar(node2) || isCollection(node2)) && !!node2.anchor;
 
 // node_modules/yaml/browser/dist/visit.js
 var BREAK = /* @__PURE__ */ Symbol("break visit");
 var SKIP = /* @__PURE__ */ Symbol("skip children");
 var REMOVE = /* @__PURE__ */ Symbol("remove node");
-function visit(node, visitor) {
+function visit(node2, visitor) {
   const visitor_ = initVisitor(visitor);
-  if (isDocument(node)) {
-    const cd = visit_(null, node.contents, visitor_, Object.freeze([node]));
+  if (isDocument(node2)) {
+    const cd = visit_(null, node2.contents, visitor_, Object.freeze([node2]));
     if (cd === REMOVE)
-      node.contents = null;
+      node2.contents = null;
   } else
-    visit_(null, node, visitor_, Object.freeze([]));
+    visit_(null, node2, visitor_, Object.freeze([]));
 }
 visit.BREAK = BREAK;
 visit.SKIP = SKIP;
 visit.REMOVE = REMOVE;
-function visit_(key, node, visitor, path) {
-  const ctrl = callVisitor(key, node, visitor, path);
+function visit_(key, node2, visitor, path) {
+  const ctrl = callVisitor(key, node2, visitor, path);
   if (isNode(ctrl) || isPair(ctrl)) {
     replaceNode(key, path, ctrl);
     return visit_(key, ctrl, visitor, path);
   }
   if (typeof ctrl !== "symbol") {
-    if (isCollection(node)) {
-      path = Object.freeze(path.concat(node));
-      for (let i2 = 0; i2 < node.items.length; ++i2) {
-        const ci = visit_(i2, node.items[i2], visitor, path);
+    if (isCollection(node2)) {
+      path = Object.freeze(path.concat(node2));
+      for (let i2 = 0; i2 < node2.items.length; ++i2) {
+        const ci = visit_(i2, node2.items[i2], visitor, path);
         if (typeof ci === "number")
           i2 = ci - 1;
         else if (ci === BREAK)
           return BREAK;
         else if (ci === REMOVE) {
-          node.items.splice(i2, 1);
+          node2.items.splice(i2, 1);
           i2 -= 1;
         }
       }
-    } else if (isPair(node)) {
-      path = Object.freeze(path.concat(node));
-      const ck = visit_("key", node.key, visitor, path);
+    } else if (isPair(node2)) {
+      path = Object.freeze(path.concat(node2));
+      const ck = visit_("key", node2.key, visitor, path);
       if (ck === BREAK)
         return BREAK;
       else if (ck === REMOVE)
-        node.key = null;
-      const cv = visit_("value", node.value, visitor, path);
+        node2.key = null;
+      const cv = visit_("value", node2.value, visitor, path);
       if (cv === BREAK)
         return BREAK;
       else if (cv === REMOVE)
-        node.value = null;
+        node2.value = null;
     }
   }
   return ctrl;
 }
-async function visitAsync(node, visitor) {
+async function visitAsync(node2, visitor) {
   const visitor_ = initVisitor(visitor);
-  if (isDocument(node)) {
-    const cd = await visitAsync_(null, node.contents, visitor_, Object.freeze([node]));
+  if (isDocument(node2)) {
+    const cd = await visitAsync_(null, node2.contents, visitor_, Object.freeze([node2]));
     if (cd === REMOVE)
-      node.contents = null;
+      node2.contents = null;
   } else
-    await visitAsync_(null, node, visitor_, Object.freeze([]));
+    await visitAsync_(null, node2, visitor_, Object.freeze([]));
 }
 visitAsync.BREAK = BREAK;
 visitAsync.SKIP = SKIP;
 visitAsync.REMOVE = REMOVE;
-async function visitAsync_(key, node, visitor, path) {
-  const ctrl = await callVisitor(key, node, visitor, path);
+async function visitAsync_(key, node2, visitor, path) {
+  const ctrl = await callVisitor(key, node2, visitor, path);
   if (isNode(ctrl) || isPair(ctrl)) {
     replaceNode(key, path, ctrl);
     return visitAsync_(key, ctrl, visitor, path);
   }
   if (typeof ctrl !== "symbol") {
-    if (isCollection(node)) {
-      path = Object.freeze(path.concat(node));
-      for (let i2 = 0; i2 < node.items.length; ++i2) {
-        const ci = await visitAsync_(i2, node.items[i2], visitor, path);
+    if (isCollection(node2)) {
+      path = Object.freeze(path.concat(node2));
+      for (let i2 = 0; i2 < node2.items.length; ++i2) {
+        const ci = await visitAsync_(i2, node2.items[i2], visitor, path);
         if (typeof ci === "number")
           i2 = ci - 1;
         else if (ci === BREAK)
           return BREAK;
         else if (ci === REMOVE) {
-          node.items.splice(i2, 1);
+          node2.items.splice(i2, 1);
           i2 -= 1;
         }
       }
-    } else if (isPair(node)) {
-      path = Object.freeze(path.concat(node));
-      const ck = await visitAsync_("key", node.key, visitor, path);
+    } else if (isPair(node2)) {
+      path = Object.freeze(path.concat(node2));
+      const ck = await visitAsync_("key", node2.key, visitor, path);
       if (ck === BREAK)
         return BREAK;
       else if (ck === REMOVE)
-        node.key = null;
-      const cv = await visitAsync_("value", node.value, visitor, path);
+        node2.key = null;
+      const cv = await visitAsync_("value", node2.value, visitor, path);
       if (cv === BREAK)
         return BREAK;
       else if (cv === REMOVE)
-        node.value = null;
+        node2.value = null;
     }
   }
   return ctrl;
@@ -1265,32 +1265,32 @@ function initVisitor(visitor) {
   }
   return visitor;
 }
-function callVisitor(key, node, visitor, path) {
+function callVisitor(key, node2, visitor, path) {
   if (typeof visitor === "function")
-    return visitor(key, node, path);
-  if (isMap(node))
-    return visitor.Map?.(key, node, path);
-  if (isSeq(node))
-    return visitor.Seq?.(key, node, path);
-  if (isPair(node))
-    return visitor.Pair?.(key, node, path);
-  if (isScalar(node))
-    return visitor.Scalar?.(key, node, path);
-  if (isAlias(node))
-    return visitor.Alias?.(key, node, path);
+    return visitor(key, node2, path);
+  if (isMap(node2))
+    return visitor.Map?.(key, node2, path);
+  if (isSeq(node2))
+    return visitor.Seq?.(key, node2, path);
+  if (isPair(node2))
+    return visitor.Pair?.(key, node2, path);
+  if (isScalar(node2))
+    return visitor.Scalar?.(key, node2, path);
+  if (isAlias(node2))
+    return visitor.Alias?.(key, node2, path);
   return void 0;
 }
-function replaceNode(key, path, node) {
+function replaceNode(key, path, node2) {
   const parent = path[path.length - 1];
   if (isCollection(parent)) {
-    parent.items[key] = node;
+    parent.items[key] = node2;
   } else if (isPair(parent)) {
     if (key === "key")
-      parent.key = node;
+      parent.key = node2;
     else
-      parent.value = node;
+      parent.value = node2;
   } else if (isDocument(parent)) {
-    parent.contents = node;
+    parent.contents = node2;
   } else {
     const pt = isAlias(parent) ? "alias" : "scalar";
     throw new Error(`Cannot replace node with ${pt} parent`);
@@ -1441,9 +1441,9 @@ var Directives = class _Directives {
     let tagNames;
     if (doc && tagEntries.length > 0 && isNode(doc.contents)) {
       const tags = {};
-      visit(doc.contents, (_key, node) => {
-        if (isNode(node) && node.tag)
-          tags[node.tag] = true;
+      visit(doc.contents, (_key, node2) => {
+        if (isNode(node2) && node2.tag)
+          tags[node2.tag] = true;
       });
       tagNames = Object.keys(tags);
     } else
@@ -1472,9 +1472,9 @@ function anchorIsValid(anchor) {
 function anchorNames(root) {
   const anchors = /* @__PURE__ */ new Set();
   visit(root, {
-    Value(_key, node) {
-      if (node.anchor)
-        anchors.add(node.anchor);
+    Value(_key, node2) {
+      if (node2.anchor)
+        anchors.add(node2.anchor);
     }
   });
   return anchors;
@@ -1642,20 +1642,20 @@ var Alias = class extends NodeBase {
     } else {
       nodes = [];
       visit(doc, {
-        Node: (_key, node) => {
-          if (isAlias(node) || hasAnchor(node))
-            nodes.push(node);
+        Node: (_key, node2) => {
+          if (isAlias(node2) || hasAnchor(node2))
+            nodes.push(node2);
         }
       });
       if (ctx)
         ctx.aliasResolveCache = nodes;
     }
     let found = void 0;
-    for (const node of nodes) {
-      if (node === this)
+    for (const node2 of nodes) {
+      if (node2 === this)
         break;
-      if (node.anchor === this.source)
-        found = node;
+      if (node2.anchor === this.source)
+        found = node2;
     }
     if (found && ctx) {
       const { anchors, doc: doc2, maxAliasCount } = ctx;
@@ -1704,22 +1704,22 @@ var Alias = class extends NodeBase {
     return src;
   }
 };
-function getAliasCount(doc, node, anchors) {
-  if (isAlias(node)) {
-    const source = node.resolve(doc);
+function getAliasCount(doc, node2, anchors) {
+  if (isAlias(node2)) {
+    const source = node2.resolve(doc);
     const anchor = anchors && source && anchors.get(source);
     return anchor ? anchor.count * anchor.aliasCount : 0;
-  } else if (isCollection(node)) {
+  } else if (isCollection(node2)) {
     let count2 = 0;
-    for (const item of node.items) {
+    for (const item of node2.items) {
       const c = getAliasCount(doc, item, anchors);
       if (c > count2)
         count2 = c;
     }
     return count2;
-  } else if (isPair(node)) {
-    const kc = getAliasCount(doc, node.key, anchors);
-    const vc = getAliasCount(doc, node.value, anchors);
+  } else if (isPair(node2)) {
+    const kc = getAliasCount(doc, node2.key, anchors);
+    const vc = getAliasCount(doc, node2.value, anchors);
     return Math.max(kc, vc);
   }
   return 1;
@@ -1790,10 +1790,10 @@ function createNode(value, tagName, ctx) {
       value = value.toJSON();
     }
     if (!value || typeof value !== "object") {
-      const node2 = new Scalar(value);
+      const node3 = new Scalar(value);
       if (ref)
-        ref.node = node2;
-      return node2;
+        ref.node = node3;
+      return node3;
     }
     tagObj = value instanceof Map ? schema4[MAP] : Symbol.iterator in Object(value) ? schema4[SEQ] : schema4[MAP];
   }
@@ -1801,14 +1801,14 @@ function createNode(value, tagName, ctx) {
     onTagObj(tagObj);
     delete ctx.onTagObj;
   }
-  const node = tagObj?.createNode ? tagObj.createNode(ctx.schema, value, ctx) : typeof tagObj?.nodeClass?.from === "function" ? tagObj.nodeClass.from(ctx.schema, value, ctx) : new Scalar(value);
+  const node2 = tagObj?.createNode ? tagObj.createNode(ctx.schema, value, ctx) : typeof tagObj?.nodeClass?.from === "function" ? tagObj.nodeClass.from(ctx.schema, value, ctx) : new Scalar(value);
   if (tagName)
-    node.tag = tagName;
+    node2.tag = tagName;
   else if (!tagObj.default)
-    node.tag = tagObj.tag;
+    node2.tag = tagObj.tag;
   if (ref)
-    ref.node = node;
-  return node;
+    ref.node = node2;
+  return node2;
 }
 
 // node_modules/yaml/browser/dist/nodes/Collection.js
@@ -1869,10 +1869,10 @@ var Collection = class extends NodeBase {
       this.add(value);
     else {
       const [key, ...rest] = path;
-      const node = this.get(key, true);
-      if (isCollection(node))
-        node.addIn(rest, value);
-      else if (node === void 0 && this.schema)
+      const node2 = this.get(key, true);
+      if (isCollection(node2))
+        node2.addIn(rest, value);
+      else if (node2 === void 0 && this.schema)
         this.set(key, collectionFromPath(this.schema, rest, value));
       else
         throw new Error(`Expected YAML collection at ${key}. Remaining path: ${rest}`);
@@ -1886,9 +1886,9 @@ var Collection = class extends NodeBase {
     const [key, ...rest] = path;
     if (rest.length === 0)
       return this.delete(key);
-    const node = this.get(key, true);
-    if (isCollection(node))
-      return node.deleteIn(rest);
+    const node2 = this.get(key, true);
+    if (isCollection(node2))
+      return node2.deleteIn(rest);
     else
       throw new Error(`Expected YAML collection at ${key}. Remaining path: ${rest}`);
   }
@@ -1899,17 +1899,17 @@ var Collection = class extends NodeBase {
    */
   getIn(path, keepScalar) {
     const [key, ...rest] = path;
-    const node = this.get(key, true);
+    const node2 = this.get(key, true);
     if (rest.length === 0)
-      return !keepScalar && isScalar(node) ? node.value : node;
+      return !keepScalar && isScalar(node2) ? node2.value : node2;
     else
-      return isCollection(node) ? node.getIn(rest, keepScalar) : void 0;
+      return isCollection(node2) ? node2.getIn(rest, keepScalar) : void 0;
   }
   hasAllNullValues(allowScalar) {
-    return this.items.every((node) => {
-      if (!isPair(node))
+    return this.items.every((node2) => {
+      if (!isPair(node2))
         return false;
-      const n = node.value;
+      const n = node2.value;
       return n == null || allowScalar && isScalar(n) && n.value == null && !n.commentBefore && !n.comment && !n.tag;
     });
   }
@@ -1920,8 +1920,8 @@ var Collection = class extends NodeBase {
     const [key, ...rest] = path;
     if (rest.length === 0)
       return this.has(key);
-    const node = this.get(key, true);
-    return isCollection(node) ? node.hasIn(rest) : false;
+    const node2 = this.get(key, true);
+    return isCollection(node2) ? node2.hasIn(rest) : false;
   }
   /**
    * Sets a value in this collection. For `!!set`, `value` needs to be a
@@ -1932,10 +1932,10 @@ var Collection = class extends NodeBase {
     if (rest.length === 0) {
       this.set(key, value);
     } else {
-      const node = this.get(key, true);
-      if (isCollection(node))
-        node.setIn(rest, value);
-      else if (node === void 0 && this.schema)
+      const node2 = this.get(key, true);
+      if (isCollection(node2))
+        node2.setIn(rest, value);
+      else if (node2 === void 0 && this.schema)
         this.set(key, collectionFromPath(this.schema, rest, value));
       else
         throw new Error(`Expected YAML collection at ${key}. Remaining path: ${rest}`);
@@ -2424,16 +2424,16 @@ function getTagObject(tags, item) {
   }
   return tagObj;
 }
-function stringifyProps(node, tagObj, { anchors, doc }) {
+function stringifyProps(node2, tagObj, { anchors, doc }) {
   if (!doc.directives)
     return "";
   const props = [];
-  const anchor = (isScalar(node) || isCollection(node)) && node.anchor;
+  const anchor = (isScalar(node2) || isCollection(node2)) && node2.anchor;
   if (anchor && anchorIsValid(anchor)) {
     anchors.add(anchor);
     props.push(`&${anchor}`);
   }
-  const tag = node.tag ?? (tagObj.default ? null : tagObj.tag);
+  const tag = node2.tag ?? (tagObj.default ? null : tagObj.tag);
   if (tag)
     props.push(doc.directives.tagString(tag));
   return props.join(" ");
@@ -2455,15 +2455,15 @@ function stringify(item, ctx, onComment, onChompKeep) {
     }
   }
   let tagObj = void 0;
-  const node = isNode(item) ? item : ctx.doc.createNode(item, { onTagObj: (o) => tagObj = o });
-  tagObj ?? (tagObj = getTagObject(ctx.doc.schema.tags, node));
-  const props = stringifyProps(node, tagObj, ctx);
+  const node2 = isNode(item) ? item : ctx.doc.createNode(item, { onTagObj: (o) => tagObj = o });
+  tagObj ?? (tagObj = getTagObject(ctx.doc.schema.tags, node2));
+  const props = stringifyProps(node2, tagObj, ctx);
   if (props.length > 0)
     ctx.indentAtStart = (ctx.indentAtStart ?? 0) + props.length + 1;
-  const str = typeof tagObj.stringify === "function" ? tagObj.stringify(node, ctx, onComment, onChompKeep) : isScalar(node) ? stringifyString(node, ctx, onComment, onChompKeep) : node.toString(ctx, onComment, onChompKeep);
+  const str = typeof tagObj.stringify === "function" ? tagObj.stringify(node2, ctx, onComment, onChompKeep) : isScalar(node2) ? stringifyString(node2, ctx, onComment, onChompKeep) : node2.toString(ctx, onComment, onChompKeep);
   if (!props)
     return str;
-  return isScalar(node) || str[0] === "{" || str[0] === "[" ? `${props} ${str}` : `${props}
+  return isScalar(node2) || str[0] === "{" || str[0] === "[" ? `${props} ${str}` : `${props}
 ${ctx.indent}${str}`;
 }
 
@@ -2683,8 +2683,8 @@ function stringifyKey(key, jsKey, ctx) {
   if (isNode(key) && ctx?.doc) {
     const strCtx = createStringifyContext(ctx.doc, {});
     strCtx.anchors = /* @__PURE__ */ new Set();
-    for (const node of ctx.anchors.keys())
-      strCtx.anchors.add(node.anchor);
+    for (const node2 of ctx.anchors.keys())
+      strCtx.anchors.add(node2.anchor);
     strCtx.inFlow = true;
     strCtx.inStringifyKey = true;
     const strKey = key.toString(strCtx);
@@ -2961,8 +2961,8 @@ var YAMLMap = class extends Collection {
   }
   get(key, keepScalar) {
     const it = findPair(this.items, key);
-    const node = it?.value;
-    return (!keepScalar && isScalar(node) ? node.value : node) ?? void 0;
+    const node2 = it?.value;
+    return (!keepScalar && isScalar(node2) ? node2.value : node2) ?? void 0;
   }
   has(key) {
     return !!findPair(this.items, key);
@@ -3211,9 +3211,9 @@ var floatExp = {
   format: "EXP",
   test: /^[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)[eE][-+]?[0-9]+$/,
   resolve: (str) => parseFloat(str),
-  stringify(node) {
-    const num = Number(node.value);
-    return isFinite(num) ? num.toExponential() : stringifyNumber(node);
+  stringify(node2) {
+    const num = Number(node2.value);
+    return isFinite(num) ? num.toExponential() : stringifyNumber(node2);
   }
 };
 var float = {
@@ -3222,11 +3222,11 @@ var float = {
   tag: "tag:yaml.org,2002:float",
   test: /^[-+]?(?:\.[0-9]+|[0-9]+\.[0-9]*)$/,
   resolve(str) {
-    const node = new Scalar(parseFloat(str));
+    const node2 = new Scalar(parseFloat(str));
     const dot = str.indexOf(".");
     if (dot !== -1 && str[str.length - 1] === "0")
-      node.minFractionDigits = str.length - dot - 1;
-    return node;
+      node2.minFractionDigits = str.length - dot - 1;
+    return node2;
   },
   stringify: stringifyNumber
 };
@@ -3234,11 +3234,11 @@ var float = {
 // node_modules/yaml/browser/dist/schema/core/int.js
 var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
 var intResolve = (str, offset, radix, { intAsBigInt }) => intAsBigInt ? BigInt(str) : parseInt(str.substring(offset), radix);
-function intStringify(node, radix, prefix) {
-  const { value } = node;
+function intStringify(node2, radix, prefix) {
+  const { value } = node2;
   if (intIdentify(value) && value >= 0)
     return prefix + value.toString(radix);
-  return stringifyNumber(node);
+  return stringifyNumber(node2);
 }
 var intOct = {
   identify: (value) => intIdentify(value) && value >= 0,
@@ -3247,7 +3247,7 @@ var intOct = {
   format: "OCT",
   test: /^0o[0-7]+$/,
   resolve: (str, _onError, opt) => intResolve(str, 2, 8, opt),
-  stringify: (node) => intStringify(node, 8, "0o")
+  stringify: (node2) => intStringify(node2, 8, "0o")
 };
 var int = {
   identify: intIdentify,
@@ -3264,7 +3264,7 @@ var intHex = {
   format: "HEX",
   test: /^0x[0-9a-fA-F]+$/,
   resolve: (str, _onError, opt) => intResolve(str, 2, 16, opt),
-  stringify: (node) => intStringify(node, 16, "0x")
+  stringify: (node2) => intStringify(node2, 16, "0x")
 };
 
 // node_modules/yaml/browser/dist/schema/core/schema.js
@@ -3565,9 +3565,9 @@ var floatExp2 = {
   format: "EXP",
   test: /^[-+]?(?:[0-9][0-9_]*)?(?:\.[0-9_]*)?[eE][-+]?[0-9]+$/,
   resolve: (str) => parseFloat(str.replace(/_/g, "")),
-  stringify(node) {
-    const num = Number(node.value);
-    return isFinite(num) ? num.toExponential() : stringifyNumber(node);
+  stringify(node2) {
+    const num = Number(node2.value);
+    return isFinite(num) ? num.toExponential() : stringifyNumber(node2);
   }
 };
 var float2 = {
@@ -3576,14 +3576,14 @@ var float2 = {
   tag: "tag:yaml.org,2002:float",
   test: /^[-+]?(?:[0-9][0-9_]*)?\.[0-9_]*$/,
   resolve(str) {
-    const node = new Scalar(parseFloat(str.replace(/_/g, "")));
+    const node2 = new Scalar(parseFloat(str.replace(/_/g, "")));
     const dot = str.indexOf(".");
     if (dot !== -1) {
       const f = str.substring(dot + 1).replace(/_/g, "");
       if (f[f.length - 1] === "0")
-        node.minFractionDigits = f.length;
+        node2.minFractionDigits = f.length;
     }
-    return node;
+    return node2;
   },
   stringify: stringifyNumber
 };
@@ -3613,13 +3613,13 @@ function intResolve2(str, offset, radix, { intAsBigInt }) {
   const n = parseInt(str, radix);
   return sign === "-" ? -1 * n : n;
 }
-function intStringify2(node, radix, prefix) {
-  const { value } = node;
+function intStringify2(node2, radix, prefix) {
+  const { value } = node2;
   if (intIdentify3(value)) {
     const str = value.toString(radix);
     return value < 0 ? "-" + prefix + str.substr(1) : prefix + str;
   }
-  return stringifyNumber(node);
+  return stringifyNumber(node2);
 }
 var intBin = {
   identify: intIdentify3,
@@ -3628,7 +3628,7 @@ var intBin = {
   format: "BIN",
   test: /^[-+]?0b[0-1_]+$/,
   resolve: (str, _onError, opt) => intResolve2(str, 2, 2, opt),
-  stringify: (node) => intStringify2(node, 2, "0b")
+  stringify: (node2) => intStringify2(node2, 2, "0b")
 };
 var intOct2 = {
   identify: intIdentify3,
@@ -3637,7 +3637,7 @@ var intOct2 = {
   format: "OCT",
   test: /^[-+]?0[0-7_]+$/,
   resolve: (str, _onError, opt) => intResolve2(str, 1, 8, opt),
-  stringify: (node) => intStringify2(node, 8, "0")
+  stringify: (node2) => intStringify2(node2, 8, "0")
 };
 var int2 = {
   identify: intIdentify3,
@@ -3654,7 +3654,7 @@ var intHex2 = {
   format: "HEX",
   test: /^[-+]?0x[0-9a-fA-F_]+$/,
   resolve: (str, _onError, opt) => intResolve2(str, 2, 16, opt),
-  stringify: (node) => intStringify2(node, 16, "0x")
+  stringify: (node2) => intStringify2(node2, 16, "0x")
 };
 
 // node_modules/yaml/browser/dist/schema/yaml-1.1/set.js
@@ -3744,13 +3744,13 @@ function parseSexagesimal(str, asBigInt) {
   const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num(60) + num(p), num(0));
   return sign === "-" ? num(-1) * res : res;
 }
-function stringifySexagesimal(node) {
-  let { value } = node;
+function stringifySexagesimal(node2) {
+  let { value } = node2;
   let num = (n) => n;
   if (typeof value === "bigint")
     num = (n) => BigInt(n);
   else if (isNaN(value) || !isFinite(value))
-    return stringifyNumber(node);
+    return stringifyNumber(node2);
   let sign = "";
   if (value < 0) {
     sign = "-";
@@ -4080,13 +4080,13 @@ var Document = class _Document {
    * `name` will be used as a prefix for a new unique anchor.
    * If `name` is undefined, the generated anchor will use 'a' as a prefix.
    */
-  createAlias(node, name) {
-    if (!node.anchor) {
+  createAlias(node2, name) {
+    if (!node2.anchor) {
       const prev = anchorNames(this);
-      node.anchor = // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+      node2.anchor = // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
       !name || prev.has(name) ? findNewAnchor(name || "a", prev) : name;
     }
-    return new Alias(node.anchor);
+    return new Alias(node2.anchor);
   }
   createNode(value, replacer, options) {
     let _replacer = void 0;
@@ -4118,11 +4118,11 @@ var Document = class _Document {
       schema: this.schema,
       sourceObjects
     };
-    const node = createNode(value, tag, ctx);
-    if (flow && isCollection(node))
-      node.flow = true;
+    const node2 = createNode(value, tag, ctx);
+    if (flow && isCollection(node2))
+      node2.flow = true;
     setAnchors();
-    return node;
+    return node2;
   }
   /**
    * Convert a key and a value into a `Pair` using the current schema,
@@ -4663,11 +4663,11 @@ function resolveBlockSeq({ composeNode: composeNode2, composeEmptyNode: composeE
         continue;
       }
     }
-    const node = value ? composeNode2(ctx, value, props, onError) : composeEmptyNode2(ctx, props.end, start, null, props, onError);
+    const node2 = value ? composeNode2(ctx, value, props, onError) : composeEmptyNode2(ctx, props.end, start, null, props, onError);
     if (ctx.schema.compat)
       flowIndentCheck(bs.indent, value, onError);
-    offset = node.range[2];
-    seq2.items.push(node);
+    offset = node2.range[2];
+    seq2.items.push(node2);
   }
   seq2.range = [bs.offset, offset, commentEnd ?? offset];
   return seq2;
@@ -4934,12 +4934,12 @@ function composeCollection(CN2, ctx, token, props, onError) {
   }
   const coll = resolveCollection(CN2, ctx, token, onError, tagName, tag);
   const res = tag.resolve?.(coll, (msg) => onError(tagToken, "TAG_RESOLVE_FAILED", msg), ctx.options) ?? coll;
-  const node = isNode(res) ? res : new Scalar(res);
-  node.range = coll.range;
-  node.tag = tagName;
+  const node2 = isNode(res) ? res : new Scalar(res);
+  node2.range = coll.range;
+  node2.tag = tagName;
   if (tag?.format)
-    node.format = tag.format;
-  return node;
+    node2.format = tag.format;
+  return node2;
 }
 
 // node_modules/yaml/browser/dist/compose/resolve-block-scalar.js
@@ -5431,11 +5431,11 @@ var CN = { composeNode, composeEmptyNode };
 function composeNode(ctx, token, props, onError) {
   const atKey = ctx.atKey;
   const { spaceBefore, comment, anchor, tag } = props;
-  let node;
+  let node2;
   let isSrcToken = true;
   switch (token.type) {
     case "alias":
-      node = composeAlias(ctx, token, onError);
+      node2 = composeAlias(ctx, token, onError);
       if (anchor || tag)
         onError(token, "ALIAS_PROPS", "An alias node must not specify any properties");
       break;
@@ -5443,17 +5443,17 @@ function composeNode(ctx, token, props, onError) {
     case "single-quoted-scalar":
     case "double-quoted-scalar":
     case "block-scalar":
-      node = composeScalar(ctx, token, tag, onError);
+      node2 = composeScalar(ctx, token, tag, onError);
       if (anchor)
-        node.anchor = anchor.source.substring(1);
+        node2.anchor = anchor.source.substring(1);
       break;
     case "block-map":
     case "block-seq":
     case "flow-collection":
       try {
-        node = composeCollection(CN, ctx, token, props, onError);
+        node2 = composeCollection(CN, ctx, token, props, onError);
         if (anchor)
-          node.anchor = anchor.source.substring(1);
+          node2.anchor = anchor.source.substring(1);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         onError(token, "RESOURCE_EXHAUSTION", message);
@@ -5465,24 +5465,24 @@ function composeNode(ctx, token, props, onError) {
       isSrcToken = false;
     }
   }
-  node ?? (node = composeEmptyNode(ctx, token.offset, void 0, null, props, onError));
-  if (anchor && node.anchor === "")
+  node2 ?? (node2 = composeEmptyNode(ctx, token.offset, void 0, null, props, onError));
+  if (anchor && node2.anchor === "")
     onError(anchor, "BAD_ALIAS", "Anchor cannot be an empty string");
-  if (atKey && ctx.options.stringKeys && (!isScalar(node) || typeof node.value !== "string" || node.tag && node.tag !== "tag:yaml.org,2002:str")) {
+  if (atKey && ctx.options.stringKeys && (!isScalar(node2) || typeof node2.value !== "string" || node2.tag && node2.tag !== "tag:yaml.org,2002:str")) {
     const msg = "With stringKeys, all keys must be strings";
     onError(tag ?? token, "NON_STRING_KEY", msg);
   }
   if (spaceBefore)
-    node.spaceBefore = true;
+    node2.spaceBefore = true;
   if (comment) {
     if (token.type === "scalar" && token.source === "")
-      node.comment = comment;
+      node2.comment = comment;
     else
-      node.commentBefore = comment;
+      node2.commentBefore = comment;
   }
   if (ctx.options.keepSourceTokens && isSrcToken)
-    node.srcToken = token;
-  return node;
+    node2.srcToken = token;
+  return node2;
 }
 function composeEmptyNode(ctx, offset, before, pos, { spaceBefore, comment, anchor, tag, end }, onError) {
   const token = {
@@ -5491,19 +5491,19 @@ function composeEmptyNode(ctx, offset, before, pos, { spaceBefore, comment, anch
     indent: -1,
     source: ""
   };
-  const node = composeScalar(ctx, token, tag, onError);
+  const node2 = composeScalar(ctx, token, tag, onError);
   if (anchor) {
-    node.anchor = anchor.source.substring(1);
-    if (node.anchor === "")
+    node2.anchor = anchor.source.substring(1);
+    if (node2.anchor === "")
       onError(anchor, "BAD_ALIAS", "Anchor cannot be an empty string");
   }
   if (spaceBefore)
-    node.spaceBefore = true;
+    node2.spaceBefore = true;
   if (comment) {
-    node.comment = comment;
-    node.range[2] = end;
+    node2.comment = comment;
+    node2.range[2] = end;
   }
-  return node;
+  return node2;
 }
 function composeAlias({ options }, { offset, source, end }, onError) {
   const alias = new Alias(source.substring(1));
@@ -7511,10 +7511,10 @@ function topLevelKeyLines(yaml) {
 function renderPair(key, value) {
   const doc = new Document({ [key]: value });
   const pair = isMap(doc.contents) ? doc.contents.items[0] : void 0;
-  const node = pair?.value;
-  if (isSeq(node) || isMap(node)) node.flow = true;
-  if (isScalar(node) && typeof node.value === "string" && /[\r\n]/.test(node.value)) {
-    node.type = "QUOTE_DOUBLE";
+  const node2 = pair?.value;
+  if (isSeq(node2) || isMap(node2)) node2.flow = true;
+  if (isScalar(node2) && typeof node2.value === "string" && /[\r\n]/.test(node2.value)) {
+    node2.type = "QUOTE_DOUBLE";
   }
   return doc.toString({ lineWidth: 0, flowCollectionPadding: false }).replace(/\n$/, "").split("\n");
 }
@@ -7577,6 +7577,388 @@ async function findBlueprintFolder(folder, hasBlueprintFile) {
   return void 0;
 }
 
+// src/core/book-tree.ts
+var KIND_KEYS2 = [
+  ["blueprint", "blueprint"],
+  ["blueprint_book", "blueprint-book"],
+  ["upgrade_planner", "upgrade-planner"],
+  ["deconstruction_planner", "deconstruction-planner"]
+];
+function bookTree(value) {
+  return node(value, []);
+}
+function flattenTree(root) {
+  const out = [];
+  const visit3 = (n) => {
+    out.push(n);
+    n.children.forEach(visit3);
+  };
+  visit3(root);
+  return out;
+}
+var UNLABELED = {
+  blueprint: "Blueprint",
+  "blueprint-book": "Book",
+  "upgrade-planner": "Upgrade planner",
+  "deconstruction-planner": "Deconstruction planner"
+};
+function displayLabel(n) {
+  if (n.label !== "") return n.label;
+  return n.slot === void 0 ? UNLABELED[n.kind] : `${UNLABELED[n.kind]} (slot ${n.slot})`;
+}
+function node(value, slots) {
+  if (!isObject2(value)) return void 0;
+  for (const [key, kind] of KIND_KEYS2) {
+    const body = value[key];
+    if (!isObject2(body)) continue;
+    const label = typeof body["label"] === "string" ? plainLabel(body["label"]) : "";
+    const result = {
+      slot: slots.length === 0 ? void 0 : slots[slots.length - 1],
+      slots,
+      path: slots.join("/"),
+      kind,
+      label,
+      children: []
+    };
+    const entries = body["blueprints"];
+    if (kind === "blueprint-book" && Array.isArray(entries)) {
+      const children = [];
+      entries.forEach((entry, position) => {
+        const index = isObject2(entry) ? entry["index"] : void 0;
+        const slot = typeof index === "number" && Number.isInteger(index) && index >= 0 ? index : position;
+        const child = node(entry, [...slots, slot]);
+        if (child) children.push(child);
+      });
+      result.children = children.sort((a, b) => a.slot - b.slot);
+    }
+    return result;
+  }
+  return void 0;
+}
+function isObject2(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// src/core/links.ts
+var DEFAULT_LINK_BASE = "https://blueprints.abucnasty.dev";
+function stringUrl(base, folder, slots = [], sha) {
+  const entry = slots.map((s) => `/${checkSlot(s)}`).join("");
+  const at = sha === void 0 || sha === "" ? "" : `@${checkSha(sha)}`;
+  return `${folderUrl(base, folder)}${entry}${at}.txt`;
+}
+function coverUrl(base, folder) {
+  return `${folderUrl(base, folder)}/cover.jpg`;
+}
+function folderUrl(base, folder) {
+  const path = encodePath(folder);
+  if (path === "") throw new Error("A link needs a blueprint folder path.");
+  return `${base.trim().replace(/\/+$/, "")}/${path}`;
+}
+function encodePath(path) {
+  return path.split("/").filter((s) => s !== "").map((s) => encodeURIComponent(s)).join("/");
+}
+function checkSlot(slot) {
+  if (!Number.isInteger(slot) || slot < 0) throw new Error(`Not a slot number: ${slot}`);
+  return slot;
+}
+function checkSha(sha) {
+  if (!/^[0-9a-f]{7,40}$/.test(sha)) throw new Error(`Not a commit SHA: ${sha}`);
+  return sha;
+}
+
+// src/core/generated-block.ts
+var BLOCK_START = "<!-- blueprint:generated:start -->";
+var BLOCK_END = "<!-- blueprint:generated:end -->";
+function generatedBlockLines(input) {
+  const inner = [];
+  if (input.hasRenders) {
+    inner.push(`![${escapeInline(input.title)}](${coverUrl(input.base, input.folder)})`);
+  }
+  if (input.tree.kind === "blueprint-book" && input.tree.children.length > 0) {
+    if (inner.length > 0) inner.push("");
+    const visit3 = (n, depth) => {
+      const indent = "  ".repeat(depth);
+      const label = escapeInline(displayLabel(n));
+      const url = stringUrl(input.base, input.folder, n.slots);
+      inner.push(n.kind === "blueprint-book" ? `${indent}- ${label} ([book](${url}))` : `${indent}- [${label}](${url})`);
+      for (const c of n.children) visit3(c, depth + 1);
+    };
+    for (const c of input.tree.children) visit3(c, 0);
+  }
+  return inner.length === 0 ? void 0 : [BLOCK_START, ...inner, BLOCK_END];
+}
+function applyGeneratedBlock(note, lines) {
+  const split = splitFrontmatter(note);
+  const head = note.slice(0, note.length - split.body.length);
+  const body = split.body;
+  const eol = split.yaml !== void 0 ? split.eol : /\r\n/.test(note) ? "\r\n" : "\n";
+  const block = lines === void 0 ? void 0 : lines.join(eol);
+  const found = findBlock(body);
+  if (found === "invalid") {
+    return {
+      status: "invalid",
+      text: note,
+      reason: "The generated block markers in this note are incomplete or repeated; fix them by hand."
+    };
+  }
+  if (found === void 0) {
+    if (block === void 0) return { status: "unchanged", text: note };
+    const after2 = body === "" || body.startsWith("\n") || body.startsWith("\r\n") ? body : eol + body;
+    const lead = split.yaml !== void 0 ? eol : "";
+    return { status: "inserted", text: head + lead + block + eol + after2 };
+  }
+  const before = body.slice(0, found.start);
+  const after = body.slice(found.end);
+  if (block === void 0) {
+    const atTop = /^(\r?\n)?$/.test(before);
+    const rest = after.replace(/^\r?\n/, "");
+    return { status: "removed", text: head + (atTop ? "" : before) + rest };
+  }
+  const current = body.slice(found.start, found.end);
+  if (current === block) return { status: "unchanged", text: note };
+  return { status: "replaced", text: head + before + block + after };
+}
+function findBlock(body) {
+  const starts = markerLines(body, BLOCK_START);
+  const ends = markerLines(body, BLOCK_END);
+  const anywhere = (m) => body.split(m).length - 1;
+  if (starts.length === 0 && ends.length === 0) {
+    return anywhere(BLOCK_START) + anywhere(BLOCK_END) === 0 ? void 0 : "invalid";
+  }
+  if (starts.length !== 1 || ends.length !== 1 || anywhere(BLOCK_START) !== 1 || anywhere(BLOCK_END) !== 1) {
+    return "invalid";
+  }
+  const start = starts[0];
+  const end = ends[0] + BLOCK_END.length;
+  return start < end - BLOCK_END.length ? { start, end } : "invalid";
+}
+function markerLines(body, marker) {
+  const out = [];
+  for (let i2 = body.indexOf(marker); i2 !== -1; i2 = body.indexOf(marker, i2 + 1)) {
+    const lineStart = i2 === 0 || body[i2 - 1] === "\n";
+    const next = body.slice(i2 + marker.length, i2 + marker.length + 2);
+    const lineEnd = next === "" || next[0] === "\n" || next === "\r\n";
+    if (lineStart && lineEnd) out.push(i2);
+  }
+  return out;
+}
+function escapeInline(text) {
+  const oneLine2 = text.replace(/\s+/g, " ").trim();
+  let out = oneLine2.replace(/[\\`*_[\]{}<>#!|~=$%^&]/g, "\\$&");
+  out = out.replace(/^([-+])/, "\\$1").replace(/^(\d+)([.)])/, "$1\\$2");
+  return out;
+}
+
+// src/core/sha256.ts
+var K = new Uint32Array([
+  1116352408,
+  1899447441,
+  3049323471,
+  3921009573,
+  961987163,
+  1508970993,
+  2453635748,
+  2870763221,
+  3624381080,
+  310598401,
+  607225278,
+  1426881987,
+  1925078388,
+  2162078206,
+  2614888103,
+  3248222580,
+  3835390401,
+  4022224774,
+  264347078,
+  604807628,
+  770255983,
+  1249150122,
+  1555081692,
+  1996064986,
+  2554220882,
+  2821834349,
+  2952996808,
+  3210313671,
+  3336571891,
+  3584528711,
+  113926993,
+  338241895,
+  666307205,
+  773529912,
+  1294757372,
+  1396182291,
+  1695183700,
+  1986661051,
+  2177026350,
+  2456956037,
+  2730485921,
+  2820302411,
+  3259730800,
+  3345764771,
+  3516065817,
+  3600352804,
+  4094571909,
+  275423344,
+  430227734,
+  506948616,
+  659060556,
+  883997877,
+  958139571,
+  1322822218,
+  1537002063,
+  1747873779,
+  1955562222,
+  2024104815,
+  2227730452,
+  2361852424,
+  2428436474,
+  2756734187,
+  3204031479,
+  3329325298
+]);
+function sha256Hex(data) {
+  const bitLength = data.length * 8;
+  const padded = new Uint8Array(data.length + 9 + 63 >> 6 << 6);
+  padded.set(data);
+  padded[data.length] = 128;
+  const view = new DataView(padded.buffer);
+  view.setUint32(padded.length - 8, Math.floor(bitLength / 4294967296));
+  view.setUint32(padded.length - 4, bitLength >>> 0);
+  const h = new Uint32Array([
+    1779033703,
+    3144134277,
+    1013904242,
+    2773480762,
+    1359893119,
+    2600822924,
+    528734635,
+    1541459225
+  ]);
+  const w = new Uint32Array(64);
+  for (let off = 0; off < padded.length; off += 64) {
+    for (let i2 = 0; i2 < 16; i2++) w[i2] = view.getUint32(off + i2 * 4);
+    for (let i2 = 16; i2 < 64; i2++) {
+      const a2 = w[i2 - 15];
+      const b2 = w[i2 - 2];
+      const s0 = rotr(a2, 7) ^ rotr(a2, 18) ^ a2 >>> 3;
+      const s1 = rotr(b2, 17) ^ rotr(b2, 19) ^ b2 >>> 10;
+      w[i2] = w[i2 - 16] + s0 + w[i2 - 7] + s1 >>> 0;
+    }
+    let [a, b, c, d, e, f, g, hh] = h;
+    for (let i2 = 0; i2 < 64; i2++) {
+      const t1 = hh + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + (e & f ^ ~e & g) + K[i2] + w[i2] >>> 0;
+      const t2 = (rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + (a & b ^ a & c ^ b & c) >>> 0;
+      hh = g;
+      g = f;
+      f = e;
+      e = d + t1 >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = t1 + t2 >>> 0;
+    }
+    h[0] = h[0] + a >>> 0;
+    h[1] = h[1] + b >>> 0;
+    h[2] = h[2] + c >>> 0;
+    h[3] = h[3] + d >>> 0;
+    h[4] = h[4] + e >>> 0;
+    h[5] = h[5] + f >>> 0;
+    h[6] = h[6] + g >>> 0;
+    h[7] = h[7] + hh >>> 0;
+  }
+  return Array.from(h, (x2) => x2.toString(16).padStart(8, "0")).join("");
+}
+function rotr(x2, n) {
+  return x2 >>> n | x2 << 32 - n;
+}
+
+// src/core/render-state.ts
+var RENDER_MANIFEST = "render.json";
+function blueprintHash(blueprint) {
+  return sha256Hex(new TextEncoder().encode(writeCompactSortedJson(blueprint)));
+}
+function renderTargets(value) {
+  const out = [];
+  const visit3 = (node2, slots) => {
+    if (!isObject3(node2)) return;
+    const bp = node2["blueprint"];
+    if (isObject3(bp)) {
+      if (arrayLength2(bp["entities"]) + arrayLength2(bp["tiles"]) === 0) return;
+      const path = slots.join("/");
+      const key = path === "" ? "0" : path;
+      out.push({ key, path, file: `${key}.jpg`, label: typeof bp["label"] === "string" ? bp["label"] : "", hash: blueprintHash(bp) });
+      return;
+    }
+    const book = node2["blueprint_book"];
+    if (!isObject3(book) || !Array.isArray(book["blueprints"])) return;
+    const children = book["blueprints"].map((entry, position) => {
+      const index = isObject3(entry) ? entry["index"] : void 0;
+      return { entry, slot: typeof index === "number" && Number.isInteger(index) && index >= 0 ? index : position };
+    });
+    children.sort((a, b) => a.slot - b.slot);
+    for (const c of children) visit3(c.entry, [...slots, c.slot]);
+  };
+  visit3(value, []);
+  return out;
+}
+function parseRenderManifest(text) {
+  if (text === void 0) return void 0;
+  try {
+    const v = JSON.parse(text);
+    if (!isObject3(v) || v["schema"] !== 1 || !isObject3(v["entries"])) return void 0;
+    const entries = {};
+    for (const [k, e] of Object.entries(v["entries"])) {
+      if (isObject3(e) && typeof e["file"] === "string" && typeof e["sha256"] === "string") {
+        entries[k] = e;
+      }
+    }
+    return { schema: 1, rendered_at: typeof v["rendered_at"] === "string" ? v["rendered_at"] : "", entries };
+  } catch {
+    return void 0;
+  }
+}
+function writeRenderManifest(m) {
+  const keys = Object.keys(m.entries).sort((a, b) => comparePaths(a, b));
+  const entries = {};
+  for (const k of keys) entries[k] = m.entries[k];
+  return JSON.stringify({ schema: 1, rendered_at: m.rendered_at, entries }, null, 2) + "\n";
+}
+function renderState(value, manifest, images) {
+  const present = new Set(images);
+  const claimed = /* @__PURE__ */ new Set();
+  const entries = renderTargets(value).map((t) => {
+    const recorded = manifest?.entries[t.key];
+    const image = [recorded?.file, t.file].find((f) => f !== void 0 && present.has(f));
+    if (image !== void 0) claimed.add(image);
+    const state = image === void 0 ? "none" : recorded !== void 0 && recorded.sha256 === t.hash && recorded.file === image ? "current" : "outdated";
+    return { ...t, state, image };
+  });
+  const orphans = images.filter((f) => !claimed.has(f)).sort();
+  const count2 = (s) => entries.filter((e) => e.state === s).length;
+  const counts = { total: entries.length, current: count2("current"), outdated: count2("outdated"), none: count2("none"), orphans: orphans.length };
+  const overall = counts.total === 0 || counts.none === counts.total ? "none" : counts.current === counts.total ? "current" : "outdated";
+  return { entries, orphans, overall, counts };
+}
+function renderStateLabel(s) {
+  if (s.counts.total === 0) return "Render: nothing to render";
+  if (s.overall === "none") return "Render: none";
+  if (s.overall === "current") return "Render: current";
+  const stale = s.counts.total - s.counts.current;
+  return s.counts.total === 1 ? "Render: outdated" : `Render: ${stale} of ${s.counts.total} outdated`;
+}
+function comparePaths(a, b) {
+  const x2 = a.split("/").map(Number);
+  const y = b.split("/").map(Number);
+  for (let i2 = 0; i2 < Math.min(x2.length, y.length); i2++) if (x2[i2] !== y[i2]) return x2[i2] - y[i2];
+  return x2.length - y.length;
+}
+function arrayLength2(v) {
+  return Array.isArray(v) ? v.length : 0;
+}
+function isObject3(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
 // src/commands/copy-blueprint.ts
 async function copyBlueprintString(host, contextFolder) {
   const folder = await findBlueprintFolder(
@@ -7609,6 +7991,503 @@ function reject(host, reason) {
   return { action: "rejected", reason };
 }
 
+// src/commands/copy-link.ts
+async function copyLiveLink(host, contextFolder) {
+  const folder = await findBlueprintFolder(contextFolder, (f) => host.files.exists(joinPath(f, BLUEPRINT_FILE)));
+  if (folder === void 0) return reject2(host, "This is not inside a blueprint folder (a folder with a blueprint.json).");
+  let tree;
+  try {
+    tree = bookTree(readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE))));
+  } catch (e) {
+    return reject2(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!tree) return reject2(host, `${folder}/${BLUEPRINT_FILE} is not a blueprint, book or planner.`);
+  let node2 = tree;
+  if (tree.kind === "blueprint-book" && tree.children.length > 0) {
+    const nodes = flattenTree(tree);
+    const index = await host.ui.pick(nodes.map(pickItem), "Link to the whole book or one entry");
+    if (index === void 0) return { action: "cancelled" };
+    node2 = nodes[index];
+  }
+  const url = stringUrl(host.settings.linkBase, folder, node2.slots);
+  try {
+    await host.clipboard.writeText(url);
+  } catch (e) {
+    return reject2(host, `Could not write to the clipboard: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  const what = node2.slots.length === 0 ? `${KIND_NAMES[node2.kind]} ${folder}` : `"${displayLabel(node2)}" (slot ${node2.path}) of ${folder}`;
+  host.ui.notice(`Copied the live link to ${what}: ${url}`);
+  return { action: "copied", folder, url };
+}
+function pickItem(n) {
+  if (n.slots.length === 0) return { label: `Whole book: ${displayLabel(n)}`, detail: "slot path: none (the root)" };
+  const indent = " ".repeat(n.slots.length - 1);
+  return { label: `${indent}${displayLabel(n)}`, detail: `slot ${n.path} · ${KIND_NAMES[n.kind]}` };
+}
+function reject2(host, reason) {
+  host.ui.notice(reason, "error");
+  return { action: "rejected", reason };
+}
+
+// src/commands/generated-notes.ts
+var IMAGE = /\.(?:jpe?g|png|webp)$/i;
+async function listRenderFiles(host, folder) {
+  const root = joinPath(folder, "renders");
+  if (!await host.files.exists(root)) return [];
+  const out = [];
+  const walk = async (dir) => {
+    const { files, folders } = await host.files.list(dir);
+    for (const f of files) if (IMAGE.test(f)) out.push(f.slice(root.length + 1));
+    for (const d of folders) await walk(d);
+  };
+  await walk(root);
+  return out.sort();
+}
+async function noteWithBlock(host, folder, note, value) {
+  const tree = bookTree(value);
+  if (!tree) return { status: "invalid", text: note, reason: `${folder}/${BLUEPRINT_FILE} is not a blueprint.` };
+  let title;
+  try {
+    title = readNotesMeta(note).title ?? baseName(folder);
+  } catch {
+    title = baseName(folder);
+  }
+  const hasRenders = (await listRenderFiles(host, folder)).length > 0;
+  const lines = generatedBlockLines({ base: host.settings.linkBase, folder, title, tree, hasRenders });
+  return applyGeneratedBlock(note, lines);
+}
+async function refreshGeneratedBlock(host, folder) {
+  const notesPath = joinPath(folder, NOTES_FILE);
+  try {
+    if (!await host.files.exists(notesPath)) return { status: "skipped", folder, reason: "no README.md" };
+    const note = await host.files.read(notesPath);
+    const value = readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE)));
+    const update = await noteWithBlock(host, folder, note, value);
+    if (update.status === "invalid") return { status: "skipped", folder, reason: update.reason };
+    if (update.status === "unchanged") return { status: "unchanged", folder };
+    await host.files.write(notesPath, update.text);
+    return { status: "changed", folder };
+  } catch (e) {
+    return { status: "skipped", folder, reason: e instanceof Error ? e.message : String(e) };
+  }
+}
+async function findBlueprintFolders(host, from = "") {
+  const out = [];
+  const walk = async (dir) => {
+    const { files, folders } = await host.files.list(dir);
+    if (dir !== "" && files.includes(joinPath(dir, BLUEPRINT_FILE))) {
+      out.push(dir);
+      return;
+    }
+    for (const d of folders) if (!/^[_.]/.test(baseName(d))) await walk(d);
+  };
+  await walk(from);
+  return out.sort();
+}
+async function refreshAllGeneratedBlocks(host) {
+  const results = [];
+  for (const folder of await findBlueprintFolders(host)) results.push(await refreshGeneratedBlock(host, folder));
+  const changed = results.filter((r) => r.status === "changed").length;
+  const unchanged = results.filter((r) => r.status === "unchanged").length;
+  const skipped = results.filter((r) => r.status === "skipped");
+  const lines = [
+    `Generated blocks: ${changed} note${changed === 1 ? "" : "s"} changed, ${unchanged} already current` + (skipped.length > 0 ? `, ${skipped.length} skipped` : "") + ". Not committed; the Git plugin's sync will pick the changes up.",
+    ...skipped.map((s) => `Skipped ${s.folder}: ${s.reason}`)
+  ];
+  host.ui.notice(lines.join("\n"), skipped.length > 0 ? "error" : "info");
+  return results;
+}
+
+// src/commands/git-notice.ts
+function reportGit(host, done, git, extra = "", warn2 = extra !== "") {
+  switch (git.status) {
+    case "pushed":
+      host.ui.notice(`${done}, committed and pushed (${git.commit}).${extra}`, warn2 ? "error" : "info");
+      return;
+    case "nothing-to-commit":
+      host.ui.notice(`${done}. Git found nothing new to commit.${extra}`, warn2 ? "error" : "info");
+      return;
+    case "failed": {
+      const lfs = git.step === "push" && /\blfs\b|batch response/i.test(git.message) ? " Render images are uploaded with Git LFS: run _tools/setup/setup-machine.sh on this computer, then sync again." : "";
+      host.ui.notice(
+        (git.committed ? `${done} and committed ${git.commit ?? ""} locally, but ${git.message}.${lfs} The Git plugin's timed sync will try again.` : `${done}, but ${git.message}. The files are saved; the Git plugin's timed sync will commit them.`) + extra,
+        "error"
+      );
+      return;
+    }
+  }
+}
+
+// src/commands/render-preview.ts
+var RENDER_SCRIPT = "_tools/render/bin/render.js";
+var RENDER_MODULES = "_tools/render/node_modules";
+var active;
+function isRendering() {
+  return active !== void 0;
+}
+function cancelRender() {
+  if (!active) return false;
+  active.abort();
+  return true;
+}
+async function renderPreview(host, contextFolder, options = {}) {
+  if (active) {
+    host.ui.notice("A render is already running; wait for it or cancel it first.", "error");
+    return { action: "busy" };
+  }
+  const controller = new AbortController();
+  active = controller;
+  try {
+    return await run(host, contextFolder, controller.signal, options);
+  } finally {
+    active = void 0;
+  }
+}
+async function run(host, contextFolder, signal, options) {
+  const { files, ui } = host;
+  const folder = await findBlueprintFolder(contextFolder, (f) => files.exists(joinPath(f, BLUEPRINT_FILE)));
+  if (folder === void 0) return reject3(host, "This is not inside a blueprint folder (a folder with a blueprint.json).");
+  if (host.processes === void 0 || host.vaultPath === void 0) {
+    return reject3(host, "Rendering needs the desktop app with the vault on this computer's disk.");
+  }
+  const settings = host.settings.render;
+  if (settings.factorioPath.trim() === "") {
+    ui.notice(
+      "Set the Factorio path for this computer (Settings, Factorio Blueprints, Factorio path), then render again.",
+      "error"
+    );
+    ui.openSettings?.();
+    return { action: "needs-settings" };
+  }
+  if (!await files.exists(RENDER_SCRIPT)) {
+    return reject3(host, `The render tool is missing (${RENDER_SCRIPT}). Pull the latest vault and try again.`);
+  }
+  if (!await files.exists(RENDER_MODULES)) {
+    return reject3(
+      host,
+      `The render tool's dependencies are not installed. In a terminal, run:
+cd "${absolute(host.vaultPath, "_tools/render")}" && npm ci
+then render again.`
+    );
+  }
+  const abs = (p) => absolute(host.vaultPath, p);
+  const node2 = settings.nodePath.trim() || "node";
+  const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
+  const manifestBefore = await files.exists(manifestPath) ? await files.read(manifestPath) : void 0;
+  let value;
+  try {
+    value = readCanonicalJson(await files.read(joinPath(folder, BLUEPRINT_FILE)));
+  } catch (e) {
+    return reject3(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  let only = [];
+  if (options.onlyNeeded) {
+    const state = renderState(value, parseRenderManifest(manifestBefore), await listRenderFiles(host, folder));
+    const needed = state.entries.filter((e) => e.state !== "current").map((e) => e.path);
+    if (needed.length === 0 && state.counts.total > 0) {
+      ui.notice(`The render of ${folder} is already current.`);
+      return { action: "rendered", folder, images: [], problems: [], committed: false };
+    }
+    if (needed.length > 0 && needed.length < state.counts.total && !needed.includes("") && await supportsOnly(host, node2, abs(RENDER_SCRIPT))) {
+      only = needed;
+    }
+  }
+  const args = [
+    abs(RENDER_SCRIPT),
+    "--factorio",
+    settings.factorioPath.trim(),
+    "--input",
+    abs(joinPath(folder, BLUEPRINT_FILE)),
+    "--out",
+    abs(joinPath(folder, "renders")),
+    "--json",
+    ...only.length > 0 ? ["--only", only.join(",")] : [],
+    ...settings.extraArgs
+  ];
+  const progress = ui.progress(`Rendering ${folder}: starting Factorio…`);
+  let result;
+  try {
+    result = await host.processes.run(node2, args, {
+      cwd: host.vaultPath,
+      signal,
+      onStderrLine: (line) => {
+        const text = line.trim();
+        if (text !== "") progress.update(`Rendering ${folder}: ${text.length > 120 ? text.slice(0, 117) + "…" : text}`);
+      }
+    });
+  } finally {
+    progress.close();
+  }
+  if (signal.aborted) {
+    ui.notice(`Render of ${folder} cancelled. Nothing was committed.`);
+    return { action: "cancelled" };
+  }
+  if (result.code === -1) {
+    return fail(
+      host,
+      `Could not start Node.js (${settings.nodePath || "node"}): ${result.error ?? "unknown error"}. Set "Node path" in the plugin settings.`
+    );
+  }
+  if (result.code !== 0 && result.code !== 2) {
+    return fail(host, `Render of ${folder} failed: ${lastErrorLine(result.stderr)}. Nothing was committed.`);
+  }
+  const report = parseReport(result.stdout);
+  const fromReport = report ? reportedFiles(report, abs(joinPath(folder, "renders"))) : void 0;
+  const present = await listRenderFiles(host, folder);
+  const images = fromReport && fromReport.length > 0 ? [...fromReport].sort() : present;
+  const problems = report ? reportedProblems(report) : result.code === 2 ? ["some blueprints got no image (no report)"] : [];
+  const summary = `Rendered ${images.length} image${images.length === 1 ? "" : "s"} for ${folder}` + (problems.length > 0 ? ` (${problems.length} problem${problems.length === 1 ? "" : "s"}: ${problems.slice(0, 5).join("; ")}${problems.length > 5 ? "; …" : ""})` : "");
+  if (images.length === 0) {
+    ui.notice(`${summary}. Nothing to commit.`, "error");
+    return { action: "rendered", folder, images, problems, committed: false };
+  }
+  const manifestAfter = await files.exists(manifestPath) ? await files.read(manifestPath) : void 0;
+  if (manifestAfter === void 0 || manifestAfter === manifestBefore) {
+    const written = manifestFromReport(value, parseRenderManifest(manifestBefore), report, fromReport, present, (/* @__PURE__ */ new Date()).toISOString());
+    if (written !== void 0) await files.write(manifestPath, writeRenderManifest(written));
+  }
+  const block = await refreshGeneratedBlock(host, folder);
+  const blockNote = block.status === "skipped" && block.reason !== "no README.md" ? ` Notes not updated: ${block.reason}` : "";
+  if (!host.settings.commitAfterImport || host.git === void 0) {
+    ui.notice(`${summary}.${blockNote}`, problems.length > 0 ? "error" : "info");
+    return { action: "rendered", folder, images, problems, committed: false };
+  }
+  if (!await host.git.lfsAvailable()) {
+    ui.notice(
+      `${summary}, but git-lfs is not installed on this computer, so the images were not committed (they must not go into plain git). Run _tools/setup/setup-machine.sh, then commit with the Git plugin.${blockNote}`,
+      "error"
+    );
+    return { action: "rendered", folder, images, problems, committed: false };
+  }
+  const git = await host.git.commitAndSync(folder, await commitMessage(host, folder));
+  reportGit(host, summary, git, blockNote, blockNote !== "" || problems.length > 0);
+  return {
+    action: "rendered",
+    folder,
+    images,
+    problems,
+    committed: git.status === "pushed" || git.status === "failed" && git.committed
+  };
+}
+async function commitMessage(host, folder) {
+  let title = folder.slice(folder.lastIndexOf("/") + 1);
+  let version;
+  try {
+    const meta = readNotesMeta(await host.files.read(joinPath(folder, NOTES_FILE)));
+    title = meta.title ?? title;
+    version = meta.version;
+  } catch {
+  }
+  return `render ${title}${version !== void 0 ? ` ${version}` : ""}`.replace(/\s+/g, " ").trim();
+}
+function parseReport(stdout) {
+  const text = stdout.trim();
+  if (text === "") return void 0;
+  try {
+    const value = JSON.parse(text);
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function reportedFiles(report, rendersAbs) {
+  const images = Array.isArray(report["images"]) ? report["images"] : [];
+  const out = [];
+  for (const image of images) {
+    if (typeof image !== "object" || image === null) continue;
+    const r = image;
+    const file = [r["output"], r["out"], r["file"]].find((f) => typeof f === "string" && f !== "");
+    if (file === void 0) return void 0;
+    const norm = file.replace(/\\/g, "/");
+    const base = rendersAbs.replace(/\\/g, "/").replace(/\/+$/, "") + "/";
+    out.push(norm.startsWith(base) ? norm.slice(base.length) : norm.replace(/^(?:\.\/)?renders\//, ""));
+  }
+  return out.length > 0 ? out : void 0;
+}
+function reportedProblems(report) {
+  const out = [];
+  const name = (r) => {
+    const label = typeof r["label"] === "string" && r["label"] !== "" ? ` "${r["label"]}"` : "";
+    const path = typeof r["path"] === "string" && r["path"] !== "" ? `slot ${r["path"]}` : `blueprint ${String(r["number"] ?? "?")}`;
+    return path + label;
+  };
+  const count2 = (v) => Array.isArray(v) ? v.length : typeof v === "number" ? v : 0;
+  for (const m of Array.isArray(report["without_image"]) ? report["without_image"] : []) {
+    if (typeof m !== "object" || m === null) continue;
+    const r = m;
+    out.push(`${name(r)}: no image${typeof r["reason"] === "string" ? ` (${r["reason"]})` : ""}`);
+  }
+  for (const i2 of Array.isArray(report["images"]) ? report["images"] : []) {
+    if (typeof i2 !== "object" || i2 === null) continue;
+    const r = i2;
+    const failed = count2(r["failed"]);
+    const missing = count2(r["missing"]);
+    if (failed + missing > 0) out.push(`${name(r)}: ${failed + missing} entit${failed + missing === 1 ? "y" : "ies"} not built`);
+  }
+  return out;
+}
+function lastErrorLine(stderr) {
+  const lines = stderr.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "");
+  const line = [...lines].reverse().find((l) => /^render: /.test(l)) ?? lines.at(-1) ?? "no output";
+  return line.length > 300 ? line.slice(0, 297) + "…" : line;
+}
+function absolute(vaultPath, path) {
+  return `${vaultPath.replace(/[\\/]+$/, "")}/${path}`;
+}
+function reject3(host, reason) {
+  host.ui.notice(reason, "error");
+  return { action: "rejected", reason };
+}
+function fail(host, reason) {
+  host.ui.notice(reason, "error");
+  return { action: "failed", reason };
+}
+var onlySupport;
+async function supportsOnly(host, node2, script) {
+  if (onlySupport?.script === script) return onlySupport.supported;
+  const out = await host.processes.run(node2, [script, "--help"], { cwd: host.vaultPath });
+  const supported = out.code === 0 && /--only\b/.test(out.stdout + out.stderr);
+  onlySupport = { script, supported };
+  return supported;
+}
+function manifestFromReport(value, previous, report, reportedFiles2, images, now) {
+  const targets = renderTargets(value);
+  const byKey = new Map(targets.map((t) => [t.key, t]));
+  const present = new Set(images);
+  const entries = { ...previous?.entries ?? {} };
+  let changed = false;
+  const reported = report && Array.isArray(report["images"]) ? report["images"] : void 0;
+  if (reported) {
+    reported.forEach((item, i2) => {
+      if (typeof item !== "object" || item === null) return;
+      const r = item;
+      const path = typeof r["path"] === "string" ? r["path"] : void 0;
+      const key = path === void 0 ? void 0 : path === "" ? "0" : path;
+      const target = key === void 0 ? void 0 : byKey.get(key);
+      if (!target) return;
+      const numbered = typeof r["number"] === "number" ? `${r["number"]}.jpg` : void 0;
+      const file = [reportedFiles2?.[i2], target.file, numbered].find((f) => f !== void 0 && present.has(f));
+      if (file === void 0) return;
+      entries[target.key] = {
+        file,
+        sha256: target.hash,
+        ...typeof r["width"] === "number" ? { width: r["width"] } : {},
+        ...typeof r["height"] === "number" ? { height: r["height"] } : {}
+      };
+      changed = true;
+    });
+  } else {
+    for (const t of targets) {
+      if (!present.has(t.file)) continue;
+      entries[t.key] = { file: t.file, sha256: t.hash };
+      changed = true;
+    }
+  }
+  return changed ? { schema: 1, rendered_at: now, entries } : void 0;
+}
+
+// src/commands/render-status.ts
+async function folderRenderState(host, folder) {
+  const value = readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE)));
+  const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
+  const manifest = await host.files.exists(manifestPath) ? parseRenderManifest(await host.files.read(manifestPath)) : void 0;
+  return renderState(value, manifest, await listRenderFiles(host, folder));
+}
+async function foldersNeedingRender(host) {
+  const out = [];
+  for (const folder of await findBlueprintFolders(host)) {
+    try {
+      const state = await folderRenderState(host, folder);
+      if (state.counts.total > 0 && state.overall !== "current") out.push({ folder, state });
+    } catch {
+    }
+  }
+  return out;
+}
+function describeState(s) {
+  return renderStateLabel(s).replace(/^Render: /, "");
+}
+async function showFoldersNeedingRender(host) {
+  const progress = host.ui.progress("Checking render state of every blueprint…");
+  let list;
+  try {
+    list = await foldersNeedingRender(host);
+  } finally {
+    progress.close();
+  }
+  if (list.length === 0) {
+    host.ui.notice("Every blueprint's render is current.");
+    return;
+  }
+  const items = [
+    { label: `Render all ${list.length} that need it`, detail: "one after another; Cancel render preview stops after the current one" },
+    ...list.map((f) => ({ label: f.folder, detail: describeState(f.state) }))
+  ];
+  const chosen = await host.ui.pick(items, "Blueprints whose render is missing or outdated");
+  if (chosen === void 0) return;
+  if (chosen === 0) {
+    await renderAll(host, list.map((f) => f.folder));
+    return;
+  }
+  await host.ui.openNote?.(joinPath(list[chosen - 1].folder, NOTES_FILE));
+}
+var queueCancelled = false;
+function cancelRenderAll() {
+  const running = isRendering();
+  queueCancelled = true;
+  if (running) cancelRender();
+  return running;
+}
+async function renderAllNeeded(host) {
+  const progress = host.ui.progress("Checking render state of every blueprint…");
+  let list;
+  try {
+    list = await foldersNeedingRender(host);
+  } finally {
+    progress.close();
+  }
+  if (list.length === 0) {
+    host.ui.notice("Every blueprint's render is current.");
+    return;
+  }
+  await renderAll(host, list.map((f) => f.folder));
+}
+async function renderAll(host, folders) {
+  if (isRendering()) {
+    host.ui.notice("A render is already running; wait for it or cancel it first.", "error");
+    return { rendered: [], failed: [], cancelled: false };
+  }
+  queueCancelled = false;
+  const result = { rendered: [], failed: [], cancelled: false };
+  const overall = host.ui.progress(`Rendering ${folders.length} blueprints…`);
+  try {
+    for (const [i2, folder] of folders.entries()) {
+      if (queueCancelled) {
+        result.cancelled = true;
+        break;
+      }
+      overall.update(`Rendering ${i2 + 1} of ${folders.length}: ${folder}`);
+      const out = await renderPreview(host, folder, { onlyNeeded: true });
+      if (out.action === "rendered") result.rendered.push(folder);
+      else if (out.action === "cancelled") result.cancelled = true;
+      else if (out.action === "needs-settings") {
+        result.failed.push({ folder, reason: "Factorio path not set" });
+        break;
+      } else result.failed.push({ folder, reason: "reason" in out ? out.reason : out.action });
+      if (result.cancelled) break;
+    }
+  } finally {
+    overall.close();
+    queueCancelled = false;
+  }
+  const lines = [
+    `Render all: ${result.rendered.length} of ${folders.length} rendered` + (result.failed.length > 0 ? `, ${result.failed.length} failed` : "") + (result.cancelled ? ", cancelled" : "") + ".",
+    ...result.failed.map((f) => `${f.folder}: ${f.reason.split("\n")[0]}`)
+  ];
+  host.ui.notice(lines.join("\n"), result.failed.length > 0 || result.cancelled ? "error" : "info");
+  return result;
+}
+
 // src/commands/import-blueprint.ts
 async function chooseImportTarget(host, contextFolder) {
   const folder = await findBlueprintFolder(
@@ -7630,7 +8509,7 @@ async function importFromClipboard(host, contextFolder) {
   try {
     text = await host.clipboard.readText();
   } catch (e) {
-    return reject2(host, `Could not read the clipboard: ${errorText2(e)}`);
+    return reject4(host, `Could not read the clipboard: ${errorText2(e)}`);
   }
   let value;
   let json;
@@ -7639,11 +8518,11 @@ async function importFromClipboard(host, contextFolder) {
     ({ value, json } = decodeBlueprintString(text));
     description = describeBlueprint(value);
   } catch (e) {
-    return reject2(host, clipboardErrorMessage(e));
+    return reject4(host, clipboardErrorMessage(e));
   }
   const lossy = findLossyNumbers(json);
   if (lossy.length > 0) {
-    return reject2(
+    return reject4(
       host,
       `This blueprint has numbers that cannot be stored exactly (${lossy.slice(0, 3).join(", ")}). Nothing was written.`
     );
@@ -7651,10 +8530,11 @@ async function importFromClipboard(host, contextFolder) {
   const canonical = writeCanonicalJson(value);
   const summary = summarizeBlueprint(description);
   const target = await chooseImportTarget(host, contextFolder);
-  if (target.mode === "refuse") return reject2(host, target.reason);
+  if (target.mode === "refuse") return reject4(host, target.reason);
   const commit = host.settings.commitAfterImport && host.git !== void 0;
   let folder;
-  let commitMessage;
+  let blockWarning = "";
+  let commitMessage2;
   let action;
   if (target.mode === "update") {
     folder = target.folder;
@@ -7686,13 +8566,20 @@ async function importFromClipboard(host, contextFolder) {
     if (!answer) return { action: "cancelled" };
     try {
       await host.files.write(jsonPath, canonical);
-      if (answer.newVersion !== void 0 && notes !== void 0 && answer.newVersion !== meta?.version) {
-        await host.files.write(notesPath, updateFrontmatter(notes, { version: answer.newVersion }));
+      if (notes !== void 0) {
+        let next = notes;
+        if (answer.newVersion !== void 0 && answer.newVersion !== meta?.version) {
+          next = updateFrontmatter(next, { version: answer.newVersion });
+        }
+        const block = await noteWithBlock(host, folder, next, value);
+        if (block.status === "invalid") blockWarning = ` ${block.reason}`;
+        else next = block.text;
+        if (next !== notes) await host.files.write(notesPath, next);
       }
     } catch (e) {
-      return reject2(host, `Could not write ${folder}: ${errorText2(e)}`);
+      return reject4(host, `Could not write ${folder}: ${errorText2(e)}`);
     }
-    commitMessage = oneLine(answer.changeNote) || `update ${title}`;
+    commitMessage2 = oneLine(answer.changeNote) || `update ${title}`;
     action = "updated";
   } else {
     const title = plainLabel(description.label ?? "") || capitalize(KIND_NAMES[description.kind]);
@@ -7708,7 +8595,7 @@ async function importFromClipboard(host, contextFolder) {
     });
     if (!answer) return { action: "cancelled" };
     const problem = await checkSlug(answer.slug);
-    if (problem !== void 0) return reject2(host, problem);
+    if (problem !== void 0) return reject4(host, problem);
     const newTitle = oneLine(answer.title) || title;
     folder = joinPath(target.parent, answer.slug);
     try {
@@ -7720,21 +8607,35 @@ async function importFromClipboard(host, contextFolder) {
         posted: host.today(),
         authors: host.settings.authors
       });
-      await host.files.write(joinPath(folder, NOTES_FILE), notes);
+      const block = await noteWithBlock(host, folder, notes, value);
+      if (block.status === "invalid") blockWarning = ` ${block.reason}`;
+      await host.files.write(joinPath(folder, NOTES_FILE), block.text);
     } catch (e) {
-      return reject2(host, `Could not write ${folder}: ${errorText2(e)}`);
+      return reject4(host, `Could not write ${folder}: ${errorText2(e)}`);
     }
-    commitMessage = oneLine(answer.changeNote) || `add ${newTitle}`;
+    commitMessage2 = oneLine(answer.changeNote) || `add ${newTitle}`;
     action = "created";
     if (ui.openNote) await ui.openNote(joinPath(folder, NOTES_FILE)).catch(() => void 0);
   }
   const verb = action === "created" ? "Created" : "Updated";
-  if (!commit) {
-    ui.notice(`${verb} ${folder} with ${summary}.`);
-    return { action, folder, git: void 0 };
+  let renderNote = "";
+  if (action === "updated") {
+    try {
+      const state = await folderRenderState(host, folder);
+      if (state.overall === "outdated") {
+        renderNote = ` (its render is now outdated: ${describeState(state)}; run Render preview)`;
+      }
+    } catch {
+    }
   }
-  const git = await host.git.commitAndSync(folder, commitMessage);
-  reportGit(host, `${verb} ${folder} with ${summary}`, git);
+  let git;
+  if (!commit) {
+    ui.notice(`${verb} ${folder} with ${summary}${renderNote}.${blockWarning}`);
+  } else {
+    git = await host.git.commitAndSync(folder, commitMessage2);
+    reportGit(host, `${verb} ${folder} with ${summary}${renderNote}`, git, blockWarning);
+  }
+  if (host.settings.render.afterImport) await renderPreview(host, folder);
   return { action, folder, git };
 }
 async function checkNewSlug(host, parent, slug) {
@@ -7773,22 +8674,6 @@ function clipboardErrorMessage(e) {
   }
   return `Could not read the blueprint string: ${errorText2(e)}`;
 }
-function reportGit(host, done, git) {
-  switch (git.status) {
-    case "pushed":
-      host.ui.notice(`${done}, committed and pushed (${git.commit}).`);
-      return;
-    case "nothing-to-commit":
-      host.ui.notice(`${done}. Git found nothing new to commit.`);
-      return;
-    case "failed":
-      host.ui.notice(
-        git.committed ? `${done} and committed ${git.commit ?? ""} locally, but ${git.message}. The Git plugin's timed sync will try again.` : `${done}, but ${git.message}. The file is saved; the Git plugin's timed sync will commit it.`,
-        "error"
-      );
-      return;
-  }
-}
 function safeSummary(text) {
   try {
     return summarizeBlueprint(describeBlueprint(readCanonicalJson(text)));
@@ -7796,7 +8681,7 @@ function safeSummary(text) {
     return void 0;
   }
 }
-function reject2(host, reason) {
+function reject4(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "rejected", reason };
 }
@@ -7823,48 +8708,48 @@ var BUSY_MARKERS = [
   ["index.lock", "another git command is running"]
 ];
 async function commitAndSync(opts) {
-  const { run, pathExists, folder, message } = opts;
+  const { run: run2, pathExists, folder, message } = opts;
   const pathspec = ["--", folder === "" ? "." : folder];
   const lit = "--literal-pathspecs";
-  const inside = await run(["rev-parse", "--is-inside-work-tree"]);
+  const inside = await run2(["rev-parse", "--is-inside-work-tree"]);
   if (inside.code !== 0 || inside.stdout.trim() !== "true") {
-    return fail("check", false, "the vault is not a git repository", inside);
+    return fail2("check", false, "the vault is not a git repository", inside);
   }
-  const busy = await busyReason(run, pathExists);
-  if (busy !== void 0) return fail("check", false, `git is busy: ${busy}`);
-  const add = await run([lit, "add", "-A", ...pathspec]);
-  if (add.code !== 0) return fail("stage", false, "git add failed", add);
-  const staged = await run([lit, "diff", "--cached", "--quiet", ...pathspec]);
+  const busy = await busyReason(run2, pathExists);
+  if (busy !== void 0) return fail2("check", false, `git is busy: ${busy}`);
+  const add = await run2([lit, "add", "-A", ...pathspec]);
+  if (add.code !== 0) return fail2("stage", false, "git add failed", add);
+  const staged = await run2([lit, "diff", "--cached", "--quiet", ...pathspec]);
   if (staged.code === 0) return { status: "nothing-to-commit" };
-  if (staged.code !== 1) return fail("stage", false, "git diff failed", staged);
-  const commitOut = await run([lit, "commit", "--only", "-m", message, ...pathspec]);
-  if (commitOut.code !== 0) return fail("commit", false, "git commit failed", commitOut);
-  const head = await run(["rev-parse", "--short", "HEAD"]);
+  if (staged.code !== 1) return fail2("stage", false, "git diff failed", staged);
+  const commitOut = await run2([lit, "commit", "--only", "-m", message, ...pathspec]);
+  if (commitOut.code !== 0) return fail2("commit", false, "git commit failed", commitOut);
+  const head = await run2(["rev-parse", "--short", "HEAD"]);
   const commit = head.stdout.trim();
-  const pull = await run(["pull", "--no-rebase", "--no-edit"]);
+  const pull = await run2(["pull", "--no-rebase", "--no-edit"]);
   if (pull.code !== 0) {
     let note = "git pull failed";
-    if (await gitPathExists(run, pathExists, "MERGE_HEAD")) {
-      const abort = await run(["merge", "--abort"]);
+    if (await gitPathExists(run2, pathExists, "MERGE_HEAD")) {
+      const abort = await run2(["merge", "--abort"]);
       note = abort.code === 0 ? "git pull hit a merge conflict, so the merge was undone" : "git pull hit a merge conflict and undoing it failed; resolve it in the Git plugin";
     }
-    return fail("pull", true, note, pull, commit);
+    return fail2("pull", true, note, pull, commit);
   }
-  const push = await run(["push"]);
-  if (push.code !== 0) return fail("push", true, "git push failed", push, commit);
+  const push = await run2(["push"]);
+  if (push.code !== 0) return fail2("push", true, "git push failed", push, commit);
   return { status: "pushed", commit };
 }
-async function busyReason(run, pathExists) {
+async function busyReason(run2, pathExists) {
   for (const [marker, reason] of BUSY_MARKERS) {
-    if (await gitPathExists(run, pathExists, marker)) return reason;
+    if (await gitPathExists(run2, pathExists, marker)) return reason;
   }
   return void 0;
 }
-async function gitPathExists(run, pathExists, name) {
-  const out = await run(["rev-parse", "--git-path", name]);
+async function gitPathExists(run2, pathExists, name) {
+  const out = await run2(["rev-parse", "--git-path", name]);
   return out.code === 0 && await pathExists(out.stdout.trim());
 }
-function fail(step, committed, what, out, commit) {
+function fail2(step, committed, what, out, commit) {
   const detail = out ? firstErrorLine(out) : "";
   const result = {
     status: "failed",
@@ -7877,8 +8762,12 @@ function fail(step, committed, what, out, commit) {
 }
 function firstErrorLine(out) {
   const lines = (out.stderr + "\n" + out.stdout).split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "" && !/^hint:/i.test(l));
-  const line = lines.find((l) => /^(fatal|error):/i.test(l)) ?? lines.find((l) => /conflict/i.test(l)) ?? lines[0] ?? "";
+  const line = lines.find((l) => /\blfs\b|batch response/i.test(l) && !/^(?:uploading lfs objects|git lfs)/i.test(l)) ?? lines.find((l) => /^(fatal|error):/i.test(l)) ?? lines.find((l) => /conflict/i.test(l)) ?? lines[0] ?? "";
   return line.length > 200 ? line.slice(0, 197) + "..." : line;
+}
+async function lfsAvailable(run2) {
+  const out = await run2(["lfs", "version"]);
+  return out.code === 0 && /git-lfs/i.test(out.stdout + out.stderr);
 }
 
 // src/git/node-runner.ts
@@ -7923,6 +8812,57 @@ function defaultGitBinary() {
     }
   }
   return "git";
+}
+
+// src/process/node-process.ts
+var import_child_process2 = require("child_process");
+var import_fs2 = require("fs");
+var nodeProcessRunner = {
+  run(program, args, { cwd, signal, onStderrLine }) {
+    return new Promise((done) => {
+      let stdout = "";
+      let stderr = "";
+      let partial = "";
+      let settled = false;
+      const finish = (r) => {
+        if (settled) return;
+        settled = true;
+        signal?.removeEventListener("abort", onAbort);
+        done(r);
+      };
+      let child;
+      try {
+        child = (0, import_child_process2.spawn)(program, args, { cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+      } catch (e) {
+        finish({ code: -1, stdout, stderr, error: e instanceof Error ? e.message : String(e) });
+        return;
+      }
+      const onAbort = () => child.kill("SIGINT");
+      if (signal?.aborted) onAbort();
+      else signal?.addEventListener("abort", onAbort);
+      child.stdout?.setEncoding("utf8");
+      child.stderr?.setEncoding("utf8");
+      child.stdout?.on("data", (d) => stdout += d);
+      child.stderr?.on("data", (d) => {
+        stderr += d;
+        partial += d;
+        const lines = partial.split(/\r?\n/);
+        partial = lines.pop() ?? "";
+        for (const line of lines) onStderrLine?.(line);
+      });
+      child.on("error", (e) => finish({ code: -1, stdout, stderr, error: e.message }));
+      child.on("close", (code) => {
+        if (partial !== "") onStderrLine?.(partial);
+        finish({ code, stdout, stderr });
+      });
+    });
+  }
+};
+function defaultNodeBinary() {
+  if (process.platform === "darwin") {
+    for (const p of ["/opt/homebrew/bin/node", "/usr/local/bin/node"]) if ((0, import_fs2.existsSync)(p)) return p;
+  }
+  return "node";
 }
 
 // src/obsidian/modals.ts
@@ -8041,17 +8981,72 @@ var UpdateBlueprintModal = class extends AnswerModal {
     );
   }
 };
+var PickModal = class extends import_obsidian.SuggestModal {
+  items;
+  resolve;
+  chosen;
+  constructor(app, items, placeholder) {
+    super(app);
+    this.items = items;
+    this.setPlaceholder(placeholder);
+  }
+  ask() {
+    return new Promise((resolve2) => {
+      this.resolve = resolve2;
+      this.open();
+    });
+  }
+  getSuggestions(query) {
+    const q = query.trim().toLowerCase();
+    return this.items.map((_, i2) => i2).filter((i2) => q === "" || `${this.items[i2].label} ${this.items[i2].detail ?? ""}`.toLowerCase().includes(q));
+  }
+  renderSuggestion(index, el) {
+    const item = this.items[index];
+    el.createEl("div", { text: item.label });
+    if (item.detail) el.createEl("small", { text: item.detail, cls: "setting-item-description" });
+  }
+  onChooseSuggestion(index) {
+    this.chosen = index;
+  }
+  onClose() {
+    super.onClose();
+    setTimeout(() => this.resolve?.(this.chosen), 0);
+  }
+};
 
 // src/obsidian/settings.ts
 var import_obsidian2 = require("obsidian");
 var DEFAULT_SETTINGS = {
   authors: "",
   commitAfterImport: true,
-  templatePath: "_tools/templates/blueprint-notes.md"
+  templatePath: "_tools/templates/blueprint-notes.md",
+  linkBase: DEFAULT_LINK_BASE
 };
-var GIT_BINARY_KEY = "factorio-blueprints-git-binary";
+var LOCAL = {
+  gitBinary: "factorio-blueprints-git-binary",
+  factorioPath: "factorio-blueprints-factorio-path",
+  nodePath: "factorio-blueprints-node-path",
+  renderArgs: "factorio-blueprints-render-args",
+  renderAfterImport: "factorio-blueprints-render-after-import"
+};
+var GIT_BINARY_KEY = LOCAL.gitBinary;
 function parseAuthors(authors) {
   return authors.split(",").map((a) => a.trim()).filter((a) => a !== "");
+}
+function parseArgs(text) {
+  return [...text.matchAll(/"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2]);
+}
+function localString(app, key) {
+  const v = app.loadLocalStorage(key);
+  return typeof v === "string" ? v : "";
+}
+function loadRenderSettings(app) {
+  return {
+    factorioPath: localString(app, LOCAL.factorioPath),
+    nodePath: localString(app, LOCAL.nodePath) || defaultNodeBinary(),
+    extraArgs: parseArgs(localString(app, LOCAL.renderArgs)),
+    afterImport: app.loadLocalStorage(LOCAL.renderAfterImport) === true
+  };
 }
 var BlueprintSettingTab = class extends import_obsidian2.PluginSettingTab {
   owner;
@@ -8069,7 +9064,7 @@ var BlueprintSettingTab = class extends import_obsidian2.PluginSettingTab {
         await this.owner.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Commit after import").setDesc("After an import, commit just that blueprint folder, then pull and push.").addToggle(
+    new import_obsidian2.Setting(containerEl).setName("Commit after import and render").setDesc("After an import or a render, commit just that blueprint folder, then pull and push.").addToggle(
       (t) => t.setValue(s.commitAfterImport).onChange(async (v) => {
         s.commitAfterImport = v;
         await this.owner.saveSettings();
@@ -8081,22 +9076,67 @@ var BlueprintSettingTab = class extends import_obsidian2.PluginSettingTab {
         await this.owner.saveSettings();
       })
     );
-    new import_obsidian2.Setting(containerEl).setName("Git binary (this computer)").setDesc("Leave empty to use git from the PATH (on a Mac, Homebrew's git if installed). Saved on this computer only.").addText(
-      (t) => t.setPlaceholder("git").setValue(String(this.app.loadLocalStorage(GIT_BINARY_KEY) ?? "")).onChange((v) => {
-        this.app.saveLocalStorage(GIT_BINARY_KEY, v.trim() === "" ? null : v.trim());
+    new import_obsidian2.Setting(containerEl).setName("Live link address").setDesc("Base URL of the link service, used for copied links and the links in notes.").addText(
+      (t) => t.setPlaceholder(DEFAULT_LINK_BASE).setValue(s.linkBase).onChange(async (v) => {
+        s.linkBase = v.trim().replace(/\/+$/, "") || DEFAULT_LINK_BASE;
+        await this.owner.saveSettings();
       })
+    );
+    new import_obsidian2.Setting(containerEl).setName("This computer").setHeading();
+    containerEl.createEl("p", {
+      text: "Saved on this computer only, not synced.",
+      cls: "setting-item-description"
+    });
+    this.localText(
+      "Git binary",
+      "Leave empty to use git from the PATH (on a Mac, Homebrew's git if installed).",
+      LOCAL.gitBinary,
+      "git"
+    );
+    this.localText(
+      "Factorio path",
+      "The Factorio executable or install folder, for Render preview. The full game, not the headless build.",
+      LOCAL.factorioPath,
+      "/path/to/factorio"
+    );
+    this.localText(
+      "Node path",
+      "Node.js 22 or later, which runs the render tool. Leave empty to use node from the PATH (on a Mac, Homebrew's node if installed).",
+      LOCAL.nodePath,
+      "node"
+    );
+    this.localText(
+      "Extra render arguments",
+      "Added to every render, for example --show-window.",
+      LOCAL.renderArgs,
+      "--show-window"
+    );
+    new import_obsidian2.Setting(containerEl).setName("Render after import").setDesc("Run Render preview right after each import (a second commit). Needs the Factorio path.").addToggle(
+      (t) => t.setValue(this.app.loadLocalStorage(LOCAL.renderAfterImport) === true).onChange((v) => this.app.saveLocalStorage(LOCAL.renderAfterImport, v ? true : null))
+    );
+  }
+  localText(name, desc, key, placeholder) {
+    new import_obsidian2.Setting(this.containerEl).setName(name).setDesc(desc).addText(
+      (t) => t.setPlaceholder(placeholder).setValue(localString(this.app, key)).onChange((v) => this.app.saveLocalStorage(key, v.trim() === "" ? null : v.trim()))
     );
   }
 };
 
 // src/obsidian/host.ts
-function createObsidianHost(app, settings) {
+function createObsidianHost(app, settings, openSettings) {
   const adapter = app.vault.adapter;
   const vaultDir = adapter instanceof import_obsidian3.FileSystemAdapter ? adapter.getBasePath() : void 0;
   const p = (path) => (0, import_obsidian3.normalizePath)(path === "" ? "/" : path);
+  const gitRunner = (dir) => {
+    const configured = app.loadLocalStorage(GIT_BINARY_KEY);
+    const binary2 = typeof configured === "string" && configured !== "" ? configured : defaultGitBinary();
+    return createGitRunner(binary2, dir);
+  };
   return {
     settings,
     today: () => localDate(/* @__PURE__ */ new Date()),
+    vaultPath: vaultDir,
+    processes: vaultDir === void 0 ? void 0 : nodeProcessRunner,
     files: {
       exists: (path) => adapter.exists(p(path)),
       read: (path) => adapter.read(p(path)),
@@ -8109,6 +9149,11 @@ function createObsidianHost(app, settings) {
       async mkdir(path) {
         if (await adapter.exists(p(path))) return;
         await app.vault.createFolder(p(path));
+      },
+      async list(path) {
+        const listed = await adapter.list(p(path));
+        const clean = (x2) => x2.replace(/^\/+/, "");
+        return { files: listed.files.map(clean), folders: listed.folders.map(clean) };
       }
     },
     clipboard: {
@@ -8121,6 +9166,15 @@ function createObsidianHost(app, settings) {
       },
       askCreate: (prompt) => new CreateBlueprintModal(app, prompt).ask(),
       askUpdate: (prompt) => new UpdateBlueprintModal(app, prompt).ask(),
+      pick: (items, placeholder) => new PickModal(app, items, placeholder).ask(),
+      progress(message) {
+        const notice = new import_obsidian3.Notice(message, 0);
+        return {
+          update: (m) => notice.setMessage(m),
+          close: () => notice.hide()
+        };
+      },
+      openSettings,
       async openNote(path) {
         for (let i2 = 0; i2 < 20; i2++) {
           const file = app.vault.getAbstractFileByPath(p(path));
@@ -8133,11 +9187,10 @@ function createObsidianHost(app, settings) {
       }
     },
     git: vaultDir === void 0 ? void 0 : {
+      lfsAvailable: () => lfsAvailable(gitRunner(vaultDir)),
       commitAndSync(folder, message) {
-        const configured = app.loadLocalStorage(GIT_BINARY_KEY);
-        const binary2 = typeof configured === "string" && configured !== "" ? configured : defaultGitBinary();
         return commitAndSync({
-          run: createGitRunner(binary2, vaultDir),
+          run: gitRunner(vaultDir),
           pathExists: nodePathExists(vaultDir),
           folder,
           message
@@ -8159,6 +9212,7 @@ var FOLDER_COMMANDS = [
     menuTitle: "Import blueprint from clipboard here",
     icon: "clipboard-paste",
     menuOnlyInBlueprintFolder: false,
+    exclusive: true,
     run: importFromClipboard
   },
   {
@@ -8167,12 +9221,35 @@ var FOLDER_COMMANDS = [
     menuTitle: "Copy blueprint string",
     icon: "clipboard-copy",
     menuOnlyInBlueprintFolder: true,
+    exclusive: true,
     run: copyBlueprintString
+  },
+  {
+    id: "copy-live-link",
+    name: "Copy live link",
+    menuTitle: "Copy live link",
+    icon: "link",
+    menuOnlyInBlueprintFolder: true,
+    exclusive: false,
+    run: copyLiveLink
+  },
+  {
+    id: "render-preview",
+    name: "Render preview",
+    menuTitle: "Render preview",
+    icon: "image",
+    menuOnlyInBlueprintFolder: true,
+    exclusive: false,
+    run: (host, folder) => renderPreview(host, folder)
   }
 ];
 var FactorioBlueprintsPlugin = class extends import_obsidian4.Plugin {
   settings = { ...DEFAULT_SETTINGS };
   running = false;
+  statusEl;
+  statusFolder;
+  statusCache = /* @__PURE__ */ new Map();
+  statusTimer;
   async onload() {
     await this.loadSettings();
     this.addSettingTab(new BlueprintSettingTab(this.app, this));
@@ -8194,6 +9271,58 @@ var FactorioBlueprintsPlugin = class extends import_obsidian4.Plugin {
         }
       });
     }
+    this.addCommand({
+      id: "cancel-render-preview",
+      name: "Cancel render preview",
+      icon: "square",
+      callback: () => {
+        if (!cancelRenderAll()) this.host().ui.notice("No render is running.");
+      }
+    });
+    this.addCommand({
+      id: "show-blueprints-needing-render",
+      name: "Show blueprints needing a render",
+      icon: "list-checks",
+      callback: () => void this.runExclusive((host) => showFoldersNeedingRender(host))
+    });
+    this.addCommand({
+      id: "render-all-needing-render",
+      name: "Render all that need it",
+      icon: "images",
+      callback: () => void this.runExclusive((host) => renderAllNeeded(host))
+    });
+    this.statusEl = this.addStatusBarItem();
+    this.statusEl.addClass("mod-clickable");
+    this.statusEl.setAttribute("aria-label", "Render preview (only what is missing or outdated)");
+    this.statusEl.hide();
+    this.registerDomEvent(this.statusEl, "click", () => {
+      if (this.statusFolder === void 0) return;
+      void renderPreview(this.host(), this.statusFolder, { onlyNeeded: true }).finally(() => this.scheduleStatus());
+    });
+    this.registerEvent(this.app.workspace.on("file-open", () => this.scheduleStatus()));
+    this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.scheduleStatus()));
+    for (const event of ["create", "delete", "modify", "rename"]) {
+      this.registerEvent(
+        this.app.vault.on(event, (file) => {
+          if (this.statusFolder !== void 0 && file.path.startsWith(this.statusFolder + "/")) this.scheduleStatus();
+        })
+      );
+    }
+    this.app.workspace.onLayoutReady(() => this.scheduleStatus());
+    this.addCommand({
+      id: "refresh-generated-blocks",
+      name: "Refresh generated blocks in all notes",
+      icon: "refresh-cw",
+      callback: () => {
+        const host = this.host();
+        if (this.running) {
+          host.ui.notice("A blueprint command is still running; try again in a moment.", "error");
+          return;
+        }
+        this.running = true;
+        void refreshAllGeneratedBlocks(host).catch((e) => host.ui.notice(`Refreshing generated blocks failed: ${e instanceof Error ? e.message : String(e)}`, "error")).finally(() => this.running = false);
+      }
+    });
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
         const folder = folderOf(file);
@@ -8214,13 +9343,28 @@ var FactorioBlueprintsPlugin = class extends import_obsidian4.Plugin {
     await this.saveData(this.settings);
   }
   host() {
-    return createObsidianHost(this.app, {
-      authors: parseAuthors(this.settings.authors),
-      commitAfterImport: this.settings.commitAfterImport,
-      templatePath: this.settings.templatePath
-    });
+    return createObsidianHost(
+      this.app,
+      {
+        authors: parseAuthors(this.settings.authors),
+        commitAfterImport: this.settings.commitAfterImport,
+        templatePath: this.settings.templatePath,
+        linkBase: this.settings.linkBase || DEFAULT_SETTINGS.linkBase,
+        render: loadRenderSettings(this.app)
+      },
+      () => this.openSettings()
+    );
   }
-  async runCommand(cmd, folder) {
+  /** Obsidian has no public API to open a plugin's settings tab. */
+  openSettings() {
+    const setting = this.app.setting;
+    try {
+      setting?.open();
+      setting?.openTabById(this.manifest.id);
+    } catch {
+    }
+  }
+  async runExclusive(fn) {
     const host = this.host();
     if (this.running) {
       host.ui.notice("A blueprint command is still running; try again in a moment.", "error");
@@ -8228,19 +9372,83 @@ var FactorioBlueprintsPlugin = class extends import_obsidian4.Plugin {
     }
     this.running = true;
     try {
+      await fn(host);
+    } catch (e) {
+      host.ui.notice(`Failed: ${e instanceof Error ? e.message : String(e)}`, "error");
+      console.error(e);
+    } finally {
+      this.running = false;
+      this.scheduleStatus();
+    }
+  }
+  /** Update the status bar soon (debounced: saves come in bursts). */
+  scheduleStatus() {
+    if (this.statusTimer !== void 0) window.clearTimeout(this.statusTimer);
+    this.statusTimer = window.setTimeout(() => {
+      this.statusTimer = void 0;
+      void this.updateStatus();
+    }, 300);
+  }
+  async updateStatus() {
+    const el = this.statusEl;
+    if (!el) return;
+    const file = this.app.workspace.getActiveFile();
+    const folder = file ? this.blueprintFolderOf(folderOf(file)) : void 0;
+    this.statusFolder = folder;
+    if (folder === void 0) {
+      el.hide();
+      return;
+    }
+    try {
+      const adapter = this.app.vault.adapter;
+      const stat = async (p) => {
+        const s = await adapter.stat(p);
+        return s ? `${s.mtime}:${s.size}` : "-";
+      };
+      const host = this.host();
+      const rendersDir = joinPath(folder, "renders");
+      const key = [
+        await stat(joinPath(folder, BLUEPRINT_FILE)),
+        await stat(joinPath(rendersDir, RENDER_MANIFEST)),
+        await host.files.exists(rendersDir) ? JSON.stringify(await adapter.list(rendersDir)) : ""
+      ].join("|");
+      let cached = this.statusCache.get(folder);
+      if (cached?.key !== key) {
+        cached = { key, label: renderStateLabel(await folderRenderState(host, folder)) };
+        this.statusCache.set(folder, cached);
+      }
+      if (this.statusFolder !== folder) return;
+      el.setText(cached.label);
+      el.show();
+    } catch {
+      el.hide();
+    }
+  }
+  blueprintFolderOf(folder) {
+    return selfAndAncestors(folder).find(
+      (f) => f !== "" && isScannedPath(f) && this.app.vault.getAbstractFileByPath(joinPath(f, BLUEPRINT_FILE)) instanceof import_obsidian4.TFile
+    );
+  }
+  async runCommand(cmd, folder) {
+    const host = this.host();
+    if (cmd.exclusive && this.running) {
+      host.ui.notice("A blueprint command is still running; try again in a moment.", "error");
+      return;
+    }
+    if (cmd.exclusive) this.running = true;
+    try {
       await cmd.run(host, folder);
     } catch (e) {
       host.ui.notice(`${cmd.name} failed: ${e instanceof Error ? e.message : String(e)}`, "error");
       console.error(e);
     } finally {
-      this.running = false;
+      if (cmd.exclusive) this.running = false;
+      this.scheduleStatus();
     }
   }
   /** Synchronous check for menus, from the vault index. */
   isInBlueprintFolder(folder) {
-    return selfAndAncestors(folder).some(
-      (f) => f !== "" && isScannedPath(f) && this.app.vault.getAbstractFileByPath(joinPath(f, BLUEPRINT_FILE)) instanceof import_obsidian4.TFile
-    );
+    return this.blueprintFolderOf(folder) !== void 0;
   }
 };
 function folderOf(file) {

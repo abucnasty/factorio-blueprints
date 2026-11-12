@@ -3,19 +3,27 @@
 import { App, FileSystemAdapter, normalizePath, Notice, TFile } from "obsidian";
 
 import type { Host, NoticeKind, Settings } from "../commands/host.ts";
-import { commitAndSync } from "../git/commit-and-sync.ts";
+import { commitAndSync, lfsAvailable } from "../git/commit-and-sync.ts";
 import { createGitRunner, defaultGitBinary, nodePathExists } from "../git/node-runner.ts";
-import { CreateBlueprintModal, UpdateBlueprintModal } from "./modals.ts";
+import { nodeProcessRunner } from "../process/node-process.ts";
+import { CreateBlueprintModal, PickModal, UpdateBlueprintModal } from "./modals.ts";
 import { GIT_BINARY_KEY } from "./settings.ts";
 
-export function createObsidianHost(app: App, settings: Settings): Host {
+export function createObsidianHost(app: App, settings: Settings, openSettings?: () => void): Host {
   const adapter = app.vault.adapter;
   const vaultDir = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : undefined;
   const p = (path: string) => normalizePath(path === "" ? "/" : path);
+  const gitRunner = (dir: string) => {
+    const configured = app.loadLocalStorage(GIT_BINARY_KEY);
+    const binary = typeof configured === "string" && configured !== "" ? configured : defaultGitBinary();
+    return createGitRunner(binary, dir);
+  };
 
   return {
     settings,
     today: () => localDate(new Date()),
+    vaultPath: vaultDir,
+    processes: vaultDir === undefined ? undefined : nodeProcessRunner,
     files: {
       exists: (path) => adapter.exists(p(path)),
       read: (path) => adapter.read(p(path)),
@@ -29,6 +37,12 @@ export function createObsidianHost(app: App, settings: Settings): Host {
         if (await adapter.exists(p(path))) return;
         await app.vault.createFolder(p(path));
       },
+      async list(path) {
+        const listed = await adapter.list(p(path));
+        // The adapter lists "/"-rooted paths for the root on some versions.
+        const clean = (x: string) => x.replace(/^\/+/, "");
+        return { files: listed.files.map(clean), folders: listed.folders.map(clean) };
+      },
     },
     clipboard: {
       readText: () => navigator.clipboard.readText(),
@@ -40,6 +54,15 @@ export function createObsidianHost(app: App, settings: Settings): Host {
       },
       askCreate: (prompt) => new CreateBlueprintModal(app, prompt).ask(),
       askUpdate: (prompt) => new UpdateBlueprintModal(app, prompt).ask(),
+      pick: (items, placeholder) => new PickModal(app, items, placeholder).ask(),
+      progress(message) {
+        const notice = new Notice(message, 0);
+        return {
+          update: (m) => notice.setMessage(m),
+          close: () => notice.hide(),
+        };
+      },
+      openSettings,
       async openNote(path) {
         // A file created a moment ago may not be indexed yet.
         for (let i = 0; i < 20; i++) {
@@ -56,11 +79,10 @@ export function createObsidianHost(app: App, settings: Settings): Host {
       vaultDir === undefined
         ? undefined
         : {
+            lfsAvailable: () => lfsAvailable(gitRunner(vaultDir)),
             commitAndSync(folder, message) {
-              const configured = app.loadLocalStorage(GIT_BINARY_KEY);
-              const binary = typeof configured === "string" && configured !== "" ? configured : defaultGitBinary();
               return commitAndSync({
-                run: createGitRunner(binary, vaultDir),
+                run: gitRunner(vaultDir),
                 pathExists: nodePathExists(vaultDir),
                 folder,
                 message,
