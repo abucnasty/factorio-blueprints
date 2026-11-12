@@ -2,20 +2,14 @@
   "name": "factorio-blueprints-lfs-worker",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
-    "types": "wrangler types",
-    "typecheck": "tsc -p .",
-    "test": "node --test test/*.test.mjs"
+    "types": "wrangler types"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240821.1",
     "typescript": "^5.5.2",
     "wrangler": "^3.78.7"
-  },
-  "engines": {
-    "node": ">=22.18"
   }
 }
