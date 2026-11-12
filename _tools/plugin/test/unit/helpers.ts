@@ -1,9 +1,27 @@
-// A fake Host with an in-memory vault, for the command tests.
+// Fake Hosts for the command tests: an in-memory vault, or a real folder on
+// disk (for the render command, which runs a real process and git).
 
-import type { CreateAnswer, CreatePrompt, Host, Settings, UpdateAnswer, UpdatePrompt } from "../../src/commands/host.ts";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+import type {
+  CreateAnswer,
+  CreatePrompt,
+  GitSync,
+  Host,
+  PickItem,
+  RenderSettings,
+  Settings,
+  UpdateAnswer,
+  UpdatePrompt,
+  VaultFiles,
+} from "../../src/commands/host.ts";
 import type { GitResult } from "../../src/git/commit-and-sync.ts";
+import { nodeProcessRunner } from "../../src/process/node-process.ts";
 
 export { fixture } from "./fixtures.ts";
+
+export const BASE = "https://blueprints.abucnasty.dev";
 
 export interface FakeHost extends Host {
   vault: Map<string, string>;
@@ -12,17 +30,24 @@ export interface FakeHost extends Host {
   clipboardText: string;
   createPrompts: CreatePrompt[];
   updatePrompts: UpdatePrompt[];
+  picks: PickItem[][];
+  progress: string[];
   commits: { folder: string; message: string }[];
   opened: string[];
+  settingsOpened: number;
 }
 
 export interface FakeOptions {
   files?: Record<string, string>;
   clipboard?: string;
-  settings?: Partial<Settings>;
+  settings?: Partial<Omit<Settings, "render">> & { render?: Partial<RenderSettings> };
   create?: (p: CreatePrompt) => CreateAnswer | undefined;
   update?: (p: UpdatePrompt) => UpdateAnswer | undefined;
-  git?: GitResult | "none";
+  pick?: (items: PickItem[]) => number | undefined;
+  git?: GitResult | "none" | GitSync;
+  lfs?: boolean;
+  /** Use a real folder instead of the in-memory vault. */
+  disk?: string;
 }
 
 export function fakeHost(opts: FakeOptions = {}): FakeHost {
@@ -32,7 +57,34 @@ export function fakeHost(opts: FakeOptions = {}): FakeHost {
     const parts = path.split("/");
     for (let i = 1; i < parts.length; i++) folders.add(parts.slice(0, i).join("/"));
   }
-  const gitResult: GitResult = opts.git === undefined || opts.git === "none" ? { status: "pushed", commit: "abc1234" } : opts.git;
+  const memoryFiles: VaultFiles = {
+    exists: async (p) => p === "" || vault.has(p) || folders.has(p),
+    read: async (p) => {
+      const t = vault.get(p);
+      if (t === undefined) throw new Error(`ENOENT: ${p}`);
+      return t;
+    },
+    write: async (p, text) => {
+      const parent = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
+      if (parent !== "" && !folders.has(parent)) throw new Error(`no folder ${parent}`);
+      vault.set(p, text);
+    },
+    mkdir: async (p) => {
+      const parts = p.split("/");
+      for (let i = 1; i <= parts.length; i++) folders.add(parts.slice(0, i).join("/"));
+    },
+    list: async (p) => {
+      const prefix = p === "" ? "" : p + "/";
+      const direct = (all: Iterable<string>) =>
+        [...all].filter((x) => x.startsWith(prefix) && x !== p && !x.slice(prefix.length).includes("/")).sort();
+      return { files: direct(vault.keys()), folders: direct(folders) };
+    },
+  };
+  const { render, ...plain } = opts.settings ?? {};
+  const gitResult: GitResult =
+    opts.git === undefined || opts.git === "none" || "commitAndSync" in opts.git
+      ? { status: "pushed", commit: "abc1234" }
+      : opts.git;
   const host: FakeHost = {
     vault,
     folders,
@@ -40,32 +92,23 @@ export function fakeHost(opts: FakeOptions = {}): FakeHost {
     clipboardText: opts.clipboard ?? "",
     createPrompts: [],
     updatePrompts: [],
+    picks: [],
+    progress: [],
     commits: [],
     opened: [],
+    settingsOpened: 0,
     settings: {
       authors: ["abucnasty"],
       commitAfterImport: true,
       templatePath: "_tools/templates/blueprint-notes.md",
-      ...opts.settings,
+      linkBase: BASE,
+      ...plain,
+      render: { factorioPath: "", nodePath: process.execPath, extraArgs: [], afterImport: false, ...render },
     },
     today: () => "2026-11-12",
-    files: {
-      exists: async (p) => vault.has(p) || folders.has(p),
-      read: async (p) => {
-        const t = vault.get(p);
-        if (t === undefined) throw new Error(`ENOENT: ${p}`);
-        return t;
-      },
-      write: async (p, text) => {
-        const parent = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "";
-        if (parent !== "" && !folders.has(parent)) throw new Error(`no folder ${parent}`);
-        vault.set(p, text);
-      },
-      mkdir: async (p) => {
-        const parts = p.split("/");
-        for (let i = 1; i <= parts.length; i++) folders.add(parts.slice(0, i).join("/"));
-      },
-    },
+    vaultPath: opts.disk,
+    processes: opts.disk === undefined ? undefined : nodeProcessRunner,
+    files: opts.disk === undefined ? memoryFiles : diskFiles(opts.disk),
     clipboard: {
       readText: async () => host.clipboardText,
       writeText: async (t) => {
@@ -85,16 +128,49 @@ export function fakeHost(opts: FakeOptions = {}): FakeHost {
       openNote: async (p) => {
         host.opened.push(p);
       },
+      pick: async (items) => {
+        host.picks.push(items);
+        return opts.pick ? opts.pick(items) : 0;
+      },
+      progress: (message) => {
+        host.progress.push(message);
+        return { update: (m) => host.progress.push(m), close: () => host.progress.push("(closed)") };
+      },
+      openSettings: () => {
+        host.settingsOpened++;
+      },
     },
     git:
       opts.git === "none"
         ? undefined
-        : {
-            commitAndSync: async (folder, message) => {
-              host.commits.push({ folder, message });
-              return gitResult;
+        : opts.git !== undefined && "commitAndSync" in opts.git
+          ? opts.git
+          : {
+              commitAndSync: async (folder, message) => {
+                host.commits.push({ folder, message });
+                return gitResult;
+              },
+              lfsAvailable: async () => opts.lfs ?? true,
             },
-          },
   };
   return host;
+}
+
+/** VaultFiles over a real folder. */
+export function diskFiles(root: string): VaultFiles {
+  const abs = (p: string) => join(root, p);
+  return {
+    exists: async (p) => existsSync(abs(p)),
+    read: async (p) => readFileSync(abs(p), "utf8"),
+    write: async (p, text) => writeFileSync(abs(p), text),
+    mkdir: async (p) => void mkdirSync(abs(p), { recursive: true }),
+    list: async (p) => {
+      const entries = readdirSync(abs(p), { withFileTypes: true });
+      const path = (n: string) => (p === "" ? n : `${p}/${n}`);
+      return {
+        files: entries.filter((e) => e.isFile()).map((e) => path(e.name)).sort(),
+        folders: entries.filter((e) => e.isDirectory()).map((e) => path(e.name)).sort(),
+      };
+    },
+  };
 }

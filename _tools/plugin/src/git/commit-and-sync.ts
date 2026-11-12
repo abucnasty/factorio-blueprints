@@ -138,6 +138,18 @@ export function firstErrorLine(out: GitOutput): string {
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l !== "" && !/^hint:/i.test(l));
-  const line = lines.find((l) => /^(fatal|error):/i.test(l)) ?? lines.find((l) => /conflict/i.test(l)) ?? lines[0] ?? "";
+  // git-lfs explains a refused upload better than git's own "failed to push".
+  const line =
+    lines.find((l) => /\blfs\b|batch response/i.test(l) && !/^(?:uploading lfs objects|git lfs)/i.test(l)) ??
+    lines.find((l) => /^(fatal|error):/i.test(l)) ??
+    lines.find((l) => /conflict/i.test(l)) ??
+    lines[0] ??
+    "";
   return line.length > 200 ? line.slice(0, 197) + "..." : line;
+}
+
+/** True if git-lfs is installed for this git. */
+export async function lfsAvailable(run: GitRunner): Promise<boolean> {
+  const out = await run(["lfs", "version"]);
+  return out.code === 0 && /git-lfs/i.test(out.stdout + out.stderr);
 }

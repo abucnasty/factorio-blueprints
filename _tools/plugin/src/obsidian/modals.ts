@@ -1,9 +1,9 @@
 // The two import dialogs. Each resolves once: with the answer, or with
 // undefined when closed or cancelled.
 
-import { App, Modal, Setting } from "obsidian";
+import { App, Modal, Setting, SuggestModal } from "obsidian";
 
-import type { CreateAnswer, CreatePrompt, UpdateAnswer, UpdatePrompt } from "../commands/host.ts";
+import type { CreateAnswer, CreatePrompt, PickItem, UpdateAnswer, UpdatePrompt } from "../commands/host.ts";
 import { slugify } from "../core/index.ts";
 
 abstract class AnswerModal<T> extends Modal {
@@ -154,5 +154,48 @@ export class UpdateBlueprintModal extends AnswerModal<UpdateAnswer> {
     this.buttons("Update", () =>
       this.finish({ newVersion: bump && version !== "" ? version : undefined, changeNote: note }),
     );
+  }
+}
+
+/** Quick picker: resolves the chosen item's index, or undefined if dismissed. */
+export class PickModal extends SuggestModal<number> {
+  private readonly items: PickItem[];
+  private resolve: ((index: number | undefined) => void) | undefined;
+  private chosen: number | undefined;
+
+  constructor(app: App, items: PickItem[], placeholder: string) {
+    super(app);
+    this.items = items;
+    this.setPlaceholder(placeholder);
+  }
+
+  ask(): Promise<number | undefined> {
+    return new Promise((resolve) => {
+      this.resolve = resolve;
+      this.open();
+    });
+  }
+
+  getSuggestions(query: string): number[] {
+    const q = query.trim().toLowerCase();
+    return this.items
+      .map((_, i) => i)
+      .filter((i) => q === "" || `${this.items[i]!.label} ${this.items[i]!.detail ?? ""}`.toLowerCase().includes(q));
+  }
+
+  renderSuggestion(index: number, el: HTMLElement): void {
+    const item = this.items[index]!;
+    el.createEl("div", { text: item.label });
+    if (item.detail) el.createEl("small", { text: item.detail, cls: "setting-item-description" });
+  }
+
+  onChooseSuggestion(index: number): void {
+    this.chosen = index;
+  }
+
+  onClose(): void {
+    super.onClose();
+    // onChooseSuggestion runs around close; settle after both.
+    setTimeout(() => this.resolve?.(this.chosen), 0);
   }
 }

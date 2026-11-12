@@ -82,6 +82,54 @@ and the notes body: tools rewrite only the lines of the keys they change.
 An optional key that is empty or `null` (`posted:`) means the same as the
 key being absent.
 
+### Generated block
+
+The plugin keeps one marked block in the notes body, between
+`<!-- blueprint:generated:start -->` and `<!-- blueprint:generated:end -->`,
+each on a line of its own. Everything outside the markers belongs to the
+owner and no tool changes it. A new block goes at the top of the body, right
+after the frontmatter; if the owner moves it, it is refreshed where it is.
+
+```
+<!-- blueprint:generated:start -->
+![<title>](https://blueprints.abucnasty.dev/<folder path>/cover.jpg)
+
+- [<label>](https://blueprints.abucnasty.dev/<folder path>/0.txt)
+- <label of nested book> ([book](https://blueprints.abucnasty.dev/<folder path>/3.txt))
+  - [<label>](https://blueprints.abucnasty.dev/<folder path>/3/1.txt)
+<!-- blueprint:generated:end -->
+```
+
+- The image line is there only when the folder has a render image.
+- The list is there only for books: one item per entry (slot path = the
+  entry's `index`, else its position), nested like the book, in slot order,
+  each linking to that entry's string. Labels are plain text with rich text
+  turned into words and Markdown characters escaped; an entry without a
+  label shows as `Blueprint (slot 3)`, `Book (slot 3)`, `Upgrade planner
+  (slot 3)` or `Deconstruction planner (slot 3)`.
+- A folder with neither has no block. Import, Render preview and "Refresh
+  generated blocks in all notes" write it; `generatedBlockLines` and
+  `applyGeneratedBlock` in the core are the implementation.
+
+### Render state
+
+After a render, `renders/render.json` (plain git, not LFS) records what each
+image shows:
+
+```json
+{ "schema": 1, "rendered_at": "<ISO time>",
+  "entries": { "<slot path, or 0 for a single blueprint>":
+               { "file": "3/1.jpg", "sha256": "<hash>", "width": 0, "height": 0 } } }
+```
+
+`sha256` is the SHA-256 (lowercase hex) of the entry's blueprint object (the
+value under its `blueprint` key) as compact JSON with keys sorted by code
+point and array order kept (`blueprintHash` in the core). An image is
+current when its entry's hash matches the blueprint now, outdated when it
+differs or is not recorded; blueprints with no entities and no tiles get no
+image and do not count. The render tool writes the file after every
+successful run (merging on `--only`); the plugin only reads it.
+
 ## Blueprint string codec
 
 - Decode: drop the first character (version byte, must be `0`), base64-decode,

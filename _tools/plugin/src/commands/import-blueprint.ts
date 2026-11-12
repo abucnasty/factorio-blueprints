@@ -28,7 +28,11 @@ import {
 } from "../core/index.ts";
 import type { BlueprintDescription } from "../core/index.ts";
 import type { GitResult } from "../git/commit-and-sync.ts";
+import { noteWithBlock } from "./generated-notes.ts";
+import { reportGit } from "./git-notice.ts";
 import type { Host } from "./host.ts";
+import { renderPreview } from "./render-preview.ts";
+import { describeState, folderRenderState } from "./render-status.ts";
 
 export type ImportOutcome =
   | { action: "created" | "updated"; folder: string; git: GitResult | undefined }
@@ -96,6 +100,7 @@ export async function importFromClipboard(host: Host, contextFolder: string): Pr
   const commit = host.settings.commitAfterImport && host.git !== undefined;
 
   let folder: string;
+  let blockWarning = "";
   let commitMessage: string;
   let action: "created" | "updated";
   if (target.mode === "update") {
@@ -132,8 +137,15 @@ export async function importFromClipboard(host: Host, contextFolder: string): Pr
     // 3a. Write.
     try {
       await host.files.write(jsonPath, canonical);
-      if (answer.newVersion !== undefined && notes !== undefined && answer.newVersion !== meta?.version) {
-        await host.files.write(notesPath, updateFrontmatter(notes, { version: answer.newVersion }));
+      if (notes !== undefined) {
+        let next = notes;
+        if (answer.newVersion !== undefined && answer.newVersion !== meta?.version) {
+          next = updateFrontmatter(next, { version: answer.newVersion });
+        }
+        const block = await noteWithBlock(host, folder, next, value);
+        if (block.status === "invalid") blockWarning = ` ${block.reason}`;
+        else next = block.text;
+        if (next !== notes) await host.files.write(notesPath, next);
       }
     } catch (e) {
       return reject(host, `Could not write ${folder}: ${errorText(e)}`);
@@ -168,7 +180,9 @@ export async function importFromClipboard(host: Host, contextFolder: string): Pr
         posted: host.today(),
         authors: host.settings.authors,
       });
-      await host.files.write(joinPath(folder, NOTES_FILE), notes);
+      const block = await noteWithBlock(host, folder, notes, value);
+      if (block.status === "invalid") blockWarning = ` ${block.reason}`;
+      await host.files.write(joinPath(folder, NOTES_FILE), block.text);
     } catch (e) {
       return reject(host, `Could not write ${folder}: ${errorText(e)}`);
     }
@@ -179,12 +193,27 @@ export async function importFromClipboard(host: Host, contextFolder: string): Pr
 
   // 4. Commit, pull and push just this folder.
   const verb = action === "created" ? "Created" : "Updated";
-  if (!commit) {
-    ui.notice(`${verb} ${folder} with ${summary}.`);
-    return { action, folder, git: undefined };
+  let renderNote = "";
+  if (action === "updated") {
+    try {
+      const state = await folderRenderState(host, folder);
+      if (state.overall === "outdated") {
+        renderNote = ` (its render is now outdated: ${describeState(state)}; run Render preview)`;
+      }
+    } catch {
+      // no render state to report
+    }
   }
-  const git = await host.git!.commitAndSync(folder, commitMessage);
-  reportGit(host, `${verb} ${folder} with ${summary}`, git);
+  let git: GitResult | undefined;
+  if (!commit) {
+    ui.notice(`${verb} ${folder} with ${summary}${renderNote}.${blockWarning}`);
+  } else {
+    git = await host.git!.commitAndSync(folder, commitMessage);
+    reportGit(host, `${verb} ${folder} with ${summary}${renderNote}`, git, blockWarning);
+  }
+
+  // 5. Optionally render previews (a separate commit).
+  if (host.settings.render.afterImport) await renderPreview(host, folder);
   return { action, folder, git };
 }
 
@@ -228,25 +257,6 @@ export function clipboardErrorMessage(e: unknown): string {
     }
   }
   return `Could not read the blueprint string: ${errorText(e)}`;
-}
-
-function reportGit(host: Host, done: string, git: GitResult): void {
-  switch (git.status) {
-    case "pushed":
-      host.ui.notice(`${done}, committed and pushed (${git.commit}).`);
-      return;
-    case "nothing-to-commit":
-      host.ui.notice(`${done}. Git found nothing new to commit.`);
-      return;
-    case "failed":
-      host.ui.notice(
-        git.committed
-          ? `${done} and committed ${git.commit ?? ""} locally, but ${git.message}. The Git plugin's timed sync will try again.`
-          : `${done}, but ${git.message}. The file is saved; the Git plugin's timed sync will commit it.`,
-        "error",
-      );
-      return;
-  }
 }
 
 function safeSummary(text: string): string | undefined {

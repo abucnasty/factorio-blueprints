@@ -8,11 +8,26 @@ import {
   readNotesMeta,
   writeCanonicalJson,
 } from "../../src/core/index.ts";
-import { fakeHost, fixture } from "./helpers.ts";
+import { BASE, fakeHost, fixture } from "./helpers.ts";
 
 const BOOK = fixture("book-nested.txt");
 const BOOK_JSON = writeCanonicalJson(decodeBlueprintString(BOOK).value);
 const TILES = fixture("tiles.txt");
+const WIRES = fixture("wires-2.0.txt");
+
+/** The generated block for book-nested.txt in a folder. */
+function bookBlock(folder: string): string {
+  const u = (slots: string) => `${BASE}/${folder}/${slots}.txt`;
+  return [
+    "<!-- blueprint:generated:start -->",
+    `- [Concrete pad](${u("0")})`,
+    `- Inner book ([book](${u("1")}))`,
+    `  - [Wired lamps](${u("1/0")})`,
+    `  - [Trees only](${u("1/1")})`,
+    `- [Belts to turbo](${u("2")})`,
+    "<!-- blueprint:generated:end -->",
+  ].join("\n");
+}
 const TEMPLATE_PATH = "_tools/templates/blueprint-notes.md";
 const EXISTING = {
   "megabasing/science/mall/blueprint.json": writeCanonicalJson(decodeBlueprintString(TILES).value),
@@ -61,8 +76,10 @@ describe("import: create", () => {
     const notes = host.vault.get(`${folder}/README.md`)!;
     assert.equal(
       notes,
-      '---\ntitle: Military Science Pack (240/s) V3\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\nfrom_vault: true\n---\n',
-      "filled from the vault's template, body empty",
+      '---\ntitle: Military Science Pack (240/s) V3\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\nfrom_vault: true\n---\n\n' +
+        bookBlock(folder) +
+        "\n",
+      "filled from the vault's template; the body is just the generated block",
     );
     assert.deepStrictEqual(readNotesMeta(notes), {
       title: "Military Science Pack (240/s) V3",
@@ -88,7 +105,17 @@ describe("import: create", () => {
     const out = await importFromClipboard(host, "megabasing");
     assert.equal(out.action, "created");
     const notes = host.vault.get("megabasing/military-science-240/README.md")!;
-    assert.equal(notes, '---\ntitle: Military Science\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\n---\n');
+    assert.equal(
+      notes,
+      '---\ntitle: Military Science\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\n---\n\n' + bookBlock("megabasing/military-science-240") + "\n",
+    );
+    const single = fakeHost({ files, clipboard: WIRES });
+    await importFromClipboard(single, "megabasing");
+    assert.equal(
+      single.vault.get("megabasing/wired-lamps/README.md"),
+      '---\ntitle: Wired lamps\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\n---\n',
+      "a single blueprint without renders gets no block: the body stays empty",
+    );
     assert.deepStrictEqual(host.commits, [{ folder: "megabasing/military-science-240", message: "first version" }]);
   });
 
@@ -140,13 +167,14 @@ describe("import: update", () => {
     assert.equal(host.vault.get("megabasing/science/mall/blueprint.json"), BOOK_JSON);
     assert.equal(
       host.vault.get("megabasing/science/mall/README.md"),
-      '---\ntitle: Mall\nauthors: []\nversion: "4"\nextra: kept\n---\n\nMy notes.\n',
+      '---\ntitle: Mall\nauthors: []\nversion: "4"\nextra: kept\n---\n\n' + bookBlock("megabasing/science/mall") + "\n\nMy notes.\n",
+      "version bumped, block added at the top of the body, notes kept",
     );
     assert.deepStrictEqual(host.commits, [{ folder: "megabasing/science/mall", message: "update Mall" }]);
   });
 
-  test("keeping the version leaves README.md untouched", async () => {
-    const host = fakeHost({ files: EXISTING, clipboard: BOOK, update: () => ({ newVersion: undefined, changeNote: "tweak belts" }) });
+  test("keeping the version leaves README.md untouched (single blueprint, no renders: no block)", async () => {
+    const host = fakeHost({ files: EXISTING, clipboard: WIRES, update: () => ({ newVersion: undefined, changeNote: "tweak belts" }) });
     await importFromClipboard(host, "megabasing/science/mall/renders");
     assert.equal(host.vault.get("megabasing/science/mall/README.md"), EXISTING["megabasing/science/mall/README.md"]);
     assert.deepStrictEqual(host.commits, [{ folder: "megabasing/science/mall", message: "tweak belts" }]);
@@ -174,15 +202,34 @@ describe("import: update", () => {
 
   test("optional keys and a hand-written body survive an update with a bump", async () => {
     const files = { ...EXISTING, "megabasing/science/mall/README.md": RICH_NOTE };
-    const host = fakeHost({ files, clipboard: BOOK });
+    const host = fakeHost({ files, clipboard: WIRES });
     await importFromClipboard(host, "megabasing/science/mall");
     assert.equal(host.updatePrompts[0]!.suggestedVersion, "2.3");
     assert.equal(host.vault.get("megabasing/science/mall/README.md"), RICH_NOTE.replace('version: "2.2"', 'version: "2.3"'));
   });
 
-  test("optional keys and a hand-written body survive an update without a bump", async () => {
+  test("a book update adds the block above a hand-written body and keeps everything else", async () => {
     const files = { ...EXISTING, "megabasing/science/mall/README.md": RICH_NOTE };
     const host = fakeHost({ files, clipboard: BOOK, update: () => ({ newVersion: undefined, changeNote: "" }) });
+    await importFromClipboard(host, "megabasing/science/mall");
+    const [fm, body] = RICH_NOTE.split("custom: value\n---\n");
+    assert.equal(
+      host.vault.get("megabasing/science/mall/README.md"),
+      `${fm}custom: value\n---\n\n${bookBlock("megabasing/science/mall")}\n${body}`,
+    );
+    // Importing the same book into the note with its block again changes nothing.
+    const again = fakeHost({
+      files: { ...files, "megabasing/science/mall/README.md": host.vault.get("megabasing/science/mall/README.md")!, "megabasing/science/mall/blueprint.json": "{}" },
+      clipboard: BOOK,
+      update: () => ({ newVersion: undefined, changeNote: "" }),
+    });
+    await importFromClipboard(again, "megabasing/science/mall");
+    assert.equal(again.vault.get("megabasing/science/mall/README.md"), host.vault.get("megabasing/science/mall/README.md"));
+  });
+
+  test("optional keys and a hand-written body survive an update without a bump", async () => {
+    const files = { ...EXISTING, "megabasing/science/mall/README.md": RICH_NOTE };
+    const host = fakeHost({ files, clipboard: WIRES, update: () => ({ newVersion: undefined, changeNote: "" }) });
     await importFromClipboard(host, "megabasing/science/mall");
     assert.equal(host.vault.get("megabasing/science/mall/README.md"), RICH_NOTE);
   });
@@ -190,7 +237,7 @@ describe("import: update", () => {
   test("a note without a version key gets one when bumped", async () => {
     const note = "---\ntitle: Mall\nauthors: []\n---\n\nNotes.\n";
     const files = { ...EXISTING, "megabasing/science/mall/README.md": note };
-    const host = fakeHost({ files, clipboard: BOOK });
+    const host = fakeHost({ files, clipboard: WIRES });
     await importFromClipboard(host, "megabasing/science/mall");
     const p = host.updatePrompts[0]!;
     assert.equal(p.currentVersion, undefined);
@@ -202,7 +249,7 @@ describe("import: update", () => {
   test("an empty-body note from the template is bumped in place", async () => {
     const note = '---\ntitle: Mall\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\n---\n';
     const files = { ...EXISTING, "megabasing/science/mall/README.md": note };
-    const host = fakeHost({ files, clipboard: BOOK });
+    const host = fakeHost({ files, clipboard: WIRES });
     await importFromClipboard(host, "megabasing/science/mall");
     assert.equal(host.vault.get("megabasing/science/mall/README.md"), note.replace('"1"', '"2"'));
   });
@@ -267,7 +314,7 @@ describe("import: problems", () => {
       git: { status: "failed", step: "check", committed: false, message: "git is busy: a merge is in progress" },
     });
     await importFromClipboard(host, "x");
-    assert.match(host.notices.at(-1)!.message, /but git is busy: a merge is in progress\. The file is saved/);
+    assert.match(host.notices.at(-1)!.message, /but git is busy: a merge is in progress\. The files are saved/);
   });
 
   test("no git available skips the commit step", async () => {
