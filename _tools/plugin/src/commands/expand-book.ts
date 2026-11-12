@@ -94,7 +94,7 @@ export async function expandBookIntoFolders(host: Host, contextFolder: string): 
     if (await host.files.exists(notePath)) {
       const meta = readNotesMeta(await host.files.read(notePath));
       title = meta.title ?? title;
-      notes = { authors: meta.authors, posted: host.today() };
+      notes = { authors: meta.authors, posted: meta.posted ?? host.today() };
     }
   } catch {
     // keep the defaults

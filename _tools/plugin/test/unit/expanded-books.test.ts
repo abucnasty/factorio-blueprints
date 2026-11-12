@@ -225,6 +225,34 @@ describe("importing onto an expanded book", () => {
     assert.deepStrictEqual(host.commits, [{ folder: R, message: "update Military" }]);
   });
 
+  test("a nested book that changed slot keeps its note; its entries move with theirs", async () => {
+    const host = await expanded();
+    const innerNote = `${R}/1-inner-book/README.md`;
+    host.vault.set(innerNote, host.vault.get(innerNote)!.replace(/\n$/, "\nWhat I wrote about the inner book.\n"));
+    const kept = host.vault.get(innerNote)!;
+    const v = structuredClone(BOOK);
+    v.blueprint_book.blueprints[1]!["index"] = 4;
+    host.clipboardText = encodeBlueprintString(v);
+    const out = await importFromClipboard(host, R);
+    assert.deepStrictEqual(out, {
+      action: "expanded-book",
+      result: { action: "updated", folder: R, counts: { unchanged: 2, changed: 0, moved: 3, new: 0, removed: 0 } },
+    });
+    const lines = host.confirms[0]!.lines;
+    assert.ok(lines.some((l) => l.startsWith("- slot 1 → 4: Inner book (book;")));
+    assert.ok(!lines.includes("New:") && !lines.some((l) => l.startsWith("Removed")));
+    assert.ok(!host.vault.has(innerNote));
+    assert.ok(host.vault.get(`${R}/4-inner-book/README.md`)!.endsWith("What I wrote about the inner book.\n"));
+    assert.equal(host.vault.get(`${R}/4-inner-book/README.md`)!.split("\n---\n")[1]!.trim().length > 0, kept.length > 0);
+    assert.equal(host.vault.get(`${R}/4-inner-book/0-wired-lamps/renders/0.jpg`), "jpeg 1/0");
+  });
+
+  test("expanding copies posted from the book's note", async () => {
+    const host = bookVault({ [`${R}/README.md`]: NOTE.replace('version: "3"\n', 'version: "3"\nposted: 2025-01-02\n') });
+    await expandBookIntoFolders(host, R);
+    assert.equal(readFrontmatter(host.vault.get(`${R}/0-concrete-pad/README.md`)!)["posted"], "2025-01-02");
+  });
+
   test("a new slot is created; a declined confirmation writes nothing", async () => {
     const v = structuredClone(BOOK);
     v.blueprint_book.blueprints.push({ index: 7, deconstruction_planner: { item: "deconstruction-planner", label: "Rocks" } });

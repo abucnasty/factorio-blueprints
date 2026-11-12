@@ -399,7 +399,7 @@ describe("render an expanded book", () => {
     assert.deepStrictEqual(parseRenderManifest(read(`${LEAF_LAMPS}/renders/render.json`))!.entries, {
       "0": { file: "0.jpg", sha256: target.hash, width: 10, height: 20 },
     });
-    assert.ok(!existsSync(join(vault, ".factorio-render")) || readdirSync(join(vault, ".factorio-render")).length === 0, "scratch removed");
+    assert.ok(!existsSync(join(vault, ".factorio-render")), "scratch removed, and its empty parent too");
     assert.deepStrictEqual((await folderRenderState(h, BOOK_DIR)).overall, "current");
     assert.ok(read(`${BOOK_DIR}/README.md`).includes(`/${BOOK_DIR}/cover.jpg)`));
     assert.ok(read(`${LEAF_PAD}/README.md`).includes(`/${BOOK_DIR}/renders/0.jpg)`));

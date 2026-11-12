@@ -106,6 +106,17 @@ export async function updateExpandedBook(host: Host, loc: Located, value: unknow
   // A removed book takes its subtree; list only its top.
   const removedTop = [...removed].filter((p) => ![...removed].some((r) => r !== p && p.startsWith(r + "/")));
   const bookChanged = !same(currentBook, expanded.book);
+  // A nested book that changed slot: the new one keeps the removed one's note (same book.json).
+  const noteFrom = new Map<string, string>(); // new path -> removed path
+  for (const p of created) {
+    const n = byPathOf(next, p);
+    if (!n || !isBook(n.entry)) continue;
+    const q = [...removed].find(
+      (r) => now.get(r)!.file === "book" && ![...noteFrom.values()].includes(r) && same(now.get(r)!.value, n.entry.book),
+    );
+    if (q !== undefined) noteFrom.set(p, q);
+  }
+  const keptFrom = new Set(noteFrom.values());
 
   if (changed.size + created.size + moveFrom.size + removedTop.length === 0 && !bookChanged) {
     host.ui.notice(`${folder} already holds this book; nothing to change.`);
@@ -118,9 +129,9 @@ export async function updateExpandedBook(host: Host, loc: Located, value: unknow
   const counts = {
     unchanged: unchanged.size,
     changed: changed.size,
-    moved: moveFrom.size,
-    new: created.size,
-    removed: removedTop.length,
+    moved: moveFrom.size + noteFrom.size,
+    new: created.size - noteFrom.size,
+    removed: removedTop.filter((p) => !keptFrom.has(p)).length,
   };
   const ok = await host.ui.confirm({
     title: `Update "${title}" from the clipboard`,
@@ -129,9 +140,17 @@ export async function updateExpandedBook(host: Host, loc: Located, value: unknow
         (bookChanged ? "; the book's own settings changed too" : "") +
         ".",
       ...(changed.size > 0 ? ["Changed:", ...[...changed].map(line)] : []),
-      ...(moveFrom.size > 0 ? ["Moved (with their notes and renders):", ...[...moveFrom].map(([t, s]) => `- slot ${s} → ${t}: ${label(byPath.get(t)!.entry)}`)] : []),
-      ...(created.size > 0 ? ["New:", ...[...created].map(line)] : []),
-      ...(removedTop.length > 0 ? ["Removed, with their notes and renders:", ...removedTop.map((p) => `- slot ${p}: ${now.get(p)!.title}`)] : []),
+      ...(counts.moved > 0
+        ? [
+            "Moved (with their notes and renders):",
+            ...[...moveFrom].map(([t, s]) => `- slot ${s} → ${t}: ${label(byPath.get(t)!.entry)}`),
+            ...[...noteFrom].map(([t, s]) => `- slot ${s} → ${t}: ${label(byPath.get(t)!.entry)} (book; its note moves, its entries are matched one by one)`),
+          ]
+        : []),
+      ...(counts.new > 0 ? ["New:", ...[...created].filter((p) => !noteFrom.has(p)).map(line)] : []),
+      ...(counts.removed > 0
+        ? ["Removed, with their notes and renders:", ...removedTop.filter((p) => !keptFrom.has(p)).map((p) => `- slot ${p}: ${now.get(p)!.title}`)]
+        : []),
       ...(expanded.dropped.length > 0
         ? ["Left out, because an earlier entry has the same slot:", ...expanded.dropped.map((d) => `- slot ${d.path}: ${d.label || "(no label)"}`)]
         : []),
@@ -143,6 +162,11 @@ export async function updateExpandedBook(host: Host, loc: Located, value: unknow
   try {
     const template = await readTemplate(host);
     const notes = await noteDefaults(host, folder);
+    const keptNotes = new Map<string, string>();
+    for (const [p, q] of noteFrom) {
+      const path = joinPath(now.get(q)!.folder, NOTES_FILE);
+      if (await host.files.exists(path)) keptNotes.set(p, await host.files.read(path));
+    }
     // 1. Set aside the folders that move, 2. remove what goes.
     const staging = joinPath(folder, ".moving");
     if (moveFrom.size > 0) await host.files.mkdir(staging);
@@ -174,6 +198,8 @@ export async function updateExpandedBook(host: Host, loc: Located, value: unknow
         // New: a leaf with its note, or a book folder whose entries follow in this loop.
         at = joinPath(parent, n.entry.folder);
         await writeEntryFolder(host, parent, { ...n.entry, entries: [] }, notes, template);
+        const kept = keptNotes.get(n.path);
+        if (kept !== undefined) await host.files.write(joinPath(at, NOTES_FILE), kept);
       }
       folderOf.set(n.path, at);
     }
@@ -214,6 +240,10 @@ export async function addEntryToBook(host: Host, loc: Located, value: unknown): 
   if (!host.settings.commitAfterImport || host.git === undefined) host.ui.notice(`${summary}.`);
   else reportGit(host, summary, await host.git.commitAndSync(loc.root, `add ${entryTitle(entry)} to ${title}`));
   return { action: "added", folder, slot };
+}
+
+function byPathOf(items: NewItem[], path: string): NewItem | undefined {
+  return items.find((i) => i.path === path);
 }
 
 function toEntry(n: TreeNode): ExpandedEntry {

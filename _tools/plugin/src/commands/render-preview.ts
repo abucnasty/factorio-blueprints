@@ -429,5 +429,8 @@ async function renderExpandedBook(host: Host, loc: Located, signal: AbortSignal,
     return { action: "rendered", folder, images: moved, problems, committed: git.status === "pushed" || (git.status === "failed" && git.committed) };
   } finally {
     if (await files.exists(scratch)) await files.remove(scratch);
+    if ((await files.exists(RENDER_SCRATCH)) && Object.values(await files.list(RENDER_SCRATCH)).every((l) => l.length === 0)) {
+      await files.remove(RENDER_SCRATCH);
+    }
   }
 }
