@@ -19,13 +19,11 @@ const WIRES = fixture("wires-2.0.txt");
 function bookBlock(folder: string): string {
   const u = (slots: string) => `${BASE}/${folder}/${slots}.txt`;
   return [
-    "<!-- blueprint:generated:start -->",
     `- [Concrete pad](${u("0")})`,
     `- Inner book ([book](${u("1")}))`,
     `  - [Wired lamps](${u("1/0")})`,
     `  - [Trees only](${u("1/1")})`,
     `- [Belts to turbo](${u("2")})`,
-    "<!-- blueprint:generated:end -->",
   ].join("\n");
 }
 const TEMPLATE_PATH = "_tools/templates/blueprint-notes.md";

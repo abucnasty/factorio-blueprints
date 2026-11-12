@@ -36,7 +36,8 @@ export function encodePath(path: string): string {
   return path
     .split("/")
     .filter((s) => s !== "")
-    .map((s) => encodeURIComponent(s))
+    // Parentheses too, so a link's URL never ends a Markdown link early.
+    .map((s) => encodeURIComponent(s).replace(/\(/g, "%28").replace(/\)/g, "%29"))
     .join("/");
 }
 

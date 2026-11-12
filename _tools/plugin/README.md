@@ -20,8 +20,9 @@ notes beside them, and back. The built plugin is committed in
   block, commits and pushes. **Show
   blueprints needing a render** and **Render all that need it** work across
   the vault; **Cancel render preview** stops a run.
-- **Refresh generated blocks in all notes**: writes the link list and cover
-  block into every note, without committing.
+- **Refresh generated blocks in all notes**: writes the cover image and
+  contents list into every note, without committing. The cover image and
+  contents list at the top of a note are generated; write below them.
 
 Settings: default authors, commit after import and render, the template
 path and the link service address (shared); per computer: the git binary,

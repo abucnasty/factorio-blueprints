@@ -67,9 +67,8 @@ export { coverUrl, DEFAULT_LINK_BASE, encodePath, renderUrl, stringUrl } from ".
 
 export {
   applyGeneratedBlock,
-  BLOCK_END,
-  BLOCK_START,
   escapeInline,
+  findGeneratedBlock,
   generatedBlockLines,
 } from "./generated-block.ts";
 export type { BlockInput, BlockUpdate } from "./generated-block.ts";

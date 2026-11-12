@@ -43,9 +43,10 @@ chmodSync(LAUNCHER, 0o755);
 const TOOL = join(root, "tool.js");
 writeFileSync(
   TOOL,
-  `process.stderr.write("step 1\\nstep 2\\n");
+  `// The SIGINT handler goes first, so a cancel right after the progress lines finds it.
+if (process.argv[2] === "slow") process.on("SIGINT", () => { process.stderr.write("got SIGINT\\n"); process.exit(130); });
+process.stderr.write("step 1\\nstep 2\\n");
 if (process.argv[2] === "slow") {
-  process.on("SIGINT", () => { process.stderr.write("got SIGINT\\n"); process.exit(130); });
   setTimeout(() => process.exit(0), 20000);
 } else {
   process.stdout.write(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }));
