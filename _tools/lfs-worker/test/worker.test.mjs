@@ -7,6 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.ts";
+import { FakeR2 } from "./fake-r2.mjs";
 
 const BASE = "https://lfs.test";
 const LFS = "application/vnd.git-lfs+json";
@@ -15,33 +16,10 @@ const TOKEN = "test-only-upload-token";
 const OID = "a".repeat(64);
 const OTHER_OID = "b".repeat(64);
 
-class FakeR2 {
-  constructor() {
-    this.objects = new Map();
-  }
-  async head(key) {
-    const bytes = this.objects.get(key);
-    return bytes ? { size: bytes.byteLength } : null;
-  }
-  async get(key) {
-    const bytes = this.objects.get(key);
-    return bytes ? { size: bytes.byteLength, body: bytes } : null;
-  }
-  async put(key, body) {
-    const bytes = new Uint8Array(await new Response(body).arrayBuffer());
-    this.objects.set(key, bytes);
-    return { size: bytes.byteLength };
-  }
-}
-
-function key(oid) {
-  return `${oid.slice(0, 2)}/${oid.slice(2, 4)}/${oid}`;
-}
-
 function makeEnv({ token = TOKEN, objects = {} } = {}) {
   const bucket = new FakeR2();
   for (const [oid, text] of Object.entries(objects)) {
-    bucket.objects.set(key(oid), new TextEncoder().encode(text));
+    bucket.putText(oid, text);
   }
   return { R2_BUCKET: bucket, LFS_UPLOAD_TOKEN: token };
 }
