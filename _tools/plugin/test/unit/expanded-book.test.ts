@@ -4,8 +4,10 @@ import { describe, test } from "node:test";
 import {
   assembleBook,
   decodeBlueprintString,
+  encodeBlueprintString,
   expandBook,
   parseSlotFolder,
+  readCanonicalJson,
   slotFolderName,
   slotFolders,
   writeCanonicalJson,
@@ -123,6 +125,10 @@ describe("assemble", () => {
     const files = writeTree("cat/book", book, entries);
     const assembled = await assembleBook("cat/book", memoryReader(files));
     assert.equal(writeCanonicalJson(assembled), writeCanonicalJson(normalized(nested)));
+    // Same key order as the book read from one canonical file, so the same string.
+    const fromFile = readCanonicalJson(writeCanonicalJson(normalized(nested)));
+    assert.equal(JSON.stringify(assembled), JSON.stringify(fromFile));
+    assert.equal(encodeBlueprintString(assembled), encodeBlueprintString(fromFile));
   });
 
   test("entries out of slot order come back sorted; an empty book has no entries", async () => {

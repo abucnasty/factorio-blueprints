@@ -9,7 +9,7 @@
 
 import { BLUEPRINT_FILE, joinPath } from "./blueprint-folder.ts";
 import { KIND_KEYS } from "./book-tree.ts";
-import { readCanonicalJson } from "./canonical-json.ts";
+import { compareCodePoints, readCanonicalJson } from "./canonical-json.ts";
 import type { BlueprintKind } from "./describe.ts";
 import { plainLabel, slugify } from "./slug.ts";
 
@@ -101,7 +101,9 @@ export interface FolderReader {
 }
 
 /** The assembled value of the expanded book at `folder`. Throws a readable Error on a broken tree
- *  (two folders for one slot, a slot folder with neither file, both files in one folder, unreadable JSON). */
+ *  (two folders for one slot, a slot folder with neither file, both files in one folder, unreadable JSON).
+ *  Keys are in the order the canonical format sorts them, so the value encodes to the same string as
+ *  the book read from one canonical blueprint.json. */
 export async function assembleBook(folder: string, reader: FolderReader): Promise<unknown> {
   const bookPath = joinPath(folder, BOOK_FILE);
   const bookText = await reader.read(bookPath);
@@ -124,7 +126,7 @@ export async function assembleBook(folder: string, reader: FolderReader): Promis
         );
       }
       const nested = (await assembleBook(child.path, reader)) as { blueprint_book: unknown };
-      items.push({ index: child.slot, blueprint_book: nested.blueprint_book });
+      items.push(sortedKeys({ index: child.slot, blueprint_book: nested.blueprint_book }));
       continue;
     }
     if ((await reader.read(joinPath(child.path, BOOK_FILE))) !== undefined) {
@@ -133,9 +135,9 @@ export async function assembleBook(folder: string, reader: FolderReader): Promis
     const found = kindOf(parse(leafPath, leafText));
     if (!found) throw new Error(`${leafPath} is not a blueprint, book or planner.`);
     const [key, , entryBody] = found;
-    items.push({ index: child.slot, [key]: entryBody });
+    items.push(sortedKeys({ index: child.slot, [key]: entryBody }));
   }
-  return { blueprint_book: { ...body, blueprints: items } };
+  return { blueprint_book: sortedKeys({ ...body, blueprints: items }) };
 }
 
 /** The slot folders of an expanded book, ascending by slot: for walking a tree without assembling it. */
@@ -175,6 +177,11 @@ function kindOf(value: unknown): [string, BlueprintKind, Record<string, unknown>
     if (isObject(body)) return [key, kind, body];
   }
   return undefined;
+}
+
+/** The object with its own keys in code point order (one level). */
+function sortedKeys(obj: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(obj).sort(([a], [b]) => compareCodePoints(a, b)));
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
