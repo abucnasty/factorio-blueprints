@@ -32,9 +32,11 @@ node bin/render.js --help                    # every option, environment variabl
   mining drills. The floor is the backdrop: `--backdrop a,b` replaces `lab-dark-1` and `lab-dark-2` (default
   `lab-dark-1,black-refined-concrete`).
 - **Space platform blueprints** are those with a hub, entities that can only be built in space, or foundation tiles.
-  They are built on a new, paused space platform, on the space background.
-  - A ship with a hub is placed by its own coordinates, so its hub sits on the platform's hub.
-  - A module without a hub goes 64 tiles south of the platform's hub, out of the picture.
+  They are shown on a plain starfield.
+  - A module without a hub is built over open space on a surface with a space platform's properties. The game
+    allows there exactly what it allows on a platform; there is no planet, asteroid or starter platform.
+  - A ship with a hub is built on a real, paused space platform, with its hub on the platform's hub. A hub cannot
+    exist on any other surface.
 - **Fallback.** If a blueprint cannot be built one way, the other surface is tried.
 - **Report.** Every attempt is logged with what was built, failed or missing, and why. Each run writes `render.log`
   and `report.json` (`--json` prints the report) into its work folder. The work folder is kept when something
@@ -50,7 +52,8 @@ node bin/render.js --help                    # every option, environment variabl
 - Entities the game forbids on a surface are reported as missing with the reason. On platforms these include chests,
   burner and pressure-bound machines, and rails.
 - A ship whose hub is not at its blueprint's (0, 0) is shifted so that it is; nothing else is placed relative to the hub.
-- Asteroids are cleared before each screenshot, but the planet the platform orbits can show in the background.
+- Behind a ship with a hub, the planet its platform orbits can show. Asteroids are cleared before each screenshot,
+  but faint ones may drift in.
 - Turrets without ammo still show their ammo icon.
 - Large builds are captured as a grid of screenshots and stitched; a one-pixel seam is possible.
 - Only Linux has been run for real; Windows and macOS share only the path handling.
