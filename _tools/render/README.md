@@ -2,14 +2,17 @@
 
 Builds a blueprint (or every blueprint in a book) in the real game, takes a screenshot with alt-mode on and writes
 one JPEG per blueprint: `<out>/0.jpg`, `<out>/1.jpg`, … A headless server runs the mod in `mod/`, and a game
-window joins it to draw the screenshots. Both are started from a work folder of their own; your saves, config and mods
+client joins it to draw the screenshots. Both are started from a work folder of their own; your saves, config and mods
 are never touched. Process control, RCON and screenshots are ported from
 [abucnasty/clock-generator](https://github.com/abucnasty/clock-generator) (MIT).
 
 ## Requirements
 
-- Factorio 2.1, the full game (not the headless build), and a desktop session: a window opens during each run.
-  Space Age is needed for space platform blueprints.
+- Factorio 2.1, the full game (not the headless build: it cannot take screenshots). Space Age is needed for space
+  platform blueprints.
+- **Linux:** the client runs without a window, using SDL's offscreen video driver and still the GPU, so nothing
+  appears on your desktop or takes focus. If that client cannot start, a visible window is used instead, and the log
+  says so. `--show-window` always shows the window. **Windows and macOS:** a game window opens during each run.
 - Node.js 22 or later; `npm ci` in this folder.
 
 ## Usage
