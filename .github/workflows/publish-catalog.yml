@@ -7,10 +7,36 @@
 # on main with "backfill" to upload every string of every version again.
 name: publish catalog
 
+# Changes that cannot affect the catalog (other tools, their workflows, vault
+# settings, docs) do not start a run. Blueprints can live in any top-level
+# folder, so this lists what to ignore rather than what to include.
+# Keep the two lists the same.
 on:
   pull_request:
+    paths-ignore:
+      - "_tools/render/**"
+      - "_tools/setup/**"
+      - "_tools/lfs-worker/**"
+      - "_tools/link-worker/**"
+      - "_tools/docs/**"
+      - "_tools/templates/**"
+      - ".obsidian/**"
+      - ".github/workflows/deploy-*.yml"
+      - ".github/workflows/check-plugin.yml"
+      - "README.md"
   push:
     branches: [main]
+    paths-ignore:
+      - "_tools/render/**"
+      - "_tools/setup/**"
+      - "_tools/lfs-worker/**"
+      - "_tools/link-worker/**"
+      - "_tools/docs/**"
+      - "_tools/templates/**"
+      - ".obsidian/**"
+      - ".github/workflows/deploy-*.yml"
+      - ".github/workflows/check-plugin.yml"
+      - "README.md"
   workflow_dispatch:
     inputs:
       backfill:
