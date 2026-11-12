@@ -1,0 +1,38 @@
+{
+  "blueprint_book": {
+    "active_index": 0,
+    "description": "Collection of display panels with configurable percent indicators. The ranges are configurable to show red for low, green for high, and yellow for in between low and high setpoint.\n- designed by abucnasty",
+    "icons": [
+      {
+        "index": 1,
+        "signal": {
+          "name": "display-panel"
+        }
+      },
+      {
+        "index": 2,
+        "signal": {
+          "name": "signal-red",
+          "type": "virtual"
+        }
+      },
+      {
+        "index": 3,
+        "signal": {
+          "name": "signal-green",
+          "type": "virtual"
+        }
+      },
+      {
+        "index": 4,
+        "signal": {
+          "name": "signal-yellow",
+          "type": "virtual"
+        }
+      }
+    ],
+    "item": "blueprint-book",
+    "label": "Packed RGB Dashboard",
+    "version": 562949957353472
+  }
+}

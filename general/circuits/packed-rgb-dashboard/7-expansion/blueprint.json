@@ -1,0 +1,29 @@
+{
+  "blueprint": {
+    "entities": [
+      {"entity_number":1,"icon":{"name":"parameter-0"},"name":"display-panel","position":{"x":1.5,"y":-679.5}},
+      {"always_on":true,"color":{"a":1,"b":0,"g":0,"r":1},"control_behavior":{"circuit_condition":{"comparator":"<","constant":10,"first_signal":{"name":"signal-percent","type":"virtual"}},"color_mode":2,"rgb_signal":{"name":"parameter-0"},"use_colors":true},"entity_number":2,"name":"small-lamp","position":{"x":1.5,"y":-678.5}}
+    ],
+    "icons": [
+      {
+        "index": 1,
+        "signal": {
+          "name": "display-panel"
+        }
+      }
+    ],
+    "item": "blueprint",
+    "label": "Expansion",
+    "parameters": [
+      {
+        "id": "parameter-0",
+        "quality-condition": {
+          "comparator": "=",
+          "quality": "normal"
+        },
+        "type": "id"
+      }
+    ],
+    "version": 562949957353472
+  }
+}
