@@ -1,10 +1,12 @@
 ---
 title: Lead Follower Furnaces
-authors: [abucnasty]
+authors:
+  - abucnasty
 version: "2"
 posted: 2025-06-28
 video: https://youtu.be/cjkMcoFJJOE
 factoriobin: https://factoriobin.com/post/jbcdkk
+deprecated: true
 ---
 
 A collection of UPS optimized smelters (using lead / follower)
