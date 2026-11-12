@@ -8,6 +8,8 @@ blueprints: 15
 factorio_version: "2.0.76"
 ---
 
+![Production Science Book](https://blueprints.abucnasty.dev/megabasing/common-quality-science/production-science-book/cover.jpg)
+
 - Any\% Patch Sizes ([book](https://blueprints.abucnasty.dev/megabasing/common-quality-science/production-science-book/0.txt))
   - [480/s Belted Stone](https://blueprints.abucnasty.dev/megabasing/common-quality-science/production-science-book/0/0.txt)
   - [80/s Belted Stone Bricks](https://blueprints.abucnasty.dev/megabasing/common-quality-science/production-science-book/0/1.txt)
