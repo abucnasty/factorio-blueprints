@@ -89,3 +89,6 @@ export type {
   RenderManifestEntry,
   RenderTarget,
 } from "./render-state.ts";
+
+export { applyStatsToNote, blueprintStats, STATS_KEYS } from "./stats.ts";
+export type { BlueprintStats } from "./stats.ts";

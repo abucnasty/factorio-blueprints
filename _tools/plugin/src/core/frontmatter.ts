@@ -194,7 +194,9 @@ function renderPair(key: string, value: unknown): string[] {
   const pair = isMap(doc.contents) ? doc.contents.items[0] : undefined;
   const node = pair?.value;
   if (isSeq(node) || isMap(node)) node.flow = true;
-  if (isScalar(node) && typeof node.value === "string" && /[\r\n]/.test(node.value)) {
+  // Multi-line text, and version-like text such as 2.1.24 (always quoted,
+  // so it never reads as a number).
+  if (isScalar(node) && typeof node.value === "string" && /[\r\n]|^[\d.]+$/.test(node.value)) {
     node.type = "QUOTE_DOUBLE";
   }
   return doc

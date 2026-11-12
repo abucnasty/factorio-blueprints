@@ -3,6 +3,8 @@
 
 import {
   applyGeneratedBlock,
+  applyStatsToNote,
+  blueprintStats,
   baseName,
   BLUEPRINT_FILE,
   bookTree,
@@ -31,7 +33,10 @@ export async function listRenderFiles(host: Host, folder: string): Promise<strin
   return out.sort();
 }
 
-/** The note text with the block for this blueprint value written into it. */
+/**
+ * The note with its generated content for this blueprint value: the stats
+ * in the frontmatter and the block at the top of the body.
+ */
 export async function noteWithBlock(
   host: Host,
   folder: string,
@@ -48,14 +53,23 @@ export async function noteWithBlock(
   }
   const hasRenders = (await listRenderFiles(host, folder)).length > 0;
   const lines = generatedBlockLines({ base: host.settings.linkBase, folder, title, tree, hasRenders });
-  return applyGeneratedBlock(note, lines);
+  const block = applyGeneratedBlock(note, lines);
+  if (block.status === "invalid") return block;
+  let text: string;
+  try {
+    text = applyStatsToNote(block.text, blueprintStats(value));
+  } catch (e) {
+    return { status: "invalid", text: note, reason: e instanceof Error ? e.message : String(e) };
+  }
+  if (text === note) return { status: "unchanged", text: note };
+  return { status: block.status === "unchanged" ? "replaced" : block.status, text };
 }
 
 export type RefreshResult =
   | { status: "changed" | "unchanged"; folder: string }
   | { status: "skipped"; folder: string; reason: string };
 
-/** Write or refresh the block in one blueprint folder's README.md. */
+/** Write or refresh the generated content (stats and block) in one blueprint folder's README.md. */
 export async function refreshGeneratedBlock(host: Host, folder: string): Promise<RefreshResult> {
   const notesPath = joinPath(folder, NOTES_FILE);
   try {
@@ -87,7 +101,7 @@ export async function findBlueprintFolders(host: Host, from = ""): Promise<strin
   return out.sort();
 }
 
-/** "Refresh generated blocks in all notes": writes, never commits. */
+/** "Refresh generated content in all notes" (stats and block): writes, never commits. */
 export async function refreshAllGeneratedBlocks(host: Host): Promise<RefreshResult[]> {
   const results: RefreshResult[] = [];
   for (const folder of await findBlueprintFolders(host)) results.push(await refreshGeneratedBlock(host, folder));
@@ -95,7 +109,7 @@ export async function refreshAllGeneratedBlocks(host: Host): Promise<RefreshResu
   const unchanged = results.filter((r) => r.status === "unchanged").length;
   const skipped = results.filter((r): r is Extract<RefreshResult, { status: "skipped" }> => r.status === "skipped");
   const lines = [
-    `Generated blocks: ${changed} note${changed === 1 ? "" : "s"} changed, ${unchanged} already current` +
+    `Generated content: ${changed} note${changed === 1 ? "" : "s"} changed, ${unchanged} already current` +
       (skipped.length > 0 ? `, ${skipped.length} skipped` : "") +
       ". Not committed; the Git plugin's sync will pick the changes up.",
     ...skipped.map((s) => `Skipped ${s.folder}: ${s.reason}`),

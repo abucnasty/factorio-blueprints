@@ -64,7 +64,7 @@ describe("copy live link", () => {
   });
 });
 
-describe("refresh generated blocks", () => {
+describe("refresh generated content", () => {
   test("finds blueprint folders, skipping _ and . folders", async () => {
     assert.deepStrictEqual(await findBlueprintFolders(fakeHost({ files: FILES })), [
       "cat/book",
@@ -85,21 +85,24 @@ describe("refresh generated blocks", () => {
         ["cat/broken", "skipped"],
         ["cat/nonotes", "skipped"],
         ["cat/rendered", "changed"],
-        ["cat/single", "unchanged"],
+        ["cat/single", "changed"],
       ],
     );
-    assert.match(host.notices[0]!.message, /^Generated blocks: 2 notes changed, 1 already current, 2 skipped\. Not committed/);
+    assert.match(host.notices[0]!.message, /^Generated content: 3 notes changed, 0 already current, 2 skipped\. Not committed/);
     assert.match(host.notices[0]!.message, /Skipped cat\/broken: This note has an incomplete or repeated/);
     assert.equal(host.commits.length, 0);
     assert.equal(
       host.vault.get("cat/rendered/README.md"),
-      `---\ntitle: Lamps\n---\n\n![Lamps](${BASE}/cat/rendered/cover.jpg)\n`,
+      `---\ntitle: Lamps\nentities: 4\nfactorio_version: "2.0.76"\n---\n\n![Lamps](${BASE}/cat/rendered/cover.jpg)\n`,
     );
     assert.ok(host.vault.get("cat/book/README.md")!.endsWith(`/cat/book/2.txt)\n\nMine.\n`));
+    assert.ok(host.vault.get("cat/book/README.md")!.startsWith('---\ntitle: The Book\nentities: 5\ntiles: 9\nblueprints: 2\nfactorio_version: "2.0.76"\n---\n'));
+    assert.equal(host.vault.get("cat/single/README.md"), "---\ntitle: Pad\nentities: 1\ntiles: 9\nfactorio_version: \"2.0.76\"\n---\n");
     assert.equal(host.vault.get("cat/broken/README.md"), FILES["cat/broken/README.md"]);
 
     const again = await refreshAllGeneratedBlocks(host);
     assert.ok(again.every((r) => r.status !== "changed"));
+    assert.match(host.notices[1]!.message, /^Generated content: 0 notes changed, 3 already current, 2 skipped\./);
   });
 
   test("renders removed: the cover line goes, and an empty block goes entirely", async () => {
@@ -108,6 +111,6 @@ describe("refresh generated blocks", () => {
     host.vault.delete("cat/rendered/renders/0.jpg");
     host.folders.delete("cat/rendered/renders");
     assert.deepStrictEqual(await refreshGeneratedBlock(host, "cat/rendered"), { status: "changed", folder: "cat/rendered" });
-    assert.equal(host.vault.get("cat/rendered/README.md"), FILES["cat/rendered/README.md"]);
+    assert.equal(host.vault.get("cat/rendered/README.md"), '---\ntitle: Lamps\nentities: 4\nfactorio_version: "2.0.76"\n---\n');
   });
 });

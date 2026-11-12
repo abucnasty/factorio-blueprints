@@ -7513,7 +7513,7 @@ function renderPair(key, value) {
   const pair = isMap(doc.contents) ? doc.contents.items[0] : void 0;
   const node2 = pair?.value;
   if (isSeq(node2) || isMap(node2)) node2.flow = true;
-  if (isScalar(node2) && typeof node2.value === "string" && /[\r\n]/.test(node2.value)) {
+  if (isScalar(node2) && typeof node2.value === "string" && /[\r\n]|^[\d.]+$/.test(node2.value)) {
     node2.type = "QUOTE_DOUBLE";
   }
   return doc.toString({ lineWidth: 0, flowCollectionPadding: false }).replace(/\n$/, "").split("\n");
@@ -7957,6 +7957,30 @@ function isObject3(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+// src/core/stats.ts
+var STATS_KEYS = ["entities", "tiles", "blueprints", "factorio_version"];
+function blueprintStats(value) {
+  const d = describeBlueprint(value);
+  const stats = {};
+  if (d.kind === "blueprint" || d.kind === "blueprint-book") {
+    stats.entities = d.counts.entities;
+    if (d.counts.tiles > 0) stats.tiles = d.counts.tiles;
+  }
+  if (d.kind === "blueprint-book") stats.blueprints = d.counts.blueprints;
+  if (d.factorioVersion !== void 0) stats.factorio_version = d.factorioVersion;
+  return stats;
+}
+function applyStatsToNote(note, stats) {
+  const fm = readFrontmatter(note);
+  const updates = {};
+  for (const key of STATS_KEYS) {
+    const want = stats[key];
+    const has = Object.prototype.hasOwnProperty.call(fm, key);
+    if (want === void 0 ? has : !has || fm[key] !== want) updates[key] = want;
+  }
+  return Object.keys(updates).length === 0 ? note : updateFrontmatter(note, updates);
+}
+
 // src/commands/copy-blueprint.ts
 async function copyBlueprintString(host, contextFolder) {
   const folder = await findBlueprintFolder(
@@ -8052,7 +8076,16 @@ async function noteWithBlock(host, folder, note, value) {
   }
   const hasRenders = (await listRenderFiles(host, folder)).length > 0;
   const lines2 = generatedBlockLines({ base: host.settings.linkBase, folder, title, tree, hasRenders });
-  return applyGeneratedBlock(note, lines2);
+  const block = applyGeneratedBlock(note, lines2);
+  if (block.status === "invalid") return block;
+  let text;
+  try {
+    text = applyStatsToNote(block.text, blueprintStats(value));
+  } catch (e) {
+    return { status: "invalid", text: note, reason: e instanceof Error ? e.message : String(e) };
+  }
+  if (text === note) return { status: "unchanged", text: note };
+  return { status: block.status === "unchanged" ? "replaced" : block.status, text };
 }
 async function refreshGeneratedBlock(host, folder) {
   const notesPath = joinPath(folder, NOTES_FILE);
@@ -8089,7 +8122,7 @@ async function refreshAllGeneratedBlocks(host) {
   const unchanged = results.filter((r) => r.status === "unchanged").length;
   const skipped = results.filter((r) => r.status === "skipped");
   const lines2 = [
-    `Generated blocks: ${changed} note${changed === 1 ? "" : "s"} changed, ${unchanged} already current` + (skipped.length > 0 ? `, ${skipped.length} skipped` : "") + ". Not committed; the Git plugin's sync will pick the changes up.",
+    `Generated content: ${changed} note${changed === 1 ? "" : "s"} changed, ${unchanged} already current` + (skipped.length > 0 ? `, ${skipped.length} skipped` : "") + ". Not committed; the Git plugin's sync will pick the changes up.",
     ...skipped.map((s) => `Skipped ${s.folder}: ${s.reason}`)
   ];
   host.ui.notice(lines2.join("\n"), skipped.length > 0 ? "error" : "info");
@@ -9310,7 +9343,7 @@ var FactorioBlueprintsPlugin = class extends import_obsidian4.Plugin {
     this.app.workspace.onLayoutReady(() => this.scheduleStatus());
     this.addCommand({
       id: "refresh-generated-blocks",
-      name: "Refresh generated blocks in all notes",
+      name: "Refresh generated content in all notes",
       icon: "refresh-cw",
       callback: () => {
         const host = this.host();
@@ -9319,7 +9352,7 @@ var FactorioBlueprintsPlugin = class extends import_obsidian4.Plugin {
           return;
         }
         this.running = true;
-        void refreshAllGeneratedBlocks(host).catch((e) => host.ui.notice(`Refreshing generated blocks failed: ${e instanceof Error ? e.message : String(e)}`, "error")).finally(() => this.running = false);
+        void refreshAllGeneratedBlocks(host).catch((e) => host.ui.notice(`Refreshing generated content failed: ${e instanceof Error ? e.message : String(e)}`, "error")).finally(() => this.running = false);
       }
     });
     this.registerEvent(

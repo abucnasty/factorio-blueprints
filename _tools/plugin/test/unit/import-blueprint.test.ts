@@ -15,6 +15,12 @@ const BOOK_JSON = writeCanonicalJson(decodeBlueprintString(BOOK).value);
 const TILES = fixture("tiles.txt");
 const WIRES = fixture("wires-2.0.txt");
 
+/** Generated frontmatter stats of the fixtures. */
+const BOOK_STATS = 'entities: 5\ntiles: 9\nblueprints: 2\nfactorio_version: "2.0.76"\n';
+const WIRES_STATS = 'entities: 4\nfactorio_version: "2.0.76"\n';
+/** A note with stats lines added at the end of its frontmatter. */
+const withStats = (note: string, stats: string) => note.replace(/\n---\n/, `\n${stats}---\n`);
+
 /** The generated block for book-nested.txt in a folder. */
 function bookBlock(folder: string): string {
   const u = (slots: string) => `${BASE}/${folder}/${slots}.txt`;
@@ -74,7 +80,7 @@ describe("import: create", () => {
     const notes = host.vault.get(`${folder}/README.md`)!;
     assert.equal(
       notes,
-      '---\ntitle: Military Science Pack (240/s) V3\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\nfrom_vault: true\n---\n\n' +
+      '---\ntitle: Military Science Pack (240/s) V3\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\nfrom_vault: true\n' + BOOK_STATS + '---\n\n' +
         bookBlock(folder) +
         "\n",
       "filled from the vault's template; the body is just the generated block",
@@ -105,13 +111,13 @@ describe("import: create", () => {
     const notes = host.vault.get("megabasing/military-science-240/README.md")!;
     assert.equal(
       notes,
-      '---\ntitle: Military Science\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\n---\n\n' + bookBlock("megabasing/military-science-240") + "\n",
+      '---\ntitle: Military Science\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\n' + BOOK_STATS + '---\n\n' + bookBlock("megabasing/military-science-240") + "\n",
     );
     const single = fakeHost({ files, clipboard: WIRES });
     await importFromClipboard(single, "megabasing");
     assert.equal(
       single.vault.get("megabasing/wired-lamps/README.md"),
-      '---\ntitle: Wired lamps\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\n---\n',
+      '---\ntitle: Wired lamps\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\n' + WIRES_STATS + '---\n',
       "a single blueprint without renders gets no block: the body stays empty",
     );
     assert.deepStrictEqual(host.commits, [{ folder: "megabasing/military-science-240", message: "first version" }]);
@@ -165,16 +171,16 @@ describe("import: update", () => {
     assert.equal(host.vault.get("megabasing/science/mall/blueprint.json"), BOOK_JSON);
     assert.equal(
       host.vault.get("megabasing/science/mall/README.md"),
-      '---\ntitle: Mall\nauthors: []\nversion: "4"\nextra: kept\n---\n\n' + bookBlock("megabasing/science/mall") + "\n\nMy notes.\n",
+      '---\ntitle: Mall\nauthors: []\nversion: "4"\nextra: kept\n' + BOOK_STATS + '---\n\n' + bookBlock("megabasing/science/mall") + "\n\nMy notes.\n",
       "version bumped, block added at the top of the body, notes kept",
     );
     assert.deepStrictEqual(host.commits, [{ folder: "megabasing/science/mall", message: "update Mall" }]);
   });
 
-  test("keeping the version leaves README.md untouched (single blueprint, no renders: no block)", async () => {
+  test("keeping the version changes only the stats (single blueprint, no renders: no block)", async () => {
     const host = fakeHost({ files: EXISTING, clipboard: WIRES, update: () => ({ newVersion: undefined, changeNote: "tweak belts" }) });
     await importFromClipboard(host, "megabasing/science/mall/renders");
-    assert.equal(host.vault.get("megabasing/science/mall/README.md"), EXISTING["megabasing/science/mall/README.md"]);
+    assert.equal(host.vault.get("megabasing/science/mall/README.md"), withStats(EXISTING["megabasing/science/mall/README.md"], WIRES_STATS));
     assert.deepStrictEqual(host.commits, [{ folder: "megabasing/science/mall", message: "tweak belts" }]);
   });
 
@@ -203,7 +209,7 @@ describe("import: update", () => {
     const host = fakeHost({ files, clipboard: WIRES });
     await importFromClipboard(host, "megabasing/science/mall");
     assert.equal(host.updatePrompts[0]!.suggestedVersion, "2.3");
-    assert.equal(host.vault.get("megabasing/science/mall/README.md"), RICH_NOTE.replace('version: "2.2"', 'version: "2.3"'));
+    assert.equal(host.vault.get("megabasing/science/mall/README.md"), withStats(RICH_NOTE.replace('version: "2.2"', 'version: "2.3"'), WIRES_STATS));
   });
 
   test("a book update adds the block above a hand-written body and keeps everything else", async () => {
@@ -213,7 +219,7 @@ describe("import: update", () => {
     const [fm, body] = RICH_NOTE.split("custom: value\n---\n");
     assert.equal(
       host.vault.get("megabasing/science/mall/README.md"),
-      `${fm}custom: value\n---\n\n${bookBlock("megabasing/science/mall")}\n${body}`,
+      `${fm}custom: value\n${BOOK_STATS}---\n\n${bookBlock("megabasing/science/mall")}\n${body}`,
     );
     // Importing the same book into the note with its block again changes nothing.
     const again = fakeHost({
@@ -229,7 +235,7 @@ describe("import: update", () => {
     const files = { ...EXISTING, "megabasing/science/mall/README.md": RICH_NOTE };
     const host = fakeHost({ files, clipboard: WIRES, update: () => ({ newVersion: undefined, changeNote: "" }) });
     await importFromClipboard(host, "megabasing/science/mall");
-    assert.equal(host.vault.get("megabasing/science/mall/README.md"), RICH_NOTE);
+    assert.equal(host.vault.get("megabasing/science/mall/README.md"), withStats(RICH_NOTE, WIRES_STATS));
   });
 
   test("a note without a version key gets one when bumped", async () => {
@@ -241,7 +247,7 @@ describe("import: update", () => {
     assert.equal(p.currentVersion, undefined);
     assert.equal(p.suggestedVersion, "2");
     assert.ok(p.canBumpVersion);
-    assert.equal(host.vault.get("megabasing/science/mall/README.md"), '---\ntitle: Mall\nauthors: []\nversion: "2"\n---\n\nNotes.\n');
+    assert.equal(host.vault.get("megabasing/science/mall/README.md"), '---\ntitle: Mall\nauthors: []\nversion: "2"\n' + WIRES_STATS + '---\n\nNotes.\n');
   });
 
   test("an empty-body note from the template is bumped in place", async () => {
@@ -249,7 +255,18 @@ describe("import: update", () => {
     const files = { ...EXISTING, "megabasing/science/mall/README.md": note };
     const host = fakeHost({ files, clipboard: WIRES });
     await importFromClipboard(host, "megabasing/science/mall");
-    assert.equal(host.vault.get("megabasing/science/mall/README.md"), note.replace('"1"', '"2"'));
+    assert.equal(host.vault.get("megabasing/science/mall/README.md"), withStats(note.replace('"1"', '"2"'), WIRES_STATS));
+  });
+
+  test("a book replaced by a single blueprint loses the stats that no longer apply", async () => {
+    const note = withStats('---\ntitle: Mall\nauthors: []\nversion: "3"\n---\n\nMine.\n', BOOK_STATS);
+    const files = { ...EXISTING, "megabasing/science/mall/README.md": note };
+    const host = fakeHost({ files, clipboard: WIRES, update: () => ({ newVersion: undefined, changeNote: "" }) });
+    await importFromClipboard(host, "megabasing/science/mall");
+    assert.equal(
+      host.vault.get("megabasing/science/mall/README.md"),
+      '---\ntitle: Mall\nauthors: []\nversion: "3"\nentities: 4\nfactorio_version: "2.0.76"\n---\n\nMine.\n',
+    );
   });
 
   test("the same blueprint again changes nothing", async () => {
