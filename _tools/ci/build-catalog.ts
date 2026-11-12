@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import {
   BLUEPRINT_FILE,
   type BlueprintKind,
+  blueprintStats,
   decodeBlueprintString,
   describeBlueprint,
   encodeBlueprintString,
@@ -241,6 +242,7 @@ export function buildCatalog(repo: string, opts: { commit?: string; now?: Date }
     const bpBlob = files.get(bpPath)!;
     const bpText = content.get(bpBlob)!.toString("utf8");
     let description: ReturnType<typeof describeBlueprint> | undefined;
+    let stats: ReturnType<typeof blueprintStats> = {};
     let tree: BookEntry[] = [];
     if (!isCanonicalJson(bpText)) {
       let parses = true;
@@ -254,6 +256,8 @@ export function buildCatalog(repo: string, opts: { commit?: string; now?: Date }
       const value = readCanonicalJson(bpText);
       if (isBlueprintValue(value)) {
         description = describeBlueprint(value);
+        // From blueprint.json, never from the note: its copy may be stale.
+        stats = blueprintStats(value);
         const book = bookEntries(value);
         tree = book.entries;
         for (const d of book.duplicates) problem(bpPath, `has more than one entry in book slot ${d}`);
@@ -313,6 +317,7 @@ export function buildCatalog(repo: string, opts: { commit?: string; now?: Date }
       ...optional,
       deprecated,
       previous_paths,
+      ...stats,
       blueprint: description,
       commit: current.sha,
       history,

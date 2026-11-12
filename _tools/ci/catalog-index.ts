@@ -20,6 +20,8 @@ export interface CatalogIndex {
    * Bumped on any change a reader must know about. 2 added nodes, cover,
    * entry strings (CatalogVersion.entries) and nested render paths; a
    * schema 1 index has none of those and renders with a number `n`.
+   * Additive fields such as the entry stats (entities, tiles, blueprints,
+   * factorio_version) do not bump it; readers treat them as optional.
    */
   schema: 2;
   /** When the index was built, ISO 8601. */
@@ -34,7 +36,8 @@ export interface CatalogEntry {
   /** Blueprint folder path from the repo root, e.g. "megabasing/modules/lead-follower-furnaces". */
   path: string;
 
-  // README.md frontmatter, normalized by the core's readNotesMeta; unknown keys are dropped.
+  // README.md frontmatter, normalized by the core's readNotesMeta; unknown keys are dropped,
+  // and so are the generated stats keys (see below).
   title: string;
   authors: string[];
   version?: string;
@@ -44,6 +47,18 @@ export interface CatalogEntry {
   deprecated: boolean;
   /** Old folder paths; the Worker redirects them here. */
   previous_paths: string[];
+
+  // Stats computed from blueprint.json by the core's blueprintStats (the
+  // same values the plugin writes into the note's frontmatter, which is
+  // never read for them). Omitted when they do not apply.
+  /** Entities, summed over every blueprint at any depth; blueprints and books only, even when 0. */
+  entities?: number;
+  /** Tiles, summed the same way; omitted when 0. */
+  tiles?: number;
+  /** Blueprints at any depth; books only. */
+  blueprints?: number;
+  /** Factorio version that saved it, e.g. "2.1.24"; absent when unknown. */
+  factorio_version?: string;
 
   /** The current blueprint.json, as the core's describeBlueprint sees it. */
   blueprint: CatalogBlueprint;

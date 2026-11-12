@@ -100,6 +100,30 @@ test("builds the index: history, renames via previous_paths, renders, frontmatte
   assert.deepEqual(b.history.map((h) => h.sha), [c3, c1], "history follows the old path");
 });
 
+test("stats come from blueprint.json, by the core's rules; stale stats in the note are ignored and still valid", () => {
+  const r = repo();
+  r.write("cat/single/blueprint.json", bp("S", 4));
+  // Stale and wrong stats in the note: must neither leak into the index nor fail validation.
+  r.write("cat/single/README.md", notes('title: S\nauthors: []\nentities: 999\ntiles: 7\nblueprints: 3\nfactorio_version: "1.1.0"'));
+  r.write("cat/book/blueprint.json", book("Bk", [{ index: 0, ...JSON.parse(bp("x", 2)) }, { index: 1, ...JSON.parse(book("inner", [{ index: 0, ...JSON.parse(bp("y", 5)) }])) }]));
+  r.write("cat/book/README.md", notes("title: Bk\nauthors: []"));
+  r.write("cat/planner/blueprint.json", writeCanonicalJson({ upgrade_planner: { item: "upgrade-planner", version: encodeFactorioVersion("2.0.76") } }));
+  r.write("cat/planner/README.md", notes("title: P\nauthors: []\nentities: 1"));
+  r.commit("add");
+  const { index, problems } = buildCatalog(r.dir);
+  assert.deepEqual(problems, []);
+  const pick = (path: string) => {
+    const e = index.blueprints.find((x) => x.path === path)!;
+    return { entities: e.entities, tiles: e.tiles, blueprints: e.blueprints, factorio_version: e.factorio_version };
+  };
+  assert.deepEqual(pick("cat/single"), { entities: 4, tiles: undefined, blueprints: undefined, factorio_version: "2.0.76" });
+  assert.deepEqual(pick("cat/book"), { entities: 7, tiles: undefined, blueprints: 2, factorio_version: "2.0.76" });
+  assert.deepEqual(pick("cat/planner"), { entities: undefined, tiles: undefined, blueprints: undefined, factorio_version: "2.0.76" });
+  const single = index.blueprints.find((x) => x.path === "cat/single")!;
+  assert.equal("tiles" in single, false, "omitted, not undefined, in the JSON");
+  assert.equal("blueprints" in single, false);
+});
+
 test("history dates are author dates, in git log order", () => {
   const r = repo();
   r.write("cat/a/blueprint.json", bp("A1"));
