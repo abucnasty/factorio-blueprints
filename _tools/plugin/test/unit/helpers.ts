@@ -10,6 +10,7 @@ import type {
   GitSync,
   Host,
   PickItem,
+  ProcessRunner,
   RenderSettings,
   Settings,
   UpdateAnswer,
@@ -48,6 +49,8 @@ export interface FakeOptions {
   lfs?: boolean;
   /** Use a real folder instead of the in-memory vault. */
   disk?: string;
+  /** Process runner for a disk vault (default: run programs directly). */
+  processes?: ProcessRunner;
 }
 
 export function fakeHost(opts: FakeOptions = {}): FakeHost {
@@ -107,7 +110,7 @@ export function fakeHost(opts: FakeOptions = {}): FakeHost {
     },
     today: () => "2026-11-12",
     vaultPath: opts.disk,
-    processes: opts.disk === undefined ? undefined : nodeProcessRunner,
+    processes: opts.disk === undefined ? undefined : (opts.processes ?? nodeProcessRunner),
     files: opts.disk === undefined ? memoryFiles : diskFiles(opts.disk),
     clipboard: {
       readText: async () => host.clipboardText,

@@ -8208,10 +8208,26 @@ then render again.`
     ui.notice(`Render of ${folder} cancelled. Nothing was committed.`);
     return { action: "cancelled" };
   }
-  if (result.code === -1) {
+  const sandbox = result.sandbox;
+  if (sandbox?.failure === "no-permission") {
     return fail(
       host,
-      `Could not start Node.js (${settings.nodePath || "node"}): ${result.error ?? "unknown error"}. Set "Node path" in the plugin settings.`
+      `Obsidian runs as a Flatpak, so the render has to start outside its sandbox, which it is not allowed to do yet. In a terminal, run:
+flatpak override --user --talk-name=org.freedesktop.Flatpak ${sandbox.appId}
+then quit and reopen Obsidian and render again.`
+    );
+  }
+  if (sandbox?.failure === "launcher-missing") {
+    return fail(
+      host,
+      "Obsidian runs as a Flatpak, but flatpak-spawn, which starts the render outside its sandbox, is not available in it, so the render cannot run."
+    );
+  }
+  if (result.code === -1 || sandbox?.failure === "command-not-found") {
+    const why = result.code === -1 ? result.error ?? "unknown error" : lastErrorLine(result.stderr);
+    return fail(
+      host,
+      `Could not start Node.js (${node2}): ${why}. Set "Node path" in the plugin settings.` + (sandbox ? " Obsidian runs as a Flatpak, so it must be the full path to node on the computer itself (what `which node` prints in a terminal)." : "")
     );
   }
   if (result.code !== 0 && result.code !== 2) {
@@ -8742,6 +8758,9 @@ function defaultGitBinary() {
   return "git";
 }
 
+// src/process/flatpak.ts
+var import_fs3 = require("fs");
+
 // src/process/node-process.ts
 var import_child_process2 = require("child_process");
 var import_fs2 = require("fs");
@@ -8791,6 +8810,48 @@ function defaultNodeBinary() {
     for (const p of ["/opt/homebrew/bin/node", "/usr/local/bin/node"]) if ((0, import_fs2.existsSync)(p)) return p;
   }
   return "node";
+}
+
+// src/process/flatpak.ts
+var DEFAULT_FLATPAK_APP_ID = "md.obsidian.Obsidian";
+function flatpakAppId(env = process.env, readInfo = () => (0, import_fs3.existsSync)("/.flatpak-info") ? (0, import_fs3.readFileSync)("/.flatpak-info", "utf8") : void 0) {
+  const id = env["FLATPAK_ID"]?.trim();
+  if (id) return id;
+  let info;
+  try {
+    info = readInfo();
+  } catch {
+    info = "";
+  }
+  if (info === void 0) return void 0;
+  return /^\s*name\s*=\s*(\S+)\s*$/m.exec(info)?.[1] ?? DEFAULT_FLATPAK_APP_ID;
+}
+function launchCommand(program, args, cwd, sandboxed, launcher = "flatpak-spawn") {
+  if (!sandboxed) return { command: program, args };
+  return { command: launcher, args: ["--host", "--watch-bus", `--directory=${cwd}`, program, ...args] };
+}
+function sandboxFailure(r) {
+  if (r.code === -1) return /ENOENT|not found/i.test(r.error ?? "") ? "launcher-missing" : void 0;
+  if (r.code === 0 || r.stdout.trim() !== "") return void 0;
+  if (/org\.freedesktop\.Flatpak/.test(r.stderr)) return "no-permission";
+  if (r.code === 127 || /Failed to (?:start|execute|spawn)[^\n]*(?:No such file|not found)/i.test(r.stderr)) {
+    return "command-not-found";
+  }
+  return void 0;
+}
+function hostProcessRunner(appId, launcher = "flatpak-spawn", inner = nodeProcessRunner) {
+  return {
+    async run(program, args, options) {
+      const launch = launchCommand(program, args, options.cwd, true, launcher);
+      const result = await inner.run(launch.command, launch.args, options);
+      const failure = sandboxFailure(result);
+      return { ...result, sandbox: failure === void 0 ? { appId } : { appId, failure } };
+    }
+  };
+}
+function processRunnerForThisApp() {
+  const appId = flatpakAppId();
+  return appId === void 0 ? nodeProcessRunner : hostProcessRunner(appId);
 }
 
 // src/obsidian/modals.ts
@@ -9064,7 +9125,7 @@ function createObsidianHost(app, settings, openSettings) {
     settings,
     today: () => localDate(/* @__PURE__ */ new Date()),
     vaultPath: vaultDir,
-    processes: vaultDir === void 0 ? void 0 : nodeProcessRunner,
+    processes: vaultDir === void 0 ? void 0 : processRunnerForThisApp(),
     files: {
       exists: (path) => adapter.exists(p(path)),
       read: (path) => adapter.read(p(path)),

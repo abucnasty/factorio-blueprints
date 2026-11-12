@@ -20,3 +20,6 @@ the Obsidian plugins and render storage, and fixes what it can after
 asking. Anything only you can do is printed as ACTION NEEDED with the exact
 steps; do them and re-run until it ends with "All good". `--check` only
 reports and changes nothing.
+
+Obsidian from Flathub only: let it start renders outside its sandbox with
+`flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian`, then restart Obsidian.

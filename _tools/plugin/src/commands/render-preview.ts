@@ -143,10 +143,27 @@ async function run(host: Host, contextFolder: string, signal: AbortSignal, optio
     ui.notice(`Render of ${folder} cancelled. Nothing was committed.`);
     return { action: "cancelled" };
   }
-  if (result.code === -1) {
+  const sandbox = result.sandbox;
+  if (sandbox?.failure === "no-permission") {
     return fail(
       host,
-      `Could not start Node.js (${settings.nodePath || "node"}): ${result.error ?? "unknown error"}. Set "Node path" in the plugin settings.`,
+      "Obsidian runs as a Flatpak, so the render has to start outside its sandbox, which it is not allowed to do yet. In a terminal, run:\n" +
+        `flatpak override --user --talk-name=org.freedesktop.Flatpak ${sandbox.appId}\n` +
+        "then quit and reopen Obsidian and render again.",
+    );
+  }
+  if (sandbox?.failure === "launcher-missing") {
+    return fail(
+      host,
+      "Obsidian runs as a Flatpak, but flatpak-spawn, which starts the render outside its sandbox, is not available in it, so the render cannot run.",
+    );
+  }
+  if (result.code === -1 || sandbox?.failure === "command-not-found") {
+    const why = result.code === -1 ? (result.error ?? "unknown error") : lastErrorLine(result.stderr);
+    return fail(
+      host,
+      `Could not start Node.js (${node}): ${why}. Set "Node path" in the plugin settings.` +
+        (sandbox ? " Obsidian runs as a Flatpak, so it must be the full path to node on the computer itself (what `which node` prints in a terminal)." : ""),
     );
   }
   if (result.code !== 0 && result.code !== 2) {
