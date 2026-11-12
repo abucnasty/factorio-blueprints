@@ -4,6 +4,7 @@ authors: [abucnasty]
 posted: 2025-06-21
 video: https://youtu.be/O9Il-vpOXNM
 factoriobin: https://factoriobin.com/post/ygmdig
+status: public
 entities: 30825
 tiles: 17360
 blueprints: 70

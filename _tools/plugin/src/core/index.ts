@@ -37,16 +37,18 @@ export type { BlueprintCounts, BlueprintDescription, BlueprintKind } from "./des
 export { isValidSlug, plainLabel, slugify } from "./slug.ts";
 
 export {
+  BLUEPRINT_STATUSES,
   bumpVersion,
   FrontmatterError,
+  isBlueprintStatus,
   readFrontmatter,
   readNotesMeta,
   splitFrontmatter,
   updateFrontmatter,
 } from "./frontmatter.ts";
-export type { NotesMeta, SplitNote } from "./frontmatter.ts";
+export type { BlueprintStatus, NotesMeta, SplitNote } from "./frontmatter.ts";
 
-export { DEFAULT_NOTES_TEMPLATE, fillNotesTemplate } from "./notes-template.ts";
+export { DEFAULT_NOTES_TEMPLATE, fillNotesTemplate, setNoteStatus } from "./notes-template.ts";
 export type { NewNotesFields } from "./notes-template.ts";
 
 export {

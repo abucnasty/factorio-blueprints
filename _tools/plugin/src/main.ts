@@ -11,6 +11,7 @@ import type { Host } from "./commands/host.ts";
 import { importFromClipboard } from "./commands/import-blueprint.ts";
 import { expandBookIntoFolders } from "./commands/expand-book.ts";
 import { renderPreview } from "./commands/render-preview.ts";
+import { setBlueprintStatus } from "./commands/set-status.ts";
 import { cancelRenderAll, folderRenderState, renderAllNeeded, showFoldersNeedingRender } from "./commands/render-status.ts";
 import { BLUEPRINT_FILE, BOOK_FILE, isScannedPath, joinPath, RENDER_MANIFEST, renderStateLabel, selfAndAncestors } from "./core/index.ts";
 import { createObsidianHost } from "./obsidian/host.ts";
@@ -73,6 +74,15 @@ const FOLDER_COMMANDS: FolderCommand[] = [
     menuOnlyInBlueprintFolder: true,
     exclusive: false,
     run: copyLiveLink,
+  },
+  {
+    id: "set-blueprint-status",
+    name: "Set blueprint status",
+    menuTitle: "Set blueprint status",
+    icon: "eye",
+    menuOnlyInBlueprintFolder: true,
+    exclusive: true,
+    run: setBlueprintStatus,
   },
   {
     id: "render-preview",

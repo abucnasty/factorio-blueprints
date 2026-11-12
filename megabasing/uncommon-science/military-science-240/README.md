@@ -5,6 +5,7 @@ version: "3"
 posted: 2026-03-10
 video: https://youtu.be/vD_zzN8VT68?t=2745
 factoriobin: https://factoriobin.com/post/90pg6z
+status: public
 entities: 2447
 blueprints: 2
 factorio_version: "2.0.76"

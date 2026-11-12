@@ -4,7 +4,7 @@ authors: [Thaeln, abucnasty]
 posted: 2025-09-30
 video: https://youtu.be/ueV6b7eCEGY
 factoriobin: https://factoriobin.com/post/q9xxwq
-deprecated: true
+status: deprecated
 entities: 2550
 factorio_version: "2.0.66.1"
 ---

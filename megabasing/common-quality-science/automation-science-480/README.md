@@ -5,6 +5,7 @@ version: "1.2"
 posted: 2026-02-03
 video: https://youtu.be/hhn6a_TgCOQ
 factoriobin: https://factoriobin.com/post/cgy91k
+status: public
 entities: 968
 blueprints: 2
 factorio_version: "2.0.73.1"

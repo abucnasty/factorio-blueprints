@@ -3,6 +3,7 @@ title: Car Orientations
 authors: [abucnasty]
 posted: 2025-11-03
 factoriobin: https://factoriobin.com/post/jtoq53
+status: public
 entities: 32
 blueprints: 32
 factorio_version: "2.0.72"

@@ -80,7 +80,7 @@ describe("import: create", () => {
     const notes = host.vault.get(`${folder}/README.md`)!;
     assert.equal(
       notes,
-      '---\ntitle: Military Science Pack (240/s) V3\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\nfrom_vault: true\n' + BOOK_STATS + '---\n\n' +
+      '---\ntitle: Military Science Pack (240/s) V3\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\nfrom_vault: true\nstatus: draft\n' + BOOK_STATS + '---\n\n' +
         bookBlock(folder) +
         "\n",
       "filled from the vault's template; the body is just the generated block",
@@ -90,7 +90,7 @@ describe("import: create", () => {
       authors: ["abucnasty"],
       version: "1",
       posted: "2026-11-12",
-      deprecated: false,
+      status: "draft",
       previous_paths: [],
     });
     assert.deepStrictEqual(host.commits, [{ folder, message: "add Military Science Pack (240/s) V3" }]);
@@ -111,13 +111,13 @@ describe("import: create", () => {
     const notes = host.vault.get("megabasing/military-science-240/README.md")!;
     assert.equal(
       notes,
-      '---\ntitle: Military Science\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\n' + BOOK_STATS + '---\n\n' + bookBlock("megabasing/military-science-240") + "\n",
+      '---\ntitle: Military Science\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\nstatus: draft\n' + BOOK_STATS + '---\n\n' + bookBlock("megabasing/military-science-240") + "\n",
     );
     const single = fakeHost({ files, clipboard: WIRES });
     await importFromClipboard(single, "megabasing");
     assert.equal(
       single.vault.get("megabasing/wired-lamps/README.md"),
-      '---\ntitle: Wired lamps\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\n' + WIRES_STATS + '---\n',
+      '---\ntitle: Wired lamps\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\nstatus: draft\n' + WIRES_STATS + '---\n',
       "a single blueprint without renders gets no block: the body stays empty",
     );
     assert.deepStrictEqual(host.commits, [{ folder: "megabasing/military-science-240", message: "first version" }]);

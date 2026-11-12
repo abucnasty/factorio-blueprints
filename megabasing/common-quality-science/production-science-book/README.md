@@ -3,6 +3,7 @@ title: Production Science Book
 authors: [abucnasty, community]
 version: "1.0"
 posted: 2026-04-10
+status: public
 entities: 10572
 blueprints: 15
 factorio_version: "2.0.76"

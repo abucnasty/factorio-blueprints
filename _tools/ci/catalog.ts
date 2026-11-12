@@ -9,6 +9,8 @@
 //           If the live index cannot be read, every string is uploaded.
 // backfill  uploads every string of every version, then index.json.
 //
+// Drafts (the note's status) are validated but not published; one that was
+// published before keeps that entry, rebuilt from the git history.
 // Publishing never waits for the whole catalog to be valid: invalid
 // blueprints are listed and left out, except that one already in the live
 // index keeps its last published entry, marked stale. The run then exits 1
@@ -61,7 +63,11 @@ async function main(): Promise<number> {
   const { index, problems } = catalog;
   reportProblems(catalog.problems, mode);
   const versions = index.blueprints.reduce((n, e) => n + e.history.length, 0);
-  console.log(`${index.blueprints.length} valid blueprints, ${versions} versions (commit ${index.commit})`);
+  console.log(`${index.blueprints.length} blueprints in the index, ${versions} versions (commit ${index.commit})`);
+  if (catalog.drafts.length > 0) {
+    const kept = catalog.frozen.length > 0 ? `, ${catalog.frozen.length} serving their last published version (${catalog.frozen.join(", ")})` : "";
+    console.log(`${catalog.drafts.length} draft(s): ${catalog.drafts.length - catalog.frozen.length} not published${kept}`);
+  }
   if (mode === "validate") return problems.length > 0 ? 1 : 0;
 
   // Publishing goes ahead without the invalid blueprints, and fails the run

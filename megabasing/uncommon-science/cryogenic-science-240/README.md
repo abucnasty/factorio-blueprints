@@ -5,7 +5,7 @@ authors:
 version: "3.0"
 posted: 2026-03-13
 factoriobin: https://factoriobin.com/post/3u0eht
-deprecated: false
+status: public
 entities: 5831
 tiles: 14046
 blueprints: 2

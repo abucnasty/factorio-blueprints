@@ -6,6 +6,7 @@ version: "4"
 posted: 2025-08-23
 video: https://youtu.be/yVhEDCcWE7s
 factoriobin: https://factoriobin.com/post/s0xzia
+status: public
 entities: 578
 factorio_version: "2.0.64.2"
 ---

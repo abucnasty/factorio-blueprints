@@ -20,6 +20,8 @@ export interface CatalogIndex {
    * Bumped on any change a reader must know about. 2 added nodes, cover,
    * entry strings (CatalogVersion.entries) and nested render paths; a
    * schema 1 index has none of those and renders with a number `n`.
+   * (status was added within schema 2: an entry without one is public, or
+   * deprecated when `deprecated` is true.)
    */
   schema: 2;
   /** When the index was built, ISO 8601. */
@@ -41,6 +43,15 @@ export interface CatalogEntry {
   posted?: string;
   video?: string;
   factoriobin?: string;
+  /**
+   * The note's status. public: listed; deprecated: listed behind a "Show
+   * deprecated" switch; unlisted: served and opened by its address, but
+   * not listed or found by search. Drafts are not in the index: a draft
+   * that was published before keeps its entry as of then, with that
+   * status (history and all).
+   */
+  status: "public" | "deprecated" | "unlisted";
+  /** status === "deprecated", for readers from before status. */
   deprecated: boolean;
   /** Old folder paths; the Worker redirects them here. */
   previous_paths: string[];
@@ -52,7 +63,9 @@ export interface CatalogEntry {
   commit: string;
   /**
    * Commits that changed blueprint.json at this path or a previous one, or
-   * (for a root book) any book.json or blueprint.json under it, newest first.
+   * (for a root book) any book.json or blueprint.json under it, newest first;
+   * only while the note published it. A commit that publishes it again after
+   * a draft is a version too when the string differs from the previous one.
    */
   history: CatalogVersion[];
   /** Every image file under renders/ (for a root book, each leaf's renders/0.jpg as <slot path>.jpg), sorted by file path. */

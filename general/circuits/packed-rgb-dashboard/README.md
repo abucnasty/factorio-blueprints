@@ -4,6 +4,7 @@ authors: [abucnasty]
 posted: 2025-07-26
 video: https://youtu.be/XbROdpgXeXQ
 factoriobin: https://factoriobin.com/post/2fs995
+status: public
 entities: 28
 blueprints: 4
 factorio_version: "2.0.60"

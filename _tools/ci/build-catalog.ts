@@ -15,7 +15,9 @@ import {
   describeBlueprint,
   encodeBlueprintString,
   type FolderReader,
+  type BlueprintStatus,
   FrontmatterError,
+  isBlueprintStatus,
   isBlueprintValue,
   isCanonicalJson,
   isScannedPath,
@@ -35,8 +37,11 @@ import {
 } from "../plugin/src/core/index.ts";
 import type { CatalogEntry, CatalogIndex, CatalogNode, CatalogRender, CatalogVersion } from "./catalog-index.ts";
 
-/** A live index as read back from R2: this schema or the previous one. */
-export type LiveIndex = Omit<CatalogIndex, "schema"> & { schema: 1 | 2 };
+/** A live index as read back from R2: this schema or the previous one (whose entries have no status). */
+export type LiveIndex = Omit<CatalogIndex, "schema" | "blueprints"> & {
+  schema: 1 | 2;
+  blueprints: (Omit<CatalogEntry, "status"> & { status?: CatalogEntry["status"] })[];
+};
 
 export interface Problem {
   /** The blueprint folder this problem makes invalid. */
@@ -56,6 +61,14 @@ export interface Catalog {
   blobs: Map<string, string>;
   /** For the other versions (of root books): the folder at that sha whose assembled tree is the value, keyed by stringKey. */
   trees: Map<string, string>;
+  /**
+   * Blueprint folders whose note says draft (or an unknown status), sorted.
+   * They are validated but never taken from the live index: each is either
+   * absent or, if it was published before, its entry as of then.
+   */
+  drafts: string[];
+  /** Those of `drafts` that keep their last published entry (under the path it had then). */
+  frozen: string[];
 }
 
 export interface StringJob {
@@ -94,8 +107,8 @@ export class Git {
     this.repo = repo;
   }
 
-  run(args: string[], input?: string): Buffer {
-    return execFileSync("git", ["-C", this.repo, "--literal-pathspecs", ...args], {
+  run(args: string[], input?: string, literal = true): Buffer {
+    return execFileSync("git", ["-C", this.repo, ...(literal ? ["--literal-pathspecs"] : []), ...args], {
       input,
       maxBuffer: 1 << 30,
       stdio: ["pipe", "pipe", "pipe"],
@@ -147,6 +160,15 @@ export class Git {
     return out;
   }
 
+  /** The commit's first parent; undefined for a root commit. */
+  parent(commit: string): string | undefined {
+    try {
+      return this.resolve(`${commit}^1`);
+    } catch {
+      return undefined;
+    }
+  }
+
   /**
    * Commits that changed any of the paths, newest first, reachable from
    * `commit`; with `changed`, only those where it accepts a changed file
@@ -177,11 +199,80 @@ export class Git {
 export async function buildCatalog(repo: string, opts: { commit?: string; now?: Date } = {}): Promise<Catalog> {
   const git = new Git(repo);
   const commit = git.resolve(opts.commit ?? "HEAD");
+  const ctx: Context = { git, era: statusEra(git, commit), blobs: new Map(), trees: new Map(), statuses: new Map() };
+  const head = await buildAt(ctx, commit);
+  const { entries, problems } = head;
+
+  // A draft keeps the entry it had when it was last published, built from
+  // that commit, so a rebuild from scratch gives the same index.
+  const frozen: string[] = [];
+  for (const d of head.drafts) {
+    const entry = await lastPublished(ctx, commit, d);
+    if (!entry) continue;
+    if (entries.some((e) => e.path === entry.path) || (entry.path !== d.folder && head.folders.includes(entry.path))) {
+      problems.push({
+        folder: d.folder,
+        path: `${d.folder}/${NOTES_FILE}`,
+        message: `its last published version was at ${entry.path}, which is now another blueprint folder, so that version is no longer served`,
+      });
+      continue;
+    }
+    entries.push(entry);
+    frozen.push(d.folder);
+  }
+  entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+
+  return {
+    index: {
+      schema: 2,
+      generatedAt: (opts.now ?? new Date()).toISOString(),
+      commit,
+      blueprints: entries,
+    },
+    problems,
+    invalid: [...new Set(problems.map((p) => p.folder))].sort(),
+    blobs: ctx.blobs,
+    trees: ctx.trees,
+    drafts: head.drafts.map((d) => d.folder).sort(),
+    frozen: frozen.sort(),
+  };
+}
+
+interface Context {
+  git: Git;
+  /** Commits in the status era (see statusEra). */
+  era: Set<string>;
+  blobs: Map<string, string>;
+  trees: Map<string, string>;
+  /** Status of a README.md blob in the status era, by blob id. */
+  statuses: Map<string, BlueprintStatus | undefined>;
+}
+
+/** A blueprint folder whose note is not published at the commit built. */
+interface Draft {
+  folder: string;
+  /** The folder and its previous paths. */
+  paths: string[];
+  isBook: boolean;
+}
+
+/**
+ * Validate the blueprint folders and root books at `commit` (all of them,
+ * or the ones in `only`) and build the entries of those whose note
+ * publishes them; the others are listed as drafts.
+ */
+async function buildAt(
+  ctx: Context,
+  commit: string,
+  only?: Set<string>,
+): Promise<{ entries: CatalogEntry[]; problems: Problem[]; drafts: Draft[]; folders: string[] }> {
+  const { git } = ctx;
   const files = git.tree(commit);
   const problems: Problem[] = [];
-  const blobs = new Map<string, string>();
-  const trees = new Map<string, string>();
-
+  const blobs = ctx.blobs;
+  const trees = ctx.trees;
+  const inEra = ctx.era.has(commit);
+  const drafts: Draft[] = [];
   const foldersWith = (name: string) =>
     new Set([...files.keys()].filter((p) => p.endsWith("/" + name) && isScannedPath(p)).map(parentFolder));
   const blueprintFolders = foldersWith(BLUEPRINT_FILE);
@@ -218,7 +309,9 @@ export async function buildCatalog(repo: string, opts: { commit?: string; now?: 
   }
 
   const wanted: string[] = [];
+  const included = (f: string) => !only || [...only].some((o) => f === o || f.startsWith(o + "/"));
   for (const f of new Set([...blueprintFolders, ...books])) {
+    if (!included(f)) continue;
     for (const name of [BLUEPRINT_FILE, BOOK_FILE, NOTES_FILE]) {
       const id = files.get(`${f}/${name}`);
       if (id) wanted.push(id);
@@ -238,6 +331,7 @@ export async function buildCatalog(repo: string, opts: { commit?: string; now?: 
   const entries: CatalogEntry[] = [];
 
   for (const folder of folders) {
+    if (only && !only.has(folder)) continue;
     const before = problems.length;
     const problem = (path: string, message: string) => problems.push({ folder, path, message });
     const isBook = books.has(folder);
@@ -268,7 +362,14 @@ export async function buildCatalog(repo: string, opts: { commit?: string; now?: 
         const meta = readNotesMeta(notesText);
         if (meta.title === undefined) problem(notesPath, "frontmatter needs a title");
         if (!Array.isArray(fm["authors"])) problem(notesPath, "frontmatter needs authors as a list (it may be empty: authors: [])");
-        if (fm["deprecated"] != null && typeof fm["deprecated"] !== "boolean") {
+        if (f !== folder) {
+          if ("status" in fm) problem(notesPath, `only the book's own note (${folder}/${NOTES_FILE}) has a status; remove it here`);
+        } else if (fm["status"] != null && !isBlueprintStatus(fm["status"])) {
+          problem(notesPath, "status must be draft, public, deprecated or unlisted (none means draft)");
+        }
+        if (inEra) {
+          if ("deprecated" in fm) problem(notesPath, "deprecated is replaced by status: write status: deprecated (or public) and remove deprecated");
+        } else if (fm["deprecated"] != null && typeof fm["deprecated"] !== "boolean") {
           problem(notesPath, "deprecated must be true or false");
         }
         if (fm["previous_paths"] != null && !Array.isArray(fm["previous_paths"])) {
@@ -283,6 +384,11 @@ export async function buildCatalog(repo: string, opts: { commit?: string; now?: 
     };
     const notes = readNotes(folder);
     const meta = notes?.meta;
+    // Unreadable notes: a draft in the status era (it may have been published
+    // before); before it, published as always (and invalid).
+    const status = notes ? noteStatus(notes.fm, inEra) : inEra ? "draft" : "public";
+    const published = status !== undefined && status !== "draft";
+    if (!published) drafts.push({ folder, paths: [folder, ...(meta?.previous_paths.map((p) => joinPath(p)) ?? [])], isBook });
     if (notes && meta) {
       meta.previous_paths = meta.previous_paths.map((p) => joinPath(p));
       for (const prev of meta.previous_paths) {
@@ -407,28 +513,11 @@ export async function buildCatalog(repo: string, opts: { commit?: string; now?: 
     }
     renders.sort((a, b) => compareSlotPaths(slotOf(a.file), slotOf(b.file)));
 
-    if (problems.length > before || !meta || !description) continue;
+    if (problems.length > before || !meta || !description || !published) continue;
 
-    // History: commits that changed blueprint.json here or at a previous path;
-    // for a root book also any book.json or blueprint.json under it, the
-    // value being blueprint.json where a commit has one, else the assembled tree.
+    // History: the published versions (see versions()).
     const paths = [folder, ...meta.previous_paths];
-    const candidates = isBook
-      ? git.log(commit, paths, (name) => paths.some((p) => name.startsWith(p + "/") && TREE_FILE.test(name)))
-      : git.log(commit, paths.map((p) => `${p}/${BLUEPRINT_FILE}`));
-    const names = isBook ? [BLUEPRINT_FILE, BOOK_FILE] : [BLUEPRINT_FILE];
-    const ids = git.blobIds(candidates.flatMap((c) => paths.flatMap((p) => names.map((n) => `${c.sha}:${p}/${n}`))));
-    const history: CatalogVersion[] = [];
-    const per = paths.length * names.length;
-    candidates.forEach((c, i) => {
-      // A commit that only deleted the file at an old path has no version.
-      const found = ids.slice(i * per, (i + 1) * per).findIndex((x) => x !== undefined);
-      if (found === -1) return;
-      history.push({ ...c, entries: true });
-      const key = stringKey(folder, c.sha);
-      if (names[found % names.length] === BLUEPRINT_FILE) blobs.set(key, ids[i * per + found]!);
-      else trees.set(key, paths[Math.floor(found / names.length)]!);
-    });
+    const history = await versions(ctx, folder, timeline(ctx, commit, paths, isBook));
     const current = isBook
       ? history.find((h, i) => i === 0 && trees.get(stringKey(folder, h.sha)) === folder)
       : history.find((h) => blobs.get(stringKey(folder, h.sha)) === files.get(bpPath));
@@ -440,13 +529,14 @@ export async function buildCatalog(repo: string, opts: { commit?: string; now?: 
     const renderFor = new Map(renders.map((r) => [slotOf(r.file), r.file]));
     const nodes = toNodes(tree, renderFor, folderFor);
     const cover = description.kind === "blueprint" ? renderFor.get("0") : firstRender(nodes);
-    const { title, authors, deprecated, previous_paths, ...optional } = meta;
+    const { title, authors, status: _, previous_paths, ...optional } = meta;
     entries.push({
       path: folder,
       title: title!,
       authors,
       ...optional,
-      deprecated,
+      status,
+      deprecated: status === "deprecated",
       previous_paths,
       blueprint: description,
       commit: current.sha,
@@ -457,18 +547,198 @@ export async function buildCatalog(repo: string, opts: { commit?: string; now?: 
     });
   }
 
-  return {
-    index: {
-      schema: 2,
-      generatedAt: (opts.now ?? new Date()).toISOString(),
-      commit,
-      blueprints: entries,
-    },
-    problems,
-    invalid: [...new Set(problems.map((p) => p.folder))].sort(),
-    blobs,
-    trees,
-  };
+  return { entries, problems, drafts, folders };
+}
+
+/**
+ * A note's status at a commit, from its frontmatter. No status means draft
+ * in the status era; before it (when no note had a status key yet) every
+ * note is published, as `deprecated` when it says `deprecated: true`.
+ * undefined for a value that is not a status.
+ */
+export function noteStatus(fm: Record<string, unknown>, inEra: boolean): BlueprintStatus | undefined {
+  const s = fm["status"];
+  if (s != null) return isBlueprintStatus(s) ? s : undefined;
+  if (!inEra) return fm["deprecated"] === true ? "deprecated" : "public";
+  return "draft";
+}
+
+/**
+ * The status era: the commits reachable from `commit` that are, or come
+ * after, a commit where some note has a `status` key in its frontmatter (the
+ * migration to statuses, wherever it is in the history: found by content,
+ * so rebasing or squashing it changes nothing). Commits outside it predate
+ * statuses and are treated as published.
+ */
+export function statusEra(git: Git, commit: string): Set<string> {
+  const era = new Set<string>();
+  // Candidates: commits whose diff of some README.md adds or removes a line
+  // starting "status:"; oldest first, so a later one is usually already in.
+  const text = git
+    .run(["log", "--format=%x1e%H", "--name-only", "--topo-order", "--reverse", "-G^status:", commit, "--", ":(glob)**/README.md"], undefined, false)
+    .toString();
+  for (const rec of text.split("\x1e").slice(1)) {
+    const [sha, ...names] = rec.split("\n").filter((l) => l !== "");
+    if (era.has(sha!)) continue;
+    const notes = names.filter((n) => n.includes("/") && isScannedPath(n));
+    const ids = git.blobIds(notes.map((n) => `${sha}:${n}`)).filter((id): id is string => id !== undefined);
+    const hasStatus = [...git.readBlobs(ids).values()].some((b) => {
+      try {
+        return "status" in readFrontmatter(b.toString("utf8"));
+      } catch {
+        return false;
+      }
+    });
+    if (!hasStatus) continue;
+    era.add(sha!);
+    for (const c of git.run(["rev-list", "--ancestry-path", `${sha}..${commit}`]).toString().split("\n")) if (c) era.add(c);
+  }
+  return era;
+}
+
+/** One commit in the life of a catalog entry. */
+interface Step extends CatalogVersion {
+  /** It changed the blueprint's files: a version, unless the note says draft. */
+  changed: boolean;
+  /** Its note publishes it at this commit. */
+  published: boolean;
+  /** The value at this commit: blueprint.json (its blob id), or the expanded book at `folder`; undefined for none. */
+  value: { folder: string; blob?: string } | undefined;
+}
+
+const VALUE_NAMES = [BLUEPRINT_FILE, BOOK_FILE];
+
+/**
+ * The commits that changed an entry's blueprint files or its note, at its
+ * path or a previous one, newest first, each with what its note said then.
+ * The changes to the blueprint files are git log's, as they were before
+ * statuses (for a root book: any book.json or blueprint.json under it).
+ */
+function timeline(ctx: Context, commit: string, paths: string[], isBook: boolean): Step[] {
+  const { git } = ctx;
+  const treeFile = (name: string) => paths.some((p) => name.startsWith(p + "/") && TREE_FILE.test(name));
+  const changes = isBook ? git.log(commit, paths, treeFile) : git.log(commit, paths.map((p) => `${p}/${BLUEPRINT_FILE}`));
+  const changed = new Set(changes.map((c) => c.sha));
+  const notePaths = paths.map((p) => `${p}/${NOTES_FILE}`);
+  // Before statuses, notes cannot make or hide a version: skip reading them.
+  const all =
+    ctx.era.size === 0
+      ? changes
+      : mergeLogs(
+          isBook
+            ? git.log(commit, paths, (name) => treeFile(name) || notePaths.includes(name))
+            : git.log(commit, [...paths.map((p) => `${p}/${BLUEPRINT_FILE}`), ...notePaths]),
+          changes,
+        );
+  const names = isBook ? VALUE_NAMES : [BLUEPRINT_FILE];
+  const per = paths.length * names.length;
+  const ids = git.blobIds(
+    all.flatMap((c) => [...paths.flatMap((p) => names.map((n) => `${c.sha}:${p}/${n}`)), ...notePaths.map((n) => `${c.sha}:${n}`)]),
+  );
+  const stride = per + paths.length;
+  const noteIds = all.map((_, i) => (ctx.era.has(all[i]!.sha) ? ids.slice(i * stride + per, (i + 1) * stride).find((x) => x !== undefined) : undefined));
+  const unread = [...new Set(noteIds.filter((id): id is string => id !== undefined && !ctx.statuses.has(id)))];
+  for (const [id, blob] of git.readBlobs(unread)) {
+    try {
+      ctx.statuses.set(id, noteStatus(readFrontmatter(blob.toString("utf8")), true));
+    } catch {
+      ctx.statuses.set(id, undefined);
+    }
+  }
+  return all.map((c, i) => {
+    // The first path holding blueprint.json or (for a root book) book.json.
+    const found = ids.slice(i * stride, i * stride + per).findIndex((x) => x !== undefined);
+    const folder = paths[Math.floor(found / names.length)]!;
+    const value = found === -1 ? undefined : names[found % names.length] === BLUEPRINT_FILE ? { folder, blob: ids[i * stride + found]! } : { folder };
+    const status = !ctx.era.has(c.sha) ? "public" : noteIds[i] === undefined ? "draft" : ctx.statuses.get(noteIds[i]!);
+    return { ...c, changed: changed.has(c.sha), published: status !== undefined && status !== "draft", value };
+  });
+}
+
+/**
+ * `all` (newest first) with any commit of `changes` it lacks put back after
+ * the one before it in `changes` (git log can simplify merges differently
+ * for a wider set of paths).
+ */
+function mergeLogs(all: CatalogVersion[], changes: CatalogVersion[]): CatalogVersion[] {
+  const out = [...all];
+  const at = new Map(out.map((c, i) => [c.sha, i]));
+  let prev = -1;
+  for (const c of changes) {
+    if (at.has(c.sha)) {
+      prev = out.findIndex((o) => o.sha === c.sha);
+      continue;
+    }
+    out.splice(++prev, 0, c);
+    at.set(c.sha, prev);
+  }
+  return out;
+}
+
+/**
+ * The published versions of an entry, newest first, from its timeline: a
+ * commit that changed the blueprint while its note published it (as before
+ * statuses), and a commit that publishes it again after a draft, when what
+ * it publishes differs from the previous version. Changes made while a
+ * draft are never versions. Records where each version's string comes from.
+ */
+async function versions(ctx: Context, folder: string, steps: Step[]): Promise<CatalogVersion[]> {
+  const out: Step[] = [];
+  let afterDraft = false;
+  for (const s of [...steps].reverse()) {
+    if (!s.published) {
+      afterDraft = true;
+      continue;
+    }
+    // A commit that only deleted the file at an old path has no version.
+    if (s.value === undefined) continue;
+    const last = out.at(-1);
+    const version = afterDraft ? !(last && (await sameValue(ctx.git, last, s))) : s.changed;
+    afterDraft = false;
+    if (version) out.push(s);
+  }
+  return out.reverse().map((s) => {
+    const key = stringKey(folder, s.sha);
+    if (s.value!.blob !== undefined) ctx.blobs.set(key, s.value!.blob);
+    else ctx.trees.set(key, s.value!.folder);
+    return { sha: s.sha, date: s.date, subject: s.subject, entries: true };
+  });
+}
+
+/** Whether two steps hold the same blueprint (the same file, or the same assembled book). */
+async function sameValue(git: Git, a: Step, b: Step): Promise<boolean> {
+  if (a.value?.blob !== undefined && a.value.blob === b.value?.blob) return true;
+  const value = async ({ sha, value: v }: Step) =>
+    v!.blob !== undefined ? readCanonicalJson(git.readBlobs([v!.blob]).get(v!.blob)!.toString("utf8")) : assembleAt(git, sha, v!.folder);
+  try {
+    return JSON.stringify(await value(a)) === JSON.stringify(await value(b));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The entry a draft had when it was last published: built at the commit
+ * before its note last became a draft (so renders and notes are as they were
+ * then), or, if that does not give a valid published entry, at each earlier
+ * published commit in turn. Undefined if it was never published.
+ */
+async function lastPublished(ctx: Context, commit: string, d: Draft): Promise<CatalogEntry | undefined> {
+  const steps = timeline(ctx, commit, d.paths, d.isBook);
+  const start = steps.findIndex((s) => s.published);
+  if (start === -1) return undefined;
+  const earlier = steps.slice(start).filter((s) => s.published && s.value !== undefined).map((s) => s.sha);
+  const before = start > 0 ? ctx.git.parent(steps[start - 1]!.sha) : undefined;
+  for (const sha of new Set([...(before ? [before] : []), ...earlier])) {
+    const ids = ctx.git.blobIds(d.paths.flatMap((p) => VALUE_NAMES.map((n) => `${sha}:${p}/${n}`)));
+    const at = ids.findIndex((x) => x !== undefined);
+    if (at === -1) continue;
+    const folder = d.paths[Math.floor(at / VALUE_NAMES.length)]!;
+    const built = await buildAt(ctx, sha, new Set([folder]));
+    const entry = built.entries.find((e) => e.path === folder);
+    if (entry) return entry;
+  }
+  return undefined;
 }
 
 /** book.json and blueprint.json: the files whose changes make a version of a root book. */
@@ -516,15 +786,23 @@ async function assembleAt(git: Git, commit: string, folder: string): Promise<unk
 /**
  * Keep the live entry of each invalid blueprint, marked stale, so its links
  * go on serving the last valid version (its strings are already published).
- * A blueprint whose folder is gone is not invalid, so it is dropped.
- * Returns the paths carried over.
+ * A blueprint whose folder is gone is not invalid, so it is dropped. Drafts
+ * never come from the live index (buildCatalog keeps what they had from the
+ * history), nor does a path the index already has. Returns the paths
+ * carried over.
  */
 export function carryOverStale(catalog: Catalog, published: LiveIndex | undefined): string[] {
-  const invalid = new Set(catalog.invalid);
+  const drafts = new Set(catalog.drafts);
+  const has = new Set(catalog.index.blueprints.map((e) => e.path));
+  const invalid = new Set(catalog.invalid.filter((f) => !drafts.has(f) && !has.has(f)));
   const carried = (published?.blueprints ?? [])
     .filter((e) => invalid.has(e.path))
     // A schema 1 entry's renders also carry a number "n"; the file is what links use.
-    .map((e): CatalogEntry => ({ ...e, renders: e.renders.map(liveRender), stale: true }));
+    // An entry from before status gets the one its deprecated flag means.
+    .map(({ status, ...e }): CatalogEntry => {
+      const s = status ?? (e.deprecated ? "deprecated" : "public");
+      return { ...e, status: s, deprecated: s === "deprecated", renders: e.renders.map(liveRender), stale: true };
+    });
   const list = catalog.index.blueprints;
   list.push(...carried);
   list.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
