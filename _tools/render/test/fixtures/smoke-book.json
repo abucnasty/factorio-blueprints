@@ -892,7 +892,7 @@
             },
             {
               "entity_number": 2,
-              "name": "steel-chest",
+              "name": "constant-combinator",
               "position": {
                 "x": 7.5,
                 "y": 7.5
@@ -908,7 +908,7 @@
             }
           ],
           "item": "blueprint",
-          "label": "smoke 3 (Space Age): platform module without a hub (foundation, thruster, chest)",
+          "label": "smoke 3 (Space Age): platform module without a hub (foundation, thruster, constant combinator)",
           "tiles": [
             {
               "name": "space-platform-foundation",
@@ -1025,34 +1025,6 @@
             {
               "name": "space-platform-foundation",
               "position": {
-                "x": 1,
-                "y": 6
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 1,
-                "y": 7
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 1,
-                "y": 8
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 1,
-                "y": 9
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
                 "x": 2,
                 "y": 0
               }
@@ -1090,34 +1062,6 @@
               "position": {
                 "x": 2,
                 "y": 5
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 2,
-                "y": 6
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 2,
-                "y": 7
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 2,
-                "y": 8
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 2,
-                "y": 9
               }
             },
             {
@@ -1165,34 +1109,6 @@
             {
               "name": "space-platform-foundation",
               "position": {
-                "x": 3,
-                "y": 6
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 3,
-                "y": 7
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 3,
-                "y": 8
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 3,
-                "y": 9
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
                 "x": 4,
                 "y": 0
               }
@@ -1230,34 +1146,6 @@
               "position": {
                 "x": 4,
                 "y": 5
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 4,
-                "y": 6
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 4,
-                "y": 7
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 4,
-                "y": 8
-              }
-            },
-            {
-              "name": "space-platform-foundation",
-              "position": {
-                "x": 4,
-                "y": 9
               }
             },
             {

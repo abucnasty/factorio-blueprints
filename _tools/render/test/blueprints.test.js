@@ -68,7 +68,7 @@ test("the platform ship fixture is one blueprint with a hub, foundation and plat
     const { blueprints } = listBlueprints(value);
     assert.equal(blueprints.length, 1);
     const names = blueprints[0].blueprint.entities.map(entity => entity.name);
-    assert.deepEqual(names, ["space-platform-hub", "thruster", "asteroid-collector", "steel-chest"]);
+    assert.deepEqual(names, ["space-platform-hub", "thruster", "asteroid-collector", "constant-combinator"]);
     assert.ok(blueprints[0].blueprint.tiles.every(tile => tile.name === "space-platform-foundation"));
 });
 

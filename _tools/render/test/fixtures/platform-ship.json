@@ -28,7 +28,7 @@
       },
       {
         "entity_number": 4,
-        "name": "steel-chest",
+        "name": "constant-combinator",
         "position": {
           "x": 4.5,
           "y": -4.5
@@ -44,7 +44,7 @@
       }
     ],
     "item": "blueprint",
-    "label": "platform ship: hub, thruster, asteroid collector (Space Age)",
+    "label": "platform ship: hub, thruster, asteroid collector, constant combinator (Space Age)",
     "tiles": [
       {
         "name": "space-platform-foundation",
@@ -987,13 +987,6 @@
       {
         "name": "space-platform-foundation",
         "position": {
-          "x": 2,
-          "y": 8
-        }
-      },
-      {
-        "name": "space-platform-foundation",
-        "position": {
           "x": 3,
           "y": -6
         }
@@ -1092,13 +1085,6 @@
       {
         "name": "space-platform-foundation",
         "position": {
-          "x": 3,
-          "y": 8
-        }
-      },
-      {
-        "name": "space-platform-foundation",
-        "position": {
           "x": 4,
           "y": -6
         }
@@ -1192,13 +1178,6 @@
         "position": {
           "x": 4,
           "y": 7
-        }
-      },
-      {
-        "name": "space-platform-foundation",
-        "position": {
-          "x": 4,
-          "y": 8
         }
       },
       {
