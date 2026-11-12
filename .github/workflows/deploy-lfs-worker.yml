@@ -1,9 +1,9 @@
 # Deploys the Git LFS Worker in _tools/lfs-worker to Cloudflare as
 # "factorio-blueprints-lfs" (https://factorio-blueprints-lfs.abucnasty.workers.dev).
 #
-# FIRST DEPLOY MUST BE DONE MANUALLY. The CLOUDFLARE_API_TOKEN secret can update
-# an existing Worker but cannot create a new one, so this workflow fails until
-# the Worker has been deployed once by hand. See _tools/docs/render-storage.md.
+# The Worker already exists (first deployed by hand on 2026-11-12). The
+# CLOUDFLARE_API_TOKEN secret can update it but cannot create a new one, so if
+# the Worker is ever deleted it must be recreated by hand before this runs.
 #
 # This workflow never sets LFS_UPLOAD_TOKEN. That secret is set once on the
 # Worker by hand and survives later deploys.

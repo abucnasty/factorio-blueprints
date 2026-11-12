@@ -31,16 +31,18 @@ exits non-zero if something needs action. `--help` lists the options.
 
 ## Once, by the owner
 
-1. Deploy the Worker the first time by hand (the CI token cannot create
-   Workers): `cd _tools/lfs-worker && npm ci && npx wrangler login && npx wrangler deploy`.
-2. Create the upload token: from the clone,
-   ```sh
-   _tools/setup/setup-render-storage.sh --set-worker-secret
-   ```
-   It makes a random token, sets it on the Worker with wrangler, stores it on
-   this machine, and shows it once if you ask, so you can save it in your
-   password manager. Running it again rotates the token; every machine then
-   needs the new one.
+The Worker is already deployed (first deployed 2026-11-12); CI redeploys it
+when its code changes. The one remaining owner step is the upload token. From
+the clone, logged in to wrangler (`npx wrangler login` in `_tools/lfs-worker`):
+
+```sh
+_tools/setup/setup-render-storage.sh --set-worker-secret
+```
+
+It makes a random token, sets it on the Worker with wrangler, stores it on
+this machine, and shows it once if you ask, so you can save it in your
+password manager. Running it again rotates the token; every machine then
+needs the new one.
 
 ## Clone without images
 
@@ -57,14 +59,14 @@ skipping in that clone: `git lfs install --local --skip-smudge`.
 | git lfs install has not been run | Re-run without `--check` and accept, or run `git lfs install` in the clone |
 | git-lfs endpoint is '…', expected … | Something sets `lfs.url`; the message says where. Remove it, or accept the fix |
 | lock verification is '…' | Accept the fix (`lfs.<url>.locksverify false`) |
-| cannot reach … / answered … with HTTP … | Check the network; if it persists, the Worker is not deployed (owner: step 1 above) |
+| cannot reach … / answered … with HTTP … | Check the network; if it persists, check the Worker in the Cloudflare dashboard or re-run the deploy workflow |
 | upload without credentials got HTTP … instead of 401 | Not our Worker, or it is broken. Do not push renders; owner investigates |
 | the LFS host may use another credential helper | Accept the fix, so no login window can appear (Obsidian cannot answer one) |
 | no upload token is stored | Re-run without `--check` and paste the token |
 | the Worker refused the stored upload token | Paste the current token from the password manager. If it is right, the owner has not set the secret yet: run `--set-worker-secret` |
 | N of M render images are pointer files | Accept the fix, or run `git lfs pull` |
 | wrangler is not logged in to Cloudflare | `cd _tools/lfs-worker && npx wrangler login`, then re-run `--set-worker-secret` |
-| wrangler could not set the secret | Read wrangler's output; usually the Worker is not deployed yet (step 1) |
+| wrangler could not set the secret | Read wrangler's output; usually you are not logged in to wrangler (`npx wrangler login`) |
 
 The script's tests (local stand-in Worker, no Cloudflare):
 `_tools/setup/test/test-setup-render-storage.sh`.
