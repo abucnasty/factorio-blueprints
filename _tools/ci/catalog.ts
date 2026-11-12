@@ -5,11 +5,14 @@
 //   node _tools/ci/catalog.ts backfill [--repo DIR] [--commit REF] [--out DIR]
 //
 // validate  checks every blueprint folder; exits 1 listing the problems.
-// publish   validates, then uploads the strings the live index.json lacks,
-//           then index.json. If the live index cannot be read, every string
-//           is uploaded (same as backfill).
-// backfill  validates, then uploads every string of every version, then
-//           index.json.
+// publish   uploads the strings the live index.json lacks, then index.json.
+//           If the live index cannot be read, every string is uploaded.
+// backfill  uploads every string of every version, then index.json.
+//
+// Publishing never waits for the whole catalog to be valid: invalid
+// blueprints are listed and left out, except that one already in the live
+// index keeps its last published entry, marked stale. The run then exits 1
+// so the problems are seen, but only after the valid ones are live.
 // --out DIR writes the R2 objects under DIR instead of uploading (a dry
 //           run; publish then diffs against DIR/index.json).
 //
@@ -20,13 +23,13 @@
 // failed run can simply be run again.
 
 import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
 
-import { buildCatalog, produceStrings, selectStrings } from "./build-catalog.ts";
+import { buildCatalog, carryOverStale, produceStrings, selectStrings, type Problem } from "./build-catalog.ts";
 import type { CatalogIndex } from "./catalog-index.ts";
 
 const BUCKET = "factorio-blueprints-catalog";
@@ -57,21 +60,20 @@ async function main(): Promise<number> {
 
   const catalog = buildCatalog(repo, values.commit ? { commit: values.commit } : {});
   const { index, problems } = catalog;
-  if (problems.length > 0) {
-    console.error(`${problems.length} problem(s) in the catalog:`);
-    for (const p of problems) {
-      console.error(`  ${p.path}: ${p.message}`);
-      if (process.env["GITHUB_ACTIONS"]) console.log(`::error file=${p.path}::${p.message}`);
-    }
-    return 1;
-  }
+  reportProblems(catalog.problems, mode);
   const versions = index.blueprints.reduce((n, e) => n + e.history.length, 0);
-  console.log(`${index.blueprints.length} blueprints, ${versions} versions, valid (commit ${index.commit})`);
-  if (mode === "validate") return 0;
+  console.log(`${index.blueprints.length} valid blueprints, ${versions} versions (commit ${index.commit})`);
+  if (mode === "validate") return problems.length > 0 ? 1 : 0;
 
-  const published = mode === "publish" ? await readPublished(out) : undefined;
-  const jobs = selectStrings(index, published);
-  console.log(`${jobs.length} string(s) to produce${published ? " (diffed against the live index)" : ""}`);
+  // Publishing goes ahead without the invalid blueprints, and fails the run
+  // only once the valid ones are live.
+  const live = await readPublished(out);
+  const jobs = selectStrings(index, mode === "publish" ? live : undefined);
+  console.log(`${jobs.length} string(s) to produce${mode === "publish" && live ? " (diffed against the live index)" : ""}`);
+  const stale = carryOverStale(catalog, live);
+  if (stale.length > 0) console.log(`kept the last published entry of ${stale.length} invalid blueprint(s): ${stale.join(", ")}`);
+  const failed = problems.length > 0 ? 1 : 0;
+  if (failed) console.error(`${catalog.invalid.length} invalid blueprint(s) were not updated; see the problems above.`);
 
   const staging = out ?? mkdtempSync(join(tmpdir(), "catalog-"));
   const files: { key: string; file: string }[] = [];
@@ -98,15 +100,40 @@ async function main(): Promise<number> {
     if (out) {
       writeFileSync(indexFile, indexText);
       console.log(`wrote to ${out}`);
-      return 0;
+      return failed;
     }
     await pool(files, (f) => put(f.key, f.file, STRING_TYPE));
     writeFileSync(indexFile, indexText);
     await put(INDEX_KEY, indexFile, INDEX_TYPE);
     console.log(`uploaded ${files.length} string(s) and index.json in ${((performance.now() - started) / 1000).toFixed(1)} s`);
-    return 0;
+    return failed;
   } finally {
     if (!out) rmSync(staging, { recursive: true, force: true });
+  }
+}
+
+/** List problems in the log, as annotations and in the step summary. */
+function reportProblems(problems: Problem[], mode: string): void {
+  if (problems.length === 0) return;
+  const folders = new Set(problems.map((p) => p.folder)).size;
+  console.error(`${problems.length} problem(s) in ${folders} blueprint(s):`);
+  for (const p of problems) {
+    console.error(`  ${p.path}: ${p.message}`);
+    if (process.env["GITHUB_ACTIONS"]) console.log(`::error file=${p.path}::${p.message}`);
+  }
+  const summary = process.env["GITHUB_STEP_SUMMARY"];
+  if (summary) {
+    const cell = (t: string) => t.replace(/\|/g, "\\|").replace(/\n/g, " ");
+    const note =
+      mode === "validate"
+        ? ""
+        : "\nThe other blueprints were published. These keep serving their last published version, if they had one.\n";
+    appendFileSync(
+      summary,
+      `### ${folders} invalid blueprint(s)\n${note}\n| File | Problem |\n| --- | --- |\n` +
+        problems.map((p) => `| \`${cell(p.path)}\` | ${cell(p.message)} |`).join("\n") +
+        "\n",
+    );
   }
 }
 
@@ -128,9 +155,9 @@ async function readPublished(out: string | undefined): Promise<CatalogIndex | un
     }
     const parsed = JSON.parse(text) as CatalogIndex;
     if (parsed.schema === 1 && Array.isArray(parsed.blueprints)) return parsed;
-    console.warn("warning: the live index has another schema; producing every string");
+    console.warn("warning: the live index has another schema; nothing to diff against or carry over");
   } catch (e) {
-    console.warn(`warning: no live index readable (${firstLine(e)}); producing every string`);
+    console.warn(`warning: no live index readable (${firstLine(e)}); nothing to diff against or carry over`);
   }
   return undefined;
 }

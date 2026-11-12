@@ -1,8 +1,8 @@
 // The index builder against temporary git repositories.
 
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
@@ -224,4 +224,79 @@ test("lists validation failures and leaves those blueprints out", () => {
     "bad/render/renders/cover.jpg",
   ]);
   assert.equal(byPath("ok/a").length, 0);
+});
+
+// The CLI's publish path, as a dry run into a directory standing in for R2.
+
+const CLI = new URL("../catalog.ts", import.meta.url).pathname;
+
+function cli(mode: string, repoDir: string, out: string) {
+  const summary = join(out + "-summary.md");
+  writeFileSync(summary, "");
+  const env = { ...process.env, GITHUB_STEP_SUMMARY: summary, GITHUB_ACTIONS: "" };
+  const r = spawnSync(process.execPath, [CLI, mode, "--repo", repoDir, "--out", out], { encoding: "utf8", env });
+  const index = existsSync(join(out, "index.json")) ? JSON.parse(readFileSync(join(out, "index.json"), "utf8")) : undefined;
+  return { code: r.status, log: r.stdout + r.stderr, summary: readFileSync(summary, "utf8"), index };
+}
+
+function threeBlueprints() {
+  const r = repo();
+  for (const name of ["a", "b", "c"]) {
+    r.write(`cat/${name}/blueprint.json`, bp(name));
+    r.write(`cat/${name}/README.md`, notes(`title: ${name}\nauthors: []`));
+  }
+  return r;
+}
+
+test("publish: an invalid blueprint is reported and left out, the others are published, the run fails", () => {
+  const r = threeBlueprints();
+  r.write("cat/b/blueprint.json", "{ broken");
+  const sha = r.commit("one broken");
+  const out = join(r.dir + "-r2");
+  const res = cli("publish", r.dir, out);
+  assert.equal(res.code, 1);
+  assert.deepEqual(res.index.blueprints.map((e: any) => e.path), ["cat/a", "cat/c"]);
+  assert.ok(existsSync(join(out, stringKey("cat/a", sha))));
+  assert.ok(existsSync(join(out, stringKey("cat/c", sha))));
+  assert.ok(!existsSync(join(out, "strings/cat/b")));
+  assert.match(res.log, /cat\/b\/blueprint\.json: is not valid JSON/);
+  assert.match(res.summary, /cat\/b\/blueprint\.json.*is not valid JSON/);
+});
+
+test("publish: an invalid blueprint keeps its live entry, marked stale; a deleted folder is removed", () => {
+  const r = threeBlueprints();
+  const c1 = r.commit("three");
+  const out = join(r.dir + "-r2");
+  assert.equal(cli("publish", r.dir, out).code, 0);
+
+  r.write("cat/a/blueprint.json", bp("a2"));
+  r.write("cat/b/README.md", notes("authors: []"));
+  r.write("cat/b/blueprint.json", bp("b2"));
+  const c2 = r.commit("update a, break b");
+  let res = cli("publish", r.dir, out);
+  assert.equal(res.code, 1);
+  const byPath = (p: string) => res.index.blueprints.find((e: any) => e.path === p);
+  assert.equal(byPath("cat/a").commit, c2);
+  assert.equal(byPath("cat/a").stale, undefined);
+  assert.equal(byPath("cat/b").stale, true);
+  assert.equal(byPath("cat/b").commit, c1, "serves the last valid version");
+  assert.ok(!existsSync(join(out, stringKey("cat/b", c2))));
+  assert.match(res.summary, /cat\/b\/README\.md.*title/);
+
+  r.git("rm", "-r", "-q", "cat/b");
+  r.commit("delete b");
+  res = cli("publish", r.dir, out);
+  assert.equal(res.code, 0);
+  assert.deepEqual(res.index.blueprints.map((e: any) => e.path), ["cat/a", "cat/c"]);
+});
+
+test("validate (pull requests) still fails and publishes nothing", () => {
+  const r = threeBlueprints();
+  r.write("cat/b/blueprint.json", "{ broken");
+  r.commit("one broken");
+  const out = join(r.dir + "-r2");
+  const res = cli("validate", r.dir, out);
+  assert.equal(res.code, 1);
+  assert.equal(existsSync(out), false);
+  assert.match(res.log, /cat\/b\/blueprint\.json: is not valid JSON/);
 });

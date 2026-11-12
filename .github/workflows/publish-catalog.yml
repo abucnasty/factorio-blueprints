@@ -1,8 +1,10 @@
 # Validates the blueprint catalog on every pull request. On pushes to main
-# (the vault pushes there directly) it then publishes it for the link
-# Worker: the blueprint strings the live index.json lacks, then index.json,
-# to the factorio-blueprints-catalog R2 bucket. Run it by hand on main with
-# "backfill" to upload every string of every version again.
+# (the vault pushes there directly) it publishes it for the link Worker:
+# the blueprint strings the live index.json lacks, then index.json, to the
+# factorio-blueprints-catalog R2 bucket. An invalid blueprint does not hold
+# up the others: it is listed in the step summary, keeps its last published
+# version, and the run fails after the valid ones are live. Run it by hand
+# on main with "backfill" to upload every string of every version again.
 name: publish catalog
 
 on:
@@ -72,7 +74,9 @@ jobs:
           ../plugin/node_modules/.bin/tsc -p .
           node --test "test/**/*.test.ts"
 
+      # Publishing validates too, but publishes the valid blueprints first.
       - name: Validate
+        if: env.PUBLISH != 'true'
         run: node _tools/ci/catalog.ts validate
 
       - name: Install wrangler

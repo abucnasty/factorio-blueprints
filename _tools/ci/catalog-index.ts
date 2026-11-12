@@ -44,6 +44,12 @@ export interface CatalogEntry {
   history: CatalogVersion[];
   /** renders/<n>.<ext>, sorted by n. */
   renders: CatalogRender[];
+  /**
+   * Present (true) when the folder's current files are invalid: this is the
+   * last valid entry published, carried over unchanged, and its links serve
+   * that version until the files are fixed.
+   */
+  stale?: true;
 }
 
 /** Same shape as the core's BlueprintDescription (build-catalog.ts assigns one to the other, so tsc catches drift). */

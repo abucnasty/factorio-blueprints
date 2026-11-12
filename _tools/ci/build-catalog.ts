@@ -23,6 +23,8 @@ import {
 import type { CatalogEntry, CatalogIndex, CatalogRender, CatalogVersion } from "./catalog-index.ts";
 
 export interface Problem {
+  /** The blueprint folder this problem makes invalid. */
+  folder: string;
   /** Repo path of the file or folder at fault. */
   path: string;
   message: string;
@@ -32,6 +34,8 @@ export interface Catalog {
   index: CatalogIndex;
   /** Validation failures; blueprints with any are left out of the index. */
   problems: Problem[];
+  /** Blueprint folders that exist at the commit but have problems, sorted. */
+  invalid: string[];
   /** blueprint.json blob id for every (path, sha) in the index, keyed by stringKey. */
   blobs: Map<string, string>;
 }
@@ -172,7 +176,7 @@ export function buildCatalog(repo: string, opts: { commit?: string; now?: Date }
 
   for (const folder of folders) {
     const before = problems.length;
-    const problem = (path: string, message: string) => problems.push({ path, message });
+    const problem = (path: string, message: string) => problems.push({ folder, path, message });
 
     // README.md frontmatter.
     const notesBlob = files.get(`${folder}/${NOTES_FILE}`);
@@ -291,8 +295,26 @@ export function buildCatalog(repo: string, opts: { commit?: string; now?: Date }
       blueprints: entries,
     },
     problems,
+    invalid: [...new Set(problems.map((p) => p.folder))].sort(),
     blobs,
   };
+}
+
+/**
+ * Keep the live entry of each invalid blueprint, marked stale, so its links
+ * go on serving the last valid version (its strings are already published).
+ * A blueprint whose folder is gone is not invalid, so it is dropped.
+ * Returns the paths carried over.
+ */
+export function carryOverStale(catalog: Catalog, published: CatalogIndex | undefined): string[] {
+  const invalid = new Set(catalog.invalid);
+  const carried = (published?.blueprints ?? [])
+    .filter((e) => invalid.has(e.path))
+    .map((e): CatalogEntry => ({ ...e, stale: true }));
+  const list = catalog.index.blueprints;
+  list.push(...carried);
+  list.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return carried.map((e) => e.path);
 }
 
 // ---------------------------------------------------------------------------
