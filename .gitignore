@@ -25,3 +25,6 @@ __pycache__/
 .venv/
 .wrangler/
 .dev.vars
+
+# Round-trip test corpus, downloaded and rebuilt on demand (npm run corpus:fetch)
+_tools/plugin/.corpus/

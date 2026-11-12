@@ -1,0 +1,9 @@
+{
+  "//": "The core must run in Obsidian, Node and Cloudflare Workers: no DOM, Node or Obsidian types here.",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["src/core/**/*.ts", "types/core-globals.d.ts"]
+}

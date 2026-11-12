@@ -1,0 +1,19 @@
+{
+  "blueprint": {
+    "description": "Ünïcödé stays as it is: “quotes”, emoji 🚂, and a tab\there.",
+    "entities": [
+      {"entity_number":1,"name":"iron-chest","position":{"x":0.5,"y":0.5}}
+    ],
+    "icons": [
+      {
+        "index": 1,
+        "signal": {
+          "name": "iron-chest"
+        }
+      }
+    ],
+    "item": "blueprint",
+    "label": "Fußgänger-Brücke — 日本語 🚀",
+    "version": 562949958402048
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "factorio-blueprints",
+  "name": "Factorio Blueprints",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.7",
+  "description": "Import Factorio blueprint strings as version-controlled JSON with notes, and copy them back as strings.",
+  "author": "abucnasty",
+  "isDesktopOnly": true
+}

@@ -32,7 +32,13 @@ A directory is a **blueprint folder** if and only if it contains
 scanned for blueprints. Category nesting can be any depth.
 
 Slugs are lowercase ASCII, words joined by `-`, no other punctuation
-(`Military Science (240/s)` becomes `military-science-240`).
+(`Military Science (240/s)` becomes `military-science-240`). In detail:
+rich text icons become their name (`[item=iron-plate]` gives `iron-plate`)
+and other rich text tags are dropped; accents are dropped (`ß` becomes
+`ss`); a rate keeps only its number (`240/s`, `/sec`, `/m`, `/min`, `/h`);
+any other run of characters that are not ASCII letters or digits is one
+`-`. A label with no ASCII letters or digits gives no slug, and the user
+names the folder. `slugify` in the core is the implementation.
 
 ## Notes file frontmatter
 
@@ -51,12 +57,16 @@ previous_paths: []                  # optional, old folder paths, for link redir
 ---
 ```
 
-Unknown keys are preserved by every tool.
+Unknown keys are preserved by every tool, and so are key order, comments
+and the notes body: tools rewrite only the lines of the keys they change.
+An optional key that is empty or `null` (`posted:`) means the same as the
+key being absent.
 
 ## Blueprint string codec
 
 - Decode: drop the first character (version byte, must be `0`), base64-decode,
-  zlib-inflate, parse as UTF-8 JSON.
+  zlib-inflate, parse as UTF-8 JSON. Whitespace anywhere in the string is
+  ignored, so a wrapped or padded paste still decodes.
 - Encode: compact JSON (no whitespace), zlib-deflate at level 9, base64,
   prefix `0`.
 - Decoding then encoding then decoding must give identical JSON. Byte-identical
@@ -80,12 +90,17 @@ removed, written as follows:
   objects are written `[]` and `{}`.
 - Numbers are written as the shortest form that parses back to the same
   value (what `JSON.stringify` produces in JavaScript). Integers must not gain
-  a decimal point.
+  a decimal point. A number the game wrote in a longer form for the same
+  double (`0.2509804069995880126953125`) is therefore written shorter
+  (`0.250980406999588`); the value does not change. A string holding an
+  integer too large for a double (above 2^53) is refused at import rather
+  than stored rounded.
 - Non-ASCII characters are written as-is, not escaped.
 
 Reading a file in this format and writing it again must produce identical
 bytes. There is exactly one implementation of the writer, in
-`_tools/plugin/src/core/`; other tools import it rather than reimplementing it.
+`_tools/plugin/src/core/`; other tools import it rather than reimplementing it
+(see `_tools/plugin/README.md`).
 
 ## Branches and commits
 
