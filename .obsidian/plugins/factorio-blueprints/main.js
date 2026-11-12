@@ -7577,6 +7577,11 @@ function fillNotesTemplate(template, fields) {
   else if (!isBlueprintStatus(status)) updates["status"] = "draft";
   return updateFrontmatter(template, updates, { before: STATS_KEYS });
 }
+function setNoteStatus(note, status) {
+  const fm = readFrontmatter(note);
+  if (fm["status"] === status && !("deprecated" in fm)) return note;
+  return updateFrontmatter(note, { status, deprecated: void 0 }, { before: ["deprecated", ...STATS_KEYS] });
+}
 
 // src/core/blueprint-folder.ts
 var BLUEPRINT_FILE = "blueprint.json";
@@ -9463,6 +9468,72 @@ function errorText4(e) {
   return e instanceof Error ? e.message : String(e);
 }
 
+// src/commands/set-status.ts
+var DETAILS = {
+  draft: "Not on the website, and no new version goes live; if it was published before, that version stays live",
+  public: "Listed on the website; the live link works",
+  deprecated: 'Listed behind "Show deprecated"; the live link works',
+  unlisted: "Not listed or found by search, but opens by its direct address; the live link works"
+};
+async function setBlueprintStatus(host, contextFolder) {
+  const loc = await locate(host, contextFolder);
+  if (loc === void 0) return reject7(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
+  const folder = loc.root;
+  const notesPath = joinPath(folder, NOTES_FILE);
+  if (!await host.files.exists(notesPath)) return reject7(host, `${folder} has no ${NOTES_FILE} to hold its status.`);
+  let note;
+  let fm;
+  try {
+    note = await host.files.read(notesPath);
+    fm = readFrontmatter(note);
+  } catch (e) {
+    return reject7(host, `Could not read ${notesPath}: ${errorText5(e)}`);
+  }
+  const current = fm["status"];
+  const title = typeof fm["title"] === "string" && fm["title"].trim() !== "" ? fm["title"] : folder;
+  const items = BLUEPRINT_STATUSES.map((s) => ({
+    label: s === current ? `${capitalize2(s)} (now)` : capitalize2(s),
+    detail: DETAILS[s]
+  }));
+  const where = loc.slots.length > 0 ? ` (the whole book ${folder})` : "";
+  const index = await host.ui.pick(items, `Status of ${title}${where}`);
+  if (index === void 0) return { action: "cancelled" };
+  const status = BLUEPRINT_STATUSES[index];
+  let next;
+  try {
+    next = setNoteStatus(note, status);
+  } catch (e) {
+    return reject7(host, `Could not set the status in ${notesPath}: ${errorText5(e)}`);
+  }
+  if (next === note) {
+    host.ui.notice(`${title} is already ${status}.`);
+    return { action: "unchanged", folder, status };
+  }
+  try {
+    await host.files.write(notesPath, next);
+  } catch (e) {
+    return reject7(host, `Could not write ${notesPath}: ${errorText5(e)}`);
+  }
+  const done = `Set ${title} to ${status}`;
+  if (!host.settings.commitAfterImport || host.git === void 0) {
+    host.ui.notice(`${done}.`);
+    return { action: "set", folder, status, git: void 0 };
+  }
+  const git = await host.git.commitAndSync(folder, `set ${title} to ${status}`);
+  reportGit(host, done, git);
+  return { action: "set", folder, status, git };
+}
+function reject7(host, reason) {
+  host.ui.notice(reason, "error");
+  return { action: "rejected", reason };
+}
+function capitalize2(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function errorText5(e) {
+  return e instanceof Error ? e.message : String(e);
+}
+
 // src/obsidian/host.ts
 var import_obsidian3 = require("obsidian");
 
@@ -10104,6 +10175,15 @@ var FOLDER_COMMANDS = [
     menuOnlyInBlueprintFolder: true,
     exclusive: false,
     run: copyLiveLink
+  },
+  {
+    id: "set-blueprint-status",
+    name: "Set blueprint status",
+    menuTitle: "Set blueprint status",
+    icon: "eye",
+    menuOnlyInBlueprintFolder: true,
+    exclusive: true,
+    run: setBlueprintStatus
   },
   {
     id: "render-preview",

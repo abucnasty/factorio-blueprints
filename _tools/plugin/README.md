@@ -16,6 +16,9 @@ notes beside them, and back. The built plugin is committed in
   folder per entry, each with its own note and render; see the conventions.
 - **Copy live link**: the folder's link on the link service; for a book, a
   picker offers the whole book or any entry.
+- **Set blueprint status**: draft, public, deprecated or unlisted, written
+  to the note's `status` (the root book's, inside an expanded book), then
+  committed and pushed. New blueprints start as drafts.
 - **Render preview** (also: click the `Render: …` status bar item): runs
   `_tools/render` for the folder (with `--only` for just the outdated
   entries when clicked from the status bar), refreshes the notes' generated
