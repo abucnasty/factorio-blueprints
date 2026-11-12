@@ -12,6 +12,8 @@ notes beside them, and back. The built plugin is committed in
 - **Copy blueprint string**: encodes a folder's `blueprint.json` to the
   clipboard, ready for Import string in the game.
 
+- **Expand book into folders** (on a book's folder): `book.json` plus one
+  folder per entry, each with its own note and render; see the conventions.
 - **Copy live link**: the folder's link on the link service; for a book, a
   picker offers the whole book or any entry.
 - **Render preview** (also: click the `Render: …` status bar item): runs

@@ -13,6 +13,7 @@ import {
   stringUrl,
 } from "../core/index.ts";
 import type { BookNode } from "../core/index.ts";
+import { folderValue, locate } from "./expanded.ts";
 import type { Host, PickItem } from "./host.ts";
 
 export type CopyLinkOutcome =
@@ -21,12 +22,13 @@ export type CopyLinkOutcome =
   | { action: "rejected"; reason: string };
 
 export async function copyLiveLink(host: Host, contextFolder: string): Promise<CopyLinkOutcome> {
-  const folder = await findBlueprintFolder(contextFolder, (f) => host.files.exists(joinPath(f, BLUEPRINT_FILE)));
-  if (folder === undefined) return reject(host, "This is not inside a blueprint folder (a folder with a blueprint.json).");
+  const loc = await locate(host, contextFolder);
+  if (loc === undefined) return reject(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
+  const folder = loc.folder;
 
   let tree: BookNode | undefined;
   try {
-    tree = bookTree(readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE))));
+    tree = bookTree(await folderValue(host, loc));
   } catch (e) {
     return reject(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -40,7 +42,8 @@ export async function copyLiveLink(host: Host, contextFolder: string): Promise<C
     node = nodes[index]!;
   }
 
-  const url = stringUrl(host.settings.linkBase, folder, node.slots);
+  // Inside an expanded book the address is the root book's path and the slots down to the entry.
+  const url = stringUrl(host.settings.linkBase, loc.root, [...loc.slots, ...node.slots]);
   try {
     await host.clipboard.writeText(url);
   } catch (e) {

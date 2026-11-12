@@ -32,3 +32,6 @@ __pycache__/
 
 # Round-trip test corpus, downloaded and rebuilt on demand (npm run corpus:fetch)
 _tools/plugin/.corpus/
+
+# Scratch space of the plugin's Render preview for expanded books
+.factorio-render/

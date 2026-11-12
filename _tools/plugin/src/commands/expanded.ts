@@ -171,3 +171,14 @@ export async function bookNoteFolders(host: Host, bookFolder: string): Promise<s
 
 /** Note path of a folder. */
 export const notePath = (folder: string) => joinPath(folder, NOTES_FILE);
+
+/** The folder at a slot path under a root book (after renames), or undefined. */
+export async function locateBySlots(host: Host, root: string, slots: number[]): Promise<string | undefined> {
+  let folder = root;
+  for (const slot of slots) {
+    const child = (await slotFolders(folder, vaultReader(host))).find((c) => c.slot === slot);
+    if (!child) return undefined;
+    folder = child.path;
+  }
+  return folder;
+}

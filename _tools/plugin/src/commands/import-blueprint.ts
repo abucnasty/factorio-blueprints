@@ -28,7 +28,10 @@ import {
 } from "../core/index.ts";
 import type { BlueprintDescription } from "../core/index.ts";
 import type { GitResult } from "../git/commit-and-sync.ts";
-import { noteWithBlock } from "./generated-notes.ts";
+import { locate, locateBySlots } from "./expanded.ts";
+import { addEntryToBook, updateExpandedBook } from "./expanded-import.ts";
+import type { ExpandedImportOutcome } from "./expanded-import.ts";
+import { noteWithBlock, refreshExpandedBook } from "./generated-notes.ts";
 import { reportGit } from "./git-notice.ts";
 import type { Host } from "./host.ts";
 import { renderPreview } from "./render-preview.ts";
@@ -36,6 +39,7 @@ import { describeState, folderRenderState } from "./render-status.ts";
 
 export type ImportOutcome =
   | { action: "created" | "updated"; folder: string; git: GitResult | undefined }
+  | { action: "expanded-book"; result: ExpandedImportOutcome }
   | { action: "unchanged"; folder: string }
   | { action: "cancelled" }
   | { action: "rejected"; reason: string };
@@ -52,10 +56,8 @@ export type ImportTarget =
  * scanned.
  */
 export async function chooseImportTarget(host: Host, contextFolder: string): Promise<ImportTarget> {
-  const folder = await findBlueprintFolder(contextFolder, (f) =>
-    host.files.exists(joinPath(f, BLUEPRINT_FILE)),
-  );
-  if (folder !== undefined) return { mode: "update", folder };
+  const loc = await locate(host, contextFolder);
+  if (loc?.kind === "blueprint") return { mode: "update", folder: loc.folder };
   if (!isScannedPath(contextFolder)) {
     return {
       mode: "refuse",
@@ -95,6 +97,14 @@ export async function importFromClipboard(host: Host, contextFolder: string): Pr
   const summary = summarizeBlueprint(description);
 
   // 2. Decide where it goes and ask the user, still without writing.
+  // An expanded book: a book updates it slot by slot, anything else is added as a new entry.
+  const loc = await locate(host, contextFolder);
+  if (loc?.kind === "book") {
+    const result =
+      description.kind === "blueprint-book" ? await updateExpandedBook(host, loc, value) : await addEntryToBook(host, loc, value);
+    return { action: "expanded-book", result };
+  }
+
   const target = await chooseImportTarget(host, contextFolder);
   if (target.mode === "refuse") return reject(host, target.reason);
   const commit = host.settings.commitAfterImport && host.git !== undefined;
@@ -155,6 +165,13 @@ export async function importFromClipboard(host: Host, contextFolder: string): Pr
   } else {
     const title = plainLabel(description.label ?? "") || capitalize(KIND_NAMES[description.kind]);
     const slug = slugify(title) || slugify(KIND_NAMES[description.kind]);
+    // A book whose folder already exists as an expanded book updates it.
+    if (description.kind === "blueprint-book") {
+      const existing = await locate(host, joinPath(target.parent, slug));
+      if (existing?.kind === "book" && existing.folder === joinPath(target.parent, slug)) {
+        return { action: "expanded-book", result: await updateExpandedBook(host, existing, value) };
+      }
+    }
     const checkSlug = (s: string) => checkNewSlug(host, target.parent, s);
     const answer = await ui.askCreate({
       parent: target.parent,
@@ -191,6 +208,19 @@ export async function importFromClipboard(host: Host, contextFolder: string): Pr
     if (ui.openNote) await ui.openNote(joinPath(folder, NOTES_FILE)).catch(() => undefined);
   }
 
+  // A leaf of an expanded book: its folder name follows its label, and the
+  // book's notes list it; the commit covers the whole root book.
+  let commitFolder = folder;
+  if (action === "updated" && loc && loc.slots.length > 0) {
+    try {
+      await refreshExpandedBook(host, loc.root);
+      folder = (await locateBySlots(host, loc.root, loc.slots)) ?? folder;
+    } catch (e) {
+      blockWarning += ` The book's notes were not refreshed: ${errorText(e)}`;
+    }
+    commitFolder = loc.root;
+  }
+
   // 4. Commit, pull and push just this folder.
   const verb = action === "created" ? "Created" : "Updated";
   let renderNote = "";
@@ -208,7 +238,7 @@ export async function importFromClipboard(host: Host, contextFolder: string): Pr
   if (!commit) {
     ui.notice(`${verb} ${folder} with ${summary}${renderNote}.${blockWarning}`);
   } else {
-    git = await host.git!.commitAndSync(folder, commitMessage);
+    git = await host.git!.commitAndSync(commitFolder, commitMessage);
     reportGit(host, `${verb} ${folder} with ${summary}${renderNote}`, git, blockWarning);
   }
 
