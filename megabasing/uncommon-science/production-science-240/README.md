@@ -9,4 +9,6 @@ entities: 3242
 factorio_version: "2.0.55"
 ---
 
+![Production Science (240/s)](https://blueprints.abucnasty.dev/megabasing/uncommon-science/production-science-240/cover.jpg)
+
 - designed by abucnasty
