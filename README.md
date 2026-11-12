@@ -13,9 +13,9 @@ settings and the notes template. The blueprint plugin can import a string
 from the clipboard (creating or updating a blueprint folder, then
 committing and pushing it) and copy a blueprint back as a string; see
 [its README](_tools/plugin/README.md). Rendering previews and live links
-are not built yet. The catalog from
-[factorio-benchmarks](https://github.com/abucnasty/factorio-benchmarks/blob/master/docs/blueprints/README.md)
-has been imported, without render images yet.
+are not built yet. There are no blueprints yet; the catalog currently
+still lives in
+[factorio-benchmarks](https://github.com/abucnasty/factorio-benchmarks/blob/master/docs/blueprints/README.md).
 
 ## Layout
 
@@ -24,7 +24,7 @@ has been imported, without render images yet.
 _tools/docs/                design docs and setup guides
 _tools/templates/           note templates
 _tools/plugin/              blueprint plugin source and the shared core library
-<category>/.../<slug>/      one folder per blueprint
+<category>/.../<slug>/      one folder per blueprint (none yet)
   README.md                 notes, with metadata in the frontmatter
   blueprint.json            the decoded blueprint
 ```
