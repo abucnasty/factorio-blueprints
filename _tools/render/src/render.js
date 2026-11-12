@@ -2,7 +2,7 @@
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { blueprintStringOf, listBlueprints, readInput } from "./blueprints.js";
+import { blueprintStringOf, listBlueprints, readInput, selectBlueprints, selects } from "./blueprints.js";
 import { Session, resolveFactorioExecutable } from "./factorio.js";
 import { planCapture } from "./framing.js";
 import { convertToJpeg, stitchToJpeg } from "./image.js";
@@ -10,13 +10,18 @@ import { convertToJpeg, stitchToJpeg } from "./image.js";
 /** Ticks the game runs after a build before its screenshot, so the client has caught up and drawn it */
 export const SETTLE_TICKS = 120;
 const SCREENSHOT_TIMEOUT_MS = 120_000;
-const IMAGE_NAME = /^(\d+)\.jpg$/;
+/** A render image under the output folder: slot numbers as folders, the last one as the file name ("3/1.jpg") */
+const RENDER_FILE = /^(\d+\/)*\d+\.jpg$/;
+const SLOT_FOLDER = /^\d+$/;
+/** Version of the report's shape (report.json, --json); 2 added slot paths and render files */
+export const REPORT_SCHEMA = 2;
 
 /**
  * @typedef {object} RenderOptions
  * @property {string} factorio        executable or install folder
  * @property {string} input           blueprint.json or a file with a blueprint string
- * @property {string} out             folder for <n>.jpg
+ * @property {string} out             folder for the render files (<slot path>.jpg)
+ * @property {string[]} [only]        slot paths to render; the rest of <out> is left alone
  * @property {import("./framing.js").FRAMING_DEFAULTS} framing
  * @property {string} [mods]          extra mods folder
  * @property {string} [save]          start from this save instead of the mod's scenario
@@ -44,29 +49,109 @@ async function makeWorkDir(requested) {
     return { dir, chosen: true };
 }
 
+/** Every render image under `dir`, as "/"-separated paths relative to it */
+async function renderFilesUnder(dir, prefix = "") {
+    const found = [];
+    for (const entry of await fsp.readdir(path.join(dir, prefix), { withFileTypes: true }).catch(() => [])) {
+        const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+        if (entry.isDirectory() && SLOT_FOLDER.test(entry.name)) found.push(...await renderFilesUnder(dir, relative));
+        else if (entry.isFile() && RENDER_FILE.test(relative)) found.push(relative);
+    }
+    return found;
+}
+
+/** Remove slot folders (all-digit names) under `dir` that are empty, deepest first; never `dir` itself */
+async function removeEmptySlotFolders(dir, prefix = "") {
+    for (const entry of await fsp.readdir(path.join(dir, prefix), { withFileTypes: true }).catch(() => [])) {
+        if (!entry.isDirectory() || !SLOT_FOLDER.test(entry.name)) continue;
+        const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+        await removeEmptySlotFolders(dir, relative);
+        if ((await fsp.readdir(path.join(dir, relative))).length === 0) await fsp.rmdir(path.join(dir, relative));
+    }
+}
+
 /**
- * Move the new images into `out` and remove numbered images that no longer belong there (the blueprint is gone
- * from the book, or it rendered nothing this time). Other files in `out` are left alone.
+ * Write the new images into `out` at their render files and remove render images that no longer belong there (the
+ * blueprint is gone from the book, moved slot, or rendered nothing this time), then slot folders left empty. Only
+ * render images (slot-number paths ending in .jpg) are ever removed; other files are left alone.
+ * @param {string} out
+ * @param {{ file: string, source: string }[]} images  file: render file relative to `out`; source: the JPEG to copy
+ * @param {(file: string) => boolean} [inScope]  only stale files it accepts are removed (all by default)
+ * @returns {Promise<string[]>} removed render files, relative to `out`
  */
-export async function publishImages(out, images) {
+export async function publishImages(out, images, inScope = () => true) {
     await fsp.mkdir(out, { recursive: true });
-    const produced = new Set(images.map(image => image.number));
+    const produced = new Set(images.map(image => image.file));
     for (const image of images) {
-        const target = path.join(out, `${image.number}.jpg`);
+        const target = path.join(out, ...image.file.split("/"));
+        await fsp.mkdir(path.dirname(target), { recursive: true });
         const temporary = `${target}.tmp`;
-        await fsp.copyFile(image.file, temporary);
+        await fsp.copyFile(image.source, temporary);
         await fsp.rename(temporary, target);
     }
     const removed = [];
-    for (const name of await fsp.readdir(out)) {
-        const match = IMAGE_NAME.exec(name);
-        if (match && !produced.has(Number(match[1]))) {
-            await fsp.rm(path.join(out, name), { force: true });
-            removed.push(name);
+    for (const file of await renderFilesUnder(out)) {
+        if (!produced.has(file) && inScope(file)) {
+            await fsp.rm(path.join(out, ...file.split("/")), { force: true });
+            removed.push(file);
         }
     }
-    return removed;
+    await removeEmptySlotFolders(out);
+    return removed.sort();
 }
+
+/**
+ * The run's report: report.json in the work folder and --json on stdout. A caller (the Obsidian plugin) can update
+ * notes from it without reading the log.
+ * @typedef {object} RenderReport
+ * @property {number} schema           REPORT_SCHEMA
+ * @property {string} input            the input file, absolute
+ * @property {"json" | "string"} format
+ * @property {string} out              the output folder, absolute
+ * @property {string[] | null} only    the --only slot paths, or null for a whole run
+ * @property {ImageResult[]} images    blueprints that got an image, in book order
+ * @property {MissingResult[]} without_image  blueprints that got none, in book order
+ * @property {{ path: string, kind: string, reason?: string }[]} skipped  planners and ignored duplicate slots
+ * @property {string[]} problems       problems with the input itself (duplicate or invalid slot numbers)
+ * @property {string[]} removed        stale render files removed from `out`, relative to it
+ * @property {string | null} work_dir
+ * @property {string} [window]         how the game client was shown
+ * @property {object} [setup]          research report from the game
+ * @property {string} [error]          why the run failed, when it did
+ *
+ * @typedef {object} ImageResult
+ * @property {string} path             slot path ("3/1"; "" for a lone blueprint)
+ * @property {string} file             render file relative to `out`, "/"-separated ("3/1.jpg", "0.jpg")
+ * @property {string} label
+ * @property {number} width
+ * @property {number} height
+ * @property {number} bytes
+ * @property {number} pixels_per_tile
+ * @property {number} screenshots      1, or the number of stitched screenshots
+ * @property {string} strategy         "ordinary" or "platform"
+ * @property {number} built            entities built
+ * @property {number} tiles            blueprint tiles placed
+ * @property {Record<string, number>} failed   entity name to count: ghosts that could not be revived
+ * @property {Record<string, number>} missing  entity name to count: entities that never got a ghost
+ * @property {string[]} problems
+ * @property {boolean} import_errors
+ * @property {object[]} attempts       every build attempt, in order
+ * @property {object} [diagnosis]      the experiment matrix, when it ran
+ *
+ * @typedef {object} MissingResult
+ * @property {string} path
+ * @property {string} file             where its image would be; any old image there is removed
+ * @property {string} label
+ * @property {string} reason
+ * @property {Record<string, number>} [failed]
+ * @property {Record<string, number>} [missing]
+ * @property {string[]} [problems]
+ * @property {object[]} [attempts]
+ * @property {object} [diagnosis]
+ */
+
+/** How an entry is named in the log: its slot path and label */
+const nameOf = entry => `${entry.path === "" ? "(single blueprint)" : entry.path}${entry.label ? ` "${entry.label}"` : ""}`;
 
 /**
  * The strategies to try for a blueprint, in order. A platform blueprint is built on a space platform first (real
@@ -102,8 +187,8 @@ export function summariseAttempt(built) {
 
 /** Build one blueprint, trying each strategy until one builds something, and capture it */
 async function renderOne(session, entry, workDir, options, log) {
-    const name = `${entry.number}${entry.label ? ` "${entry.label}"` : ""}`;
-    const about = { number: entry.number, path: entry.path, label: entry.label };
+    const name = nameOf(entry);
+    const about = { path: entry.path, file: entry.file, label: entry.label };
     log(`Blueprint ${name} (${entry.blueprint.entities?.length ?? 0} entities, ${entry.blueprint.tiles?.length ?? 0} tiles)`);
     await session.send(blueprintStringOf(entry));
     const inspection = await session.inspect();
@@ -117,7 +202,7 @@ async function renderOne(session, entry, workDir, options, log) {
     const attempts = [];
     let chosen = null;
     for (const strategy of order) {
-        const surfaceName = `blueprint-render-${entry.number}-${strategy}`;
+        const surfaceName = `blueprint-render-${entry.key}-${strategy}`;
         const { attempt, lines } = summariseAttempt({ strategy, ...await session.build(strategy, surfaceName, options.backdrop) });
         attempts.push(attempt);
         for (const line of lines) log(line);
@@ -153,7 +238,7 @@ export function needsDiagnosis(entry, attempts, asked) {
 
 async function diagnose(session, entry, log) {
     log("  running the diagnosis matrix (scratch surfaces; one line per experiment)");
-    const diagnosis = await session.diagnose(`blueprint-render-${entry.number}-diagnose`);
+    const diagnosis = await session.diagnose(`blueprint-render-${entry.key}-diagnose`);
     if (diagnosis.error) {
         log(`  [diagnose] error: ${diagnosis.error}`);
         return diagnosis;
@@ -171,12 +256,12 @@ async function capture(session, entry, workDir, options, log, { attempt, attempt
         for (const [index, shot] of plan.shots.entries()) {
             await session.prepare(attempt.surface);
             const file = await session.takeScreenshot({
-                name: `render-${entry.number}-${index}.png`, surface: attempt.surface, position: shot.position, resolution: shot.resolution,
+                name: `render-${entry.key}-${index}.png`, surface: attempt.surface, position: shot.position, resolution: shot.resolution,
                 zoom: shot.zoom, anti_alias: shot.anti_alias, timeoutMs: SCREENSHOT_TIMEOUT_MS,
             });
             shots.push({ ...shot, file });
         }
-        const jpeg = path.join(workDir, "images", `${entry.number}.jpg`);
+        const jpeg = path.join(workDir, "images", ...entry.file.split("/"));
         const written = shots.length === 1 ? await convertToJpeg(shots[0].file, jpeg) : await stitchToJpeg(plan, shots, jpeg);
         return {
             file: jpeg,
@@ -204,15 +289,31 @@ export async function render(options, print) {
         print(message);
     };
     const { value, format } = await readInput(options.input);
-    const { blueprints, skipped } = listBlueprints(value);
-    for (const item of skipped) log(`Skipping ${item.kind} at book slot ${item.path || "(top level)"}: only blueprints are rendered`);
-    const report = { input: path.resolve(options.input), format, out: path.resolve(options.out), images: [], without_image: [], skipped, removed: [], work_dir: null };
+    const listed = listBlueprints(value);
+    const only = options.only?.length ? options.only : null;
+    const blueprints = only ? selectBlueprints(listed.blueprints, only) : listed.blueprints;
+    // with --only, stale images are removed only where the selection is: its own files and anything under a
+    // selected slot path (a slot that was a blueprint and is now a book, or a book whose entries moved)
+    const inScope = file => !only || blueprints.some(entry => entry.file === file)
+        || only.some(selector => file === `${selector}.jpg` || file.startsWith(`${selector}/`));
+    for (const problem of listed.problems) log(`Problem in the input: ${problem}`);
+    for (const item of listed.skipped) {
+        if (!item.reason && (!only || only.some(selector => selects(selector, item)))) {
+            log(`Skipping ${item.kind} at slot ${item.path || "(top level)"}: only blueprints are rendered`);
+        }
+    }
+    if (only) log(`Rendering only ${only.join(", ")}: ${blueprints.length} blueprint(s); other images in ${options.out} are left alone`);
+    /** @type {RenderReport} */
+    const report = {
+        schema: REPORT_SCHEMA, input: path.resolve(options.input), format, out: path.resolve(options.out), only,
+        images: [], without_image: [], skipped: listed.skipped, problems: listed.problems, removed: [], work_dir: null,
+    };
     const pending = [];
     for (const entry of blueprints) {
-        if (entry.empty) report.without_image.push({ number: entry.number, path: entry.path, label: entry.label, reason: "empty blueprint" });
+        if (entry.empty) report.without_image.push({ path: entry.path, file: entry.file, label: entry.label, reason: "empty blueprint" });
         else pending.push(entry);
     }
-    if (!pending.length) throw new Error("The input holds no blueprint with entities or tiles to render");
+    if (!pending.length) throw new Error(`The input holds no blueprint with entities or tiles to render${only ? ` at ${only.join(", ")}` : ""}`);
 
     const executable = await resolveFactorioExecutable(options.factorio);
     const { dir: workDir, chosen } = await makeWorkDir(options.workDir);
@@ -239,7 +340,7 @@ export async function render(options, print) {
         for (const entry of pending) {
             const result = await renderOne(session, entry, workDir, options, log);
             if (result.image) {
-                images.push({ number: entry.number, file: result.file });
+                images.push({ file: entry.file, source: result.file });
                 report.images.push(result.image);
             } else {
                 report.without_image.push(result.missing);
@@ -259,9 +360,14 @@ export async function render(options, print) {
             await persist().catch(() => {});
         }
     }
-    report.removed = await publishImages(options.out, images);
-    for (const image of report.images) log(`Wrote ${path.join(options.out, `${image.number}.jpg`)} (${image.width}×${image.height})`);
-    for (const missing of report.without_image) log(`No image for blueprint ${missing.number}: ${missing.reason}`);
+    const order = new Map(listed.blueprints.map((entry, position) => [entry.path, position]));
+    const byBookOrder = (a, b) => order.get(a.path) - order.get(b.path);
+    report.images.sort(byBookOrder);
+    report.without_image.sort(byBookOrder);
+    report.removed = await publishImages(options.out, images, inScope);
+    for (const image of report.images) log(`Wrote ${path.join(options.out, ...image.file.split("/"))} (${image.width}×${image.height})`);
+    for (const file of report.removed) log(`Removed stale ${path.join(options.out, ...file.split("/"))}`);
+    for (const missing of report.without_image) log(`No image for blueprint ${nameOf(missing)}: ${missing.reason}`);
     // kept whenever a blueprint got no image, so its log and report never need a second run
     const keep = options.keepWork || chosen || report.without_image.length > 0;
     if (keep) {
