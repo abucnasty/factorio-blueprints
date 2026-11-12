@@ -1,0 +1,16 @@
+# Render images are stored with Git LFS (served from the
+# factorio-blueprints-lfs R2 bucket, see .lfsconfig). Only image files inside
+# a directory named exactly "renders", at any depth, are tracked. Everything
+# else, including blueprint.json and markdown, stays in plain git.
+**/renders/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+**/renders/**/*.jpeg filter=lfs diff=lfs merge=lfs -text
+**/renders/**/*.png filter=lfs diff=lfs merge=lfs -text
+**/renders/**/*.webp filter=lfs diff=lfs merge=lfs -text
+
+# Text files are stored with LF line endings on every OS, as the conventions
+# require, so Windows checkouts do not rewrite blueprint.json or notes.
+*.json text eol=lf
+*.md text eol=lf
+
+# Shell scripts must keep LF endings or bash on Windows cannot run them.
+*.sh text eol=lf

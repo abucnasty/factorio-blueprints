@@ -1,0 +1,12 @@
+name = "factorio-blueprints-lfs"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# R2 bucket binding. The bucket already exists in the account; it is not
+# created by this config or by CI.
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "factorio-blueprints-lfs"
+
+# Secret (never committed): LFS_UPLOAD_TOKEN, set with
+#   _tools/setup/setup-render-storage.sh --set-worker-secret
