@@ -39,6 +39,26 @@ describe("blueprintHash", () => {
     const bp = { label: "Mall", entities: [{ name: "a", entity_number: 1 }], version: 1 };
     assert.equal(blueprintHash(bp), nodeSha('{"entities":[{"entity_number":1,"name":"a"}],"label":"Mall","version":1}'));
   });
+  test("vector shared with the render tool (_tools/render/src/manifest.js)", () => {
+    const input = {
+      label: "Zähler ⚙ 🚀",
+      item: "blueprint",
+      entities: [{ position: { y: -2.5, x: 1 }, name: "stone-furnace", entity_number: 1 }],
+      version: 562949958139904,
+    };
+    const canonical =
+      '{"entities":[{"entity_number":1,"name":"stone-furnace","position":{"x":1,"y":-2.5}}],"item":"blueprint","label":"Zähler ⚙ 🚀","version":562949958139904}';
+    assert.equal(nodeSha(Buffer.from(canonical, "utf8")), "6673ed1df39ca8d56e1d29dd31c3a90d27ed29e0964c9f8e781bf97a041d39ca");
+    assert.equal(blueprintHash(input), "6673ed1df39ca8d56e1d29dd31c3a90d27ed29e0964c9f8e781bf97a041d39ca");
+  });
+
+  test("keys sort by code point: U+FF5E before U+1F680, unlike UTF-16 order", () => {
+    const v = { "\u{1F680}": 1, "～": 2 };
+    assert.deepStrictEqual(Object.keys(v).sort(), ["\u{1F680}", "～"], "UTF-16 order puts the emoji first");
+    assert.equal(blueprintHash(v), nodeSha(Buffer.from('{"～":2,"\u{1F680}":1}', "utf8")));
+    assert.notEqual(blueprintHash(v), nodeSha(Buffer.from('{"\u{1F680}":1,"～":2}', "utf8")));
+  });
+
   test("key order does not matter, array order does", () => {
     assert.equal(blueprintHash({ a: 1, b: { d: [1, 2], c: 3 } }), blueprintHash({ b: { c: 3, d: [1, 2] }, a: 1 }));
     assert.notEqual(blueprintHash({ a: [1, 2] }), blueprintHash({ a: [2, 1] }));
