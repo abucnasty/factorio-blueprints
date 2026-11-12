@@ -113,7 +113,10 @@ function startServer() {
         if (!blueprint) return { error: "not a blueprint" };
         const isPlatformBlueprint = inspect().platform;
         if (job.strategy === "platform" && process.env.FAKE_NO_SPACE_AGE === "1") return { error: "no starter pack", strategy: job.strategy };
-        const surface = job.strategy === "platform" ? `platform-${++platforms}` : job.surface;
+        // as in the mod: only a ship with a hub gets a real platform (a hub exists nowhere else); a module without one
+        // is built on a starfield surface under the name the launcher asked for
+        const hasHub = (blueprint.entities ?? []).some(entity => entity.name === "space-platform-hub");
+        const surface = job.strategy === "platform" && hasHub ? `platform-${++platforms}` : job.surface;
         surfaces.add(surface);
         names.set(job.surface, surface);
         const entities = blueprint.entities ?? [];

@@ -95,8 +95,9 @@ test("a space platform blueprint is built on a platform first; others fall back 
     assert.deepEqual(report.images[0].missing, { "steel-chest": 2 });
     assert.ok(messages.some(line => line.startsWith("  [platform] problem: steel-chest cannot be built here: it needs gravity")), messages.join("\n"));
     const shots = (await fs.readFile(path.join(env.work, "server", "screenshots.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
-    assert.deepEqual(shots.map(shot => shot.surface), ["platform-1", "blueprint-render-1-ordinary"]);
-    assert.deepEqual((await fs.readFile(path.join(env.work, "server", "prepared.log"), "utf8")).trim().split("\n"), ["platform-1", "blueprint-render-1-ordinary"]);
+    // no hub: a starfield surface under the launcher's own name, not a platform
+    assert.deepEqual(shots.map(shot => shot.surface), ["blueprint-render-0-platform", "blueprint-render-1-ordinary"]);
+    assert.deepEqual((await fs.readFile(path.join(env.work, "server", "prepared.log"), "utf8")).trim().split("\n"), ["blueprint-render-0-platform", "blueprint-render-1-ordinary"]);
     assert.deepEqual((await fs.readFile(path.join(env.work, "server", "deleted.log"), "utf8")).trim().split("\n"), ["blueprint-render-0-platform", "blueprint-render-1-ordinary"]);
     await assertNothingRunning(env.work);
 });
@@ -106,6 +107,9 @@ test("the platform ship fixture renders on a platform", async t => {
     const input = new URL("./fixtures/platform-ship.json", import.meta.url).pathname;
     const report = await render({ ...options(env), input }, () => {});
     assert.deepEqual(report.images.map(image => [image.number, image.strategy]), [[0, "platform"]]);
+    // a ship with a hub is built on a real space platform
+    const shots = (await fs.readFile(path.join(env.work, "server", "screenshots.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    assert.deepEqual(shots.map(shot => shot.surface), ["platform-1"]);
     await assertNothingRunning(env.work);
 });
 
