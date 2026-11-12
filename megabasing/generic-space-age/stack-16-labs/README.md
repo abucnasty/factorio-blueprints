@@ -10,6 +10,8 @@ blueprints: 4
 factorio_version: "2.0.60"
 ---
 
+![Stack 16 Labs](https://blueprints.abucnasty.dev/megabasing/generic-space-age/stack-16-labs/cover.jpg)
+
 - [32 Lab Follower](https://blueprints.abucnasty.dev/megabasing/generic-space-age/stack-16-labs/0.txt)
 - [Lead](https://blueprints.abucnasty.dev/megabasing/generic-space-age/stack-16-labs/1.txt)
 - [Agg Substitute](https://blueprints.abucnasty.dev/megabasing/generic-space-age/stack-16-labs/2.txt)
