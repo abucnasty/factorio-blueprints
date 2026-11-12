@@ -457,11 +457,11 @@ check_worker() {
     pass "download request answered without credentials ($LFS_URL)"
   elif [ "$code" = 000 ]; then
     action "cannot reach $LFS_URL" \
-      "check your internet connection; if it is down for everyone, the Worker may not be deployed (owner: see _tools/docs/render-storage.md)"
+      "check your internet connection; if it is down for everyone, the Worker may be down (owner: check it in the Cloudflare dashboard)"
     stop "the Worker is unreachable"
   else
     action "$LFS_URL answered a download request with HTTP $code" \
-      "the Worker is not deployed or is broken (owner: see _tools/docs/render-storage.md)"
+      "the Worker is not deployed or is broken (owner: check it in the Cloudflare dashboard, or re-run the Deploy LFS Worker workflow)"
     stop "the Worker is not answering as expected"
   fi
   code=$(probe_batch upload)
@@ -804,7 +804,7 @@ run_secret() {
   if ! out=$(printf '%s' "$tok" | run_wrangler secret put LFS_UPLOAD_TOKEN 2>&1); then
     printf '%s\n' "${out//$tok/[hidden]}" | sed 's/^/    /'
     tok=""
-    action "wrangler could not set the secret" "read the wrangler output above; the Worker must be deployed first (see _tools/docs/render-storage.md)"
+    action "wrangler could not set the secret" "read the wrangler output above; you may not be logged in (run: npx wrangler login, in _tools/lfs-worker), or the Worker is not deployed"
     stop "secret not set"
   fi
   out=""
