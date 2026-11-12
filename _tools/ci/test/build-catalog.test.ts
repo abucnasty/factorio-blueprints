@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
 
-import { decodeBlueprintString, encodeFactorioVersion, writeCanonicalJson } from "../../plugin/src/core/index.ts";
-import { buildCatalog, produceStrings, selectStrings, stringKey } from "../build-catalog.ts";
+import { decodeBlueprintString, encodeFactorioVersion, plainLabel, writeCanonicalJson } from "../../plugin/src/core/index.ts";
+import { buildCatalog, entryKey, type LiveIndex, produceStrings, selectStrings, stringKey } from "../build-catalog.ts";
 
 process.env["GIT_CONFIG_GLOBAL"] = "/dev/null";
 process.env["GIT_CONFIG_NOSYSTEM"] = "1";
@@ -46,6 +46,9 @@ const bp = (label: string, entities = 1) =>
       version: encodeFactorioVersion("2.0.76"),
     },
   });
+const bpBody = (label: string) => JSON.parse(bp(label)).blueprint;
+const book = (label: string, blueprints: object[]) =>
+  writeCanonicalJson({ blueprint_book: { item: "blueprint-book", label, blueprints, version: encodeFactorioVersion("2.0.76") } });
 const notes = (fm: string) => `---\n${fm}\n---\n\nNotes.\n`;
 const pointer = (oid: string, size = 1234) => `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${size}\n`;
 const OID = "a".repeat(64);
@@ -86,9 +89,11 @@ test("builds the index: history, renames via previous_paths, renders, frontmatte
   assert.equal(a.blueprint.counts.entities, 3);
   assert.equal(a.blueprint.factorioVersion, "2.0.76");
   assert.deepEqual(a.renders, [
-    { n: 0, file: "0.jpg", oid: OID, size: 99 },
-    { n: 1, file: "1.png", oid: "b".repeat(64), size: 1234 },
+    { file: "0.jpg", oid: OID, size: 99 },
+    { file: "1.png", oid: "b".repeat(64), size: 1234 },
   ]);
+  assert.equal(a.cover, "0.jpg");
+  assert.equal(a.nodes, undefined, "a single blueprint has no nodes");
 
   assert.deepEqual(b.previous_paths, ["cat/b"]);
   assert.equal(b.commit, c3);
@@ -181,6 +186,112 @@ test("selects only strings the live index lacks", () => {
     selectStrings(next, live).map((j) => j.key),
     [stringKey("cat/a", c3), stringKey("cat/a", c2), stringKey("cat/c", c4), stringKey("cat/c", c1)],
   );
+});
+
+test("book nodes: slot paths with and without index, nested books, planners, renders and cover", () => {
+  const inner = { item: "blueprint-book", label: "Inner [item=iron-plate]", blueprints: [{ blueprint: bpBody("Y") }, { index: 4, blueprint: bpBody("X") }] };
+  const upgrade = { item: "upgrade-planner", label: "Up", settings: { mappers: [] } };
+  const decon = { item: "deconstruction-planner", settings: {} };
+  const r = repo();
+  r.write(
+    "cat/book/blueprint.json",
+    book("Root", [{ index: 3, blueprint_book: inner }, { blueprint: bpBody("Z") }, { index: 0, upgrade_planner: upgrade }, { index: 5, deconstruction_planner: decon }]),
+  );
+  r.write("cat/book/README.md", notes("title: Book\nauthors: []"));
+  r.write("cat/book/renders/0.jpg", pointer("0".repeat(64))); // slot 0 is a planner: no image
+  r.write("cat/book/renders/3/4.jpg", pointer("4".repeat(64)));
+  r.write("cat/book/renders/3/0.png", pointer("3".repeat(64)));
+  const sha = r.commit("book");
+
+  const catalog = buildCatalog(r.dir);
+  assert.deepEqual(catalog.problems, []);
+  const e = catalog.index.blueprints[0]!;
+  assert.equal(catalog.index.schema, 2);
+  assert.deepEqual(e.nodes, [
+    { slot: 0, path: "0", kind: "upgrade-planner", label: "Up" },
+    { slot: 1, path: "1", kind: "blueprint", label: "Z" },
+    {
+      slot: 3,
+      path: "3",
+      kind: "blueprint-book",
+      label: plainLabel("Inner [item=iron-plate]"),
+      children: [
+        { slot: 0, path: "3/0", kind: "blueprint", label: "Y", render: "3/0.png" },
+        { slot: 4, path: "3/4", kind: "blueprint", label: "X", render: "3/4.jpg" },
+      ],
+    },
+    { slot: 5, path: "5", kind: "deconstruction-planner", label: "" },
+  ]);
+  assert.equal(e.cover, "3/0.png", "the first blueprint with an image, depth first");
+  assert.deepEqual(e.renders.map((x) => x.file), ["0.jpg", "3/0.png", "3/4.jpg"]);
+  assert.equal(e.history[0]!.entries, true);
+
+  const out = new Map<string, string>();
+  const stats = produceStrings(r.dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
+  assert.deepEqual(stats, { warnings: [], roots: 1, entries: 6 });
+  const decoded = (slot: string) => decodeBlueprintString(out.get(entryKey("cat/book", sha, slot))!).value;
+  assert.deepEqual(decoded("3"), { blueprint_book: inner }, "a nested book's own string");
+  assert.deepEqual(decoded("3/4"), { blueprint: inner.blueprints[1]!.blueprint });
+  assert.deepEqual(decoded("1"), { blueprint: bpBody("Z") });
+  assert.deepEqual(decoded("0"), { upgrade_planner: upgrade });
+  assert.deepEqual(decoded("5"), { deconstruction_planner: decon });
+  assert.ok(out.has(stringKey("cat/book", sha)));
+});
+
+test("an entry that a later version removes keeps its string for the older version only", () => {
+  const r = repo();
+  r.write("cat/book/blueprint.json", book("B", [{ index: 0, blueprint: bpBody("keep") }, { index: 1, blueprint: bpBody("gone") }]));
+  r.write("cat/book/README.md", notes("title: B\nauthors: []"));
+  const c1 = r.commit("two entries");
+  r.write("cat/book/blueprint.json", book("B", [{ index: 0, blueprint: bpBody("keep") }]));
+  const c2 = r.commit("one entry");
+  const catalog = buildCatalog(r.dir);
+  const keys = new Set<string>();
+  produceStrings(r.dir, catalog, selectStrings(catalog.index), (k) => keys.add(k));
+  assert.ok(keys.has(entryKey("cat/book", c1, "1")));
+  assert.ok(keys.has(entryKey("cat/book", c2, "0")));
+  assert.ok(!keys.has(entryKey("cat/book", c2, "1")));
+  assert.deepEqual(catalog.index.blueprints[0]!.nodes!.map((n) => n.path), ["0"]);
+});
+
+test("entry strings: a schema 1 live index gets all of them once, then a second run has nothing to do", () => {
+  const r = repo();
+  r.write("cat/book/blueprint.json", book("B", [{ blueprint: bpBody("a") }, { blueprint: bpBody("b") }]));
+  r.write("cat/book/README.md", notes("title: B\nauthors: []"));
+  r.commit("one");
+  r.write("cat/book/blueprint.json", book("B", [{ blueprint: bpBody("a") }, { blueprint: bpBody("c") }]));
+  r.commit("two");
+  const index = buildCatalog(r.dir).index;
+  const v1: LiveIndex = JSON.parse(JSON.stringify(index));
+  v1.schema = 1;
+  for (const e of v1.blueprints) for (const h of e.history) delete h.entries;
+
+  const jobs = selectStrings(index, v1);
+  assert.equal(jobs.length, 2);
+  assert.ok(jobs.every((j) => !j.root && j.entries), "roots exist, entries do not");
+  const catalog = buildCatalog(r.dir);
+  const keys: string[] = [];
+  produceStrings(r.dir, catalog, jobs, (k) => keys.push(k));
+  assert.equal(keys.length, 4);
+  assert.ok(keys.every((k) => /\/[0-9a-f]{40}\/[01]\.txt$/.test(k)));
+
+  assert.deepEqual(selectStrings(index, index), [], "the schema 2 index it published leaves nothing to do");
+});
+
+test("a blueprint folder inside another is rejected; the outer one is still published", () => {
+  const r = repo();
+  r.write("cat/outer/blueprint.json", bp("Outer"));
+  r.write("cat/outer/README.md", notes("title: O\nauthors: []"));
+  r.write("cat/outer/3/blueprint.json", bp("Inner"));
+  r.write("cat/outer/3/README.md", notes("title: I\nauthors: []"));
+  r.write("cat/dup/blueprint.json", book("D", [{ index: 1, blueprint: bpBody("a") }, { blueprint: bpBody("b") }]));
+  r.write("cat/dup/README.md", notes("title: D\nauthors: []"));
+  r.commit("nested");
+  const { index, problems, invalid } = buildCatalog(r.dir);
+  assert.deepEqual(index.blueprints.map((e) => e.path), ["cat/outer"]);
+  assert.deepEqual(invalid, ["cat/dup", "cat/outer/3"]);
+  assert.match(problems.find((p) => p.folder === "cat/outer/3")!.message, /inside the blueprint folder cat\/outer/);
+  assert.match(problems.find((p) => p.folder === "cat/dup")!.message, /more than one entry in book slot 1/);
 });
 
 test("lists validation failures and leaves those blueprints out", () => {
