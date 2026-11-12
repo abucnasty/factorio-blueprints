@@ -80,7 +80,27 @@ installed per machine.
 "Custom Git binary path" to `/opt/homebrew/bin/git` (Apple Silicon) or
 `/usr/local/bin/git` (Intel), then restart Obsidian.
 
-## 6. Check that sync works
+## 6. Turn on the blueprint plugin
+
+The Factorio Blueprints plugin comes with the repo (it is in
+`.obsidian/plugins/factorio-blueprints/`), so there is nothing to install.
+It runs only once the vault is trusted (step 4).
+
+1. Settings, Community plugins. Under "Installed plugins", check that
+   **Factorio Blueprints** is listed and switched on. The repo lists it as
+   enabled, so it usually already is; if not, switch it on. If it is
+   missing, restart Obsidian.
+2. Settings, Factorio Blueprints: fill in **Default authors** (for example
+   `abucnasty`). Leave "Commit after import" on.
+3. **Mac only:** if an import later says it could not run git, set "Git
+   binary (this computer)" to the same path as in step 5.
+
+To use it: copy a blueprint in Factorio, then in Obsidian right-click the
+category folder and choose **Import blueprint from clipboard here**. To get
+a string back, right-click a blueprint folder (or open its notes and use the
+command palette) and choose **Copy blueprint string**.
+
+## 7. Check that sync works
 
 1. Create a note called `sync-test` at the top of the vault and type a line.
 2. Wait about 2 minutes without editing, or run the command palette command
