@@ -102,6 +102,22 @@ bytes. There is exactly one implementation of the writer, in
 `_tools/plugin/src/core/`; other tools import it rather than reimplementing it
 (see `_tools/plugin/README.md`).
 
+## Links
+
+`https://blueprints.abucnasty.dev/` serves, for a blueprint folder `<path>`:
+
+- `<path>.txt`: the latest blueprint string.
+- `<path>@<sha>.txt`: the string as of a commit that changed its
+  `blueprint.json` (full SHA, or a unique prefix of at least 7).
+- `<path>/renders/<n>.<ext>`: a render image.
+- `index.json`: the catalog index (schema: `_tools/ci/catalog-index.ts`).
+
+A path in some blueprint's `previous_paths` redirects to its current path.
+CI (`_tools/ci/catalog.ts`) writes the R2 bucket `factorio-blueprints-catalog`
+on every push to `main`: `strings/<path>/<sha>.txt` for every version,
+then `index.json`. Renders are read from `factorio-blueprints-lfs` at
+`<oid[0:2]>/<oid[2:4]>/<oid>`.
+
 ## Branches and commits
 
 - One branch per unit of work, named for what it does (`vault-skeleton`,

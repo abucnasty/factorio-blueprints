@@ -1,0 +1,10 @@
+{
+  "//": "Type-check with the plugin's TypeScript and Node typings: ../plugin/node_modules/.bin/tsc -p .",
+  "extends": "../plugin/tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "typeRoots": ["../plugin/node_modules/@types"]
+  },
+  "include": ["*.ts", "test/**/*.ts"]
+}

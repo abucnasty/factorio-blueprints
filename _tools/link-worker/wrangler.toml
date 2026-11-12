@@ -1,0 +1,17 @@
+name = "factorio-blueprints-links"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# blueprints.abucnasty.dev, attached as a Workers custom domain (the zone
+# must be in the same Cloudflare account).
+routes = [{ pattern = "blueprints.abucnasty.dev", custom_domain = true }]
+
+# Both buckets already exist in the account; they are not created by this
+# config or by CI. The Worker only reads them.
+[[r2_buckets]]
+binding = "CATALOG"
+bucket_name = "factorio-blueprints-catalog"
+
+[[r2_buckets]]
+binding = "LFS"
+bucket_name = "factorio-blueprints-lfs"
