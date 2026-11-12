@@ -1,6 +1,8 @@
 -- Builds one blueprint string as real entities, for a screenshot, by one of two strategies:
 --   "ordinary": a new lab-tile surface (no terrain, enemies or decoratives, always day, surface conditions ignored)
---   "platform": a new, paused space platform (Space Age), for the real space background
+--   "platform": space platform blueprints (Space Age) on the space background: a ship with a hub on a new, paused
+--               space platform (a hub cannot exist anywhere else); a module without a hub on a starfield surface
+--               (empty space with the platform's surface properties: no planet, asteroids or starter platform)
 -- The launcher picks the order (see build.inspect) and falls back to the other strategy when one builds nothing.
 --
 -- Ported and trimmed from abucnasty/clock-generator (MIT), clock-generator-recorder/scripts/harness.lua:
@@ -16,9 +18,12 @@ local ROLLING_STOCK_TYPES = { ["cargo-wagon"] = true, ["fluid-wagon"] = true, ["
 local PREFERRED_RESOURCES = { "iron-ore", "crude-oil", "stone", "coal", "copper-ore" }
 -- Room around the blueprint's own extent, for the underlay and chunk generation
 local MARGIN_TILES = 8
--- Tiles between a blueprint without a hub and the platform's own starter foundation. The blueprint goes SOUTH of it:
--- thruster exhausts point south, and the game makes no foundation north of space_platform_max_size (y = -200).
-local HUB_CLEARANCE = 64
+-- The surface prototype whose properties (gravity, pressure, ...) a starfield surface copies, so the game refuses
+-- what it would refuse on a platform (chests, burner machines, rails)
+local PLATFORM_SURFACE_PROTOTYPE = "space-platform"
+-- Where the diagnosis tries "far from the hub" on its scratch platform: south of it, as north of y = -200 the game
+-- makes no foundation at all
+local DIAGNOSE_FAR = 64
 -- The collision layer of the space around a platform; a tile that can only be placed over it is platform foundation
 local EMPTY_SPACE_LAYER = "empty_space"
 local HUB_TYPE = "space-platform-hub"
@@ -606,30 +611,49 @@ local function generate(surface, center, half_width, half_height)
     surface.force_generate_chunk_requests()
 end
 
----Tile names that are open space around a platform (the empty_space layer)
-local function space_tile_names()
-    local names = {}
-    for name, tile in pairs(prototypes.tile) do
-        if (tile.collision_mask.layers or {})[EMPTY_SPACE_LAYER] then
-            table.insert(names, name)
-        end
+---A new starfield surface for a platform blueprint without a hub: the ordinary stage's settings, but the surface
+---properties of a space platform and surface conditions enforced, so the game builds exactly what a platform would
+---allow. The space background comes from the empty-space tiles laid under the blueprint. Measured in 2.1.24: a
+---space-platform-hub cannot be created on such a surface (create_entity and every clone method give nothing), so a
+---ship with a hub still needs a real platform.
+---@return LuaSurface|nil, string|nil
+local function new_space_surface(name)
+    local prototype = prototypes.surface[PLATFORM_SURFACE_PROTOTYPE]
+    if not prototype then
+        return nil, "space platforms are not available: no " .. PLATFORM_SURFACE_PROTOTYPE .. " surface prototype (is Space Age enabled?)"
     end
-    return names
+    local surface = new_ordinary_surface(name)
+    surface.ignore_surface_conditions = false
+    for property, value in pairs(prototype.surface_properties or {}) do
+        pcall(surface.set_property, property, value)
+    end
+    return surface
 end
 
----The first row south of the platform's own hub and starter foundation (a blueprint without a hub goes below it)
-local function starter_bottom(surface, hub)
-    local bottom = hub and hub.bounding_box.right_bottom.y or 0
-    local space = space_tile_names()
-    if #space > 0 then
-        local ok, tiles = pcall(surface.find_tiles_filtered, { area = { { -64, -64 }, { 64, 64 } }, name = space, invert = true })
-        if ok then
-            for _, tile in pairs(tiles) do
-                bottom = math.max(bottom, tile.position.y + 1)
-            end
+---The tile with the empty_space layer that platforms float in
+local function space_tile()
+    if prototypes.tile["empty-space"] then
+        return "empty-space"
+    end
+    for name, tile in pairs(prototypes.tile) do
+        if (tile.collision_mask.layers or {})[EMPTY_SPACE_LAYER] then
+            return name
         end
     end
-    return math.ceil(bottom)
+    return nil
+end
+
+---How far past an entity its tile rules reach (a thruster's exhaust: about 90 tiles), so open space is laid there
+local function rule_reach(entities)
+    local reach = 0
+    for _, entity in pairs(entities) do
+        local prototype = prototypes.entity[entity.name]
+        for _, rule in pairs(prototype and prototype.tile_buildability_rules or {}) do
+            local a = rule.area
+            reach = math.max(reach, math.abs(a.left_top.x), math.abs(a.left_top.y), math.abs(a.right_bottom.x), math.abs(a.right_bottom.y))
+        end
+    end
+    return math.ceil(reach)
 end
 
 ---Why the game will not build this entity on this surface by its surface conditions, or nil
@@ -702,8 +726,8 @@ end
 ---  * a blueprint with a hub lands at its own coordinates (moved to put its hub at (0, 0)), so on a platform its hub
 ---    lines up with the platform's;
 ---  * a blueprint without a hub lands with offset floor(position - centre + 0.5) of its footprint box, in steps of
----    its build grid, so it is built at centre + an offset that is a multiple of the grid; on a platform
----    it goes HUB_CLEARANCE tiles south of the starter foundation (no connection to it is needed);
+---    its build grid, so it is built at centre + an offset that is a multiple of the grid; with strategy "platform"
+---    it is built on a starfield surface (new_space_surface) over empty space;
 ---  * on a lab surface, tiles that need something under them (foundation: empty space; landfill: water) get it.
 ---@param blueprint string a blueprint string of one blueprint (not a book)
 ---@param surface_name string the name for the new surface (ordinary) or platform (platform)
@@ -774,7 +798,8 @@ function build.run(blueprint, surface_name, strategy, backdrop)
     local grid = build_grid(blueprint_entities)
     -- (+ 0 turns -0 into 0 for the report)
     local offset = { x = -grid * math.floor(centre.x / grid) + 0, y = -grid * math.floor(centre.y / grid) + 0 }
-    if strategy == "platform" then
+    local starfield = strategy == "platform" and not blueprint_hub
+    if strategy == "platform" and blueprint_hub then
         local message
         platform, message = new_platform(surface_name)
         if not platform then
@@ -782,9 +807,14 @@ function build.run(blueprint, surface_name, strategy, backdrop)
             return { error = message, strategy = strategy }
         end
         surface, hub = platform.surface, platform.hub
-        if not blueprint_hub then
-            offset.y = grid * math.ceil((starter_bottom(surface, hub) + HUB_CLEARANCE - top) / grid)
+    elseif starfield then
+        local message
+        surface, message = new_space_surface(surface_name)
+        if not surface then
+            inventory.destroy()
+            return { error = message, strategy = strategy }
         end
+        diagnostics.surface_kind = "starfield surface"
     else
         surface = new_ordinary_surface(surface_name)
     end
@@ -811,6 +841,24 @@ function build.run(blueprint, surface_name, strategy, backdrop)
     local ghosts
     if strategy == "platform" or special_tiles then
         diagnostics.method = "built once at a computed position"
+        if starfield then
+            -- open space under the frame and as far as the entities' tile rules reach (thruster exhausts)
+            local space = space_tile()
+            local reach = rule_reach(blueprint_entities)
+            generate(surface, at, half_width + reach, half_height + reach)
+            local cover = {}
+            if space then
+                for x = math.floor(around.left_top.x - reach), math.ceil(around.right_bottom.x + reach) - 1 do
+                    for y = math.floor(around.left_top.y - reach), math.ceil(around.right_bottom.y + reach) - 1 do
+                        table.insert(cover, { name = space, position = { x = x, y = y } })
+                    end
+                end
+            end
+            local ok, message = pcall(function() surface.set_tiles(cover, true, false) end)
+            if not ok or not space then
+                table.insert(problems, "could not lay open space under the blueprint: " .. tostring(message or "no empty-space tile"))
+            end
+        end
         if strategy ~= "platform" and underlay then
             -- what these tiles need under them, under the whole frame (whatever the blueprint does not cover is turned
             -- back into the checkerboard after)
@@ -1015,7 +1063,7 @@ function build.diagnose(blueprint, prefix)
     end)
     if platform then
         -- south of the hub: north of y = -200 the game makes no foundation at all
-        local far = HUB_CLEARANCE + 4 * span
+        local far = DIAGNOSE_FAR + 4 * span
         add_place("platform far from hub", platform.surface, { x = 0, y = far }, nil)
         if foundation then
             add_place("platform far + real " .. foundation, platform.surface, { x = 0, y = far + 8 * span }, foundation)
