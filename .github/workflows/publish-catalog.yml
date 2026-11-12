@@ -7,10 +7,36 @@
 # on main with "backfill" to upload every string of every version again.
 name: publish catalog
 
+# Changes that cannot affect the catalog (other tools, their workflows, vault
+# settings, docs) do not start a run. Blueprints can live in any top-level
+# folder, so this lists what to ignore rather than what to include.
+# Keep the two lists the same.
 on:
   pull_request:
+    paths-ignore:
+      - "_tools/render/**"
+      - "_tools/setup/**"
+      - "_tools/lfs-worker/**"
+      - "_tools/link-worker/**"
+      - "_tools/docs/**"
+      - "_tools/templates/**"
+      - ".obsidian/**"
+      - ".github/workflows/deploy-*.yml"
+      - ".github/workflows/check-plugin.yml"
+      - "README.md"
   push:
     branches: [main]
+    paths-ignore:
+      - "_tools/render/**"
+      - "_tools/setup/**"
+      - "_tools/lfs-worker/**"
+      - "_tools/link-worker/**"
+      - "_tools/docs/**"
+      - "_tools/templates/**"
+      - ".obsidian/**"
+      - ".github/workflows/deploy-*.yml"
+      - ".github/workflows/check-plugin.yml"
+      - "README.md"
   workflow_dispatch:
     inputs:
       backfill:
@@ -42,11 +68,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Full history for each blueprint's versions. Blueprints are read
-          # from git objects, so only _tools needs a working tree.
+          # Full history, with every blob, for each blueprint's versions.
+          # No sparse checkout: it makes the clone partial, and old versions
+          # of blueprint.json then cannot be read once credentials are gone.
           fetch-depth: 0
           lfs: false
-          sparse-checkout: _tools
           persist-credentials: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
