@@ -374,21 +374,44 @@ export class Session {
         return this.command(`/sc rcon.print(remote.call("${MOD_NAME}", "${name}"${argument}))`);
     }
 
-    /**
-     * Send a blueprint string and build it on a new surface.
-     * @returns {Promise<any>} the mod's report
-     */
-    async build(blueprintString, surface) {
+    /** Parse a JSON answer from the mod, or fail with what the game printed instead */
+    static parseAnswer(what, answer) {
+        try {
+            return JSON.parse(answer);
+        } catch {
+            throw new Error(`${what} failed in the game: ${answer.trim() || "no answer"}`);
+        }
+    }
+
+    /** Send a blueprint string to the mod, in parts; it stays there until the next send */
+    async send(blueprintString) {
         await this.call("reset");
         for (let start = 0; start < blueprintString.length; start += PART_SIZE) {
             await this.call("append", blueprintString.slice(start, start + PART_SIZE));
         }
-        const answer = await this.call("build", JSON.stringify({ surface }));
-        try {
-            return JSON.parse(answer);
-        } catch {
-            throw new Error(`Building in the game failed: ${answer.trim() || "no answer"}`);
-        }
+    }
+
+    /** What kind of blueprint was sent: { platform, reasons, platforms_available } or { error } */
+    async inspect() {
+        return Session.parseAnswer("Inspecting the blueprint", await this.call("inspect"));
+    }
+
+    /**
+     * Build the blueprint sent last with one strategy ("ordinary" or "platform") under a new name.
+     * @returns {Promise<any>} the mod's report
+     */
+    async build(strategy, name, backdrop) {
+        return Session.parseAnswer("Building", await this.call("build", JSON.stringify({ surface: name, strategy, ...(backdrop ? { backdrop } : {}) })));
+    }
+
+    /** Once per session: research every technology and enable every recipe, so no recipe icon shows as locked */
+    async setup() {
+        return Session.parseAnswer("Researching all technologies", await this.call("setup"));
+    }
+
+    /** Just before a screenshot: clear asteroids from a platform surface */
+    async prepare(surface) {
+        await this.call("prepare", surface);
     }
 
     async tick() {
@@ -407,8 +430,9 @@ export class Session {
         }
     }
 
-    async deleteSurface(surface) {
-        await this.call("delete", surface);
+    /** Remove the surface or platform built under `name` */
+    async remove(name) {
+        await this.call("delete", name);
     }
 
     /**

@@ -6,6 +6,19 @@ import { parseArgs } from "node:util";
 import { listBlueprints, readInput } from "./blueprints.js";
 import { FRAMING_DEFAULTS, framingOptions } from "./framing.js";
 
+/** The owner's backdrop: the lab checkerboard with lab-dark-2 replaced by black refined concrete */
+export const DEFAULT_BACKDROP = Object.freeze(["lab-dark-1", "black-refined-concrete"]);
+
+/** Two tile names, from "a,b" or ["a", "b"] */
+export function parseBackdrop(value) {
+    if (value === undefined || value === null || value === "") return [...DEFAULT_BACKDROP];
+    const tiles = (Array.isArray(value) ? value : String(value).split(",")).map(tile => String(tile).trim());
+    if (tiles.length !== 2 || tiles.some(tile => !/^[\w-]+$/.test(tile))) {
+        throw new Error(`--backdrop must be two tile names separated by a comma, like ${DEFAULT_BACKDROP.join(",")}, not "${value}"`);
+    }
+    return tiles;
+}
+
 export const USAGE = `Usage:
   render --input <file> --out <dir> [options]     render every blueprint in <file> to <dir>/0.jpg, 1.jpg, ...
   render --input <file> --list                    list the blueprints and their image numbers; no game needed
@@ -20,6 +33,8 @@ Options:
   --mods <dir>                  extra mods for modded blueprints (copied, never modified) (env FACTORIO_RENDER_MODS)
   --save <file>                 start from a copy of this save instead of the built-in scenario
   --show-status-icons           keep "no power" / "no fuel" icons (hidden by default)
+  --backdrop <tile>,<tile>      floor tiles replacing lab-dark-1 and lab-dark-2, default ${DEFAULT_BACKDROP.join(",")}
+                                (env FACTORIO_RENDER_BACKDROP); "lab-dark-1,lab-dark-2" is the plain lab floor
   --timeout <s>                 time allowed for the game to start and its window to join, default 300
   --work-dir <dir>              empty or new folder for the game's files (default: a temporary folder)
   --keep-work                   keep the work folder after a successful run (it is always kept after a failure)
@@ -29,7 +44,7 @@ Options:
 
 Config file (JSON, every key optional):
   { "factorio": "...", "mods": "...", "maxSize": 4096, "minPixelsPerTile": 8, "maxOutputSize": 8192,
-    "timeout": 300, "showStatusIcons": false }
+    "timeout": 300, "showStatusIcons": false, "backdrop": ["lab-dark-1", "black-refined-concrete"] }
 
 Exit status: 0 every blueprint has an image; 2 some blueprint got no image (see the report); 1 the run failed.`;
 
@@ -51,6 +66,7 @@ const OPTIONS = {
     mods: { type: "string" },
     save: { type: "string" },
     "show-status-icons": { type: "boolean" },
+    backdrop: { type: "string" },
     timeout: { type: "string" },
     "work-dir": { type: "string" },
     "keep-work": { type: "boolean" },
@@ -120,6 +136,7 @@ export async function parseCommandLine(argv, context = {}) {
         workDir: args["work-dir"],
         keepWork: Boolean(args["keep-work"]),
         hideStatusIcons: !showStatusIcons,
+        backdrop: parseBackdrop(pick(args.backdrop, "FACTORIO_RENDER_BACKDROP", "backdrop")),
         timeoutSeconds: number("--timeout", pick(args.timeout, null, "timeout"), { min: 10 }) ?? 300,
         json: Boolean(args.json),
     };

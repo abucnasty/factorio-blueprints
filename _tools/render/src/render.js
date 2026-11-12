@@ -24,6 +24,7 @@ const IMAGE_NAME = /^(\d+)\.jpg$/;
  * @property {boolean} keepWork
  * @property {boolean} hideStatusIcons
  * @property {number} timeoutSeconds  for the game to start and the window to join
+ * @property {[string, string]} [backdrop]  tiles replacing lab-dark-1 and lab-dark-2 on ordinary surfaces
  */
 
 /** The game's JSON writer turns an empty Lua table into [] */
@@ -66,6 +67,106 @@ export async function publishImages(out, images) {
 }
 
 /**
+ * The strategies to try for a blueprint, in order. A platform blueprint is built on a space platform first (real
+ * space background), then on an ordinary surface; any other blueprint on an ordinary surface first, then on a
+ * platform when the game has platforms (a blueprint the game refuses on a planet may still build there).
+ * @param {{ platform?: boolean, platforms_available?: boolean }} inspection
+ */
+export function strategyOrder(inspection) {
+    if (inspection.platform) return inspection.platforms_available ? ["platform", "ordinary"] : ["ordinary"];
+    return inspection.platforms_available ? ["ordinary", "platform"] : ["ordinary"];
+}
+
+const describeCounts = counts => Object.entries(counts).map(([entity, n]) => `${n}× ${entity}`).join(", ") || "none";
+
+/** What one build attempt reported, normalised, and the lines that tell a person about it */
+export function summariseAttempt(built) {
+    const attempt = {
+        strategy: built.strategy, surface: built.surface ?? null, error: built.error ?? null,
+        built: built.built ?? 0, tiles: built.tiles ?? 0, has_area: Boolean(built.area), area: built.area ?? null, tick: built.tick ?? 0,
+        failed: asCounts(built.failed), missing: asCounts(built.missing),
+        problems: Object.values(built.problems ?? []), import_errors: Boolean(built.import_errors),
+        diagnostics: built.diagnostics && !Array.isArray(built.diagnostics) ? built.diagnostics : {},
+    };
+    const tag = `  [${attempt.strategy}]`;
+    const lines = attempt.error ? [`${tag} error: ${attempt.error}`] : [
+        `${tag} built ${attempt.built} entities, ${attempt.tiles} tiles; failed: ${describeCounts(attempt.failed)}; missing: ${describeCounts(attempt.missing)}`,
+        ...attempt.problems.map(problem => `${tag} problem: ${problem}`),
+        ...(attempt.import_errors ? [`${tag} problem: the game imported the string with errors (unknown entities or tiles?)`] : []),
+        ...(Object.keys(attempt.diagnostics).length ? [`${tag} diagnostics: ${JSON.stringify(attempt.diagnostics)}`] : []),
+    ];
+    return { attempt, lines };
+}
+
+/** Build one blueprint, trying each strategy until one builds something, and capture it */
+async function renderOne(session, entry, workDir, options, log) {
+    const name = `${entry.number}${entry.label ? ` "${entry.label}"` : ""}`;
+    const about = { number: entry.number, path: entry.path, label: entry.label };
+    log(`Blueprint ${name} (${entry.blueprint.entities?.length ?? 0} entities, ${entry.blueprint.tiles?.length ?? 0} tiles)`);
+    await session.send(blueprintStringOf(entry));
+    const inspection = await session.inspect();
+    if (inspection.error) {
+        log(`  no image: ${inspection.error}`);
+        return { missing: { ...about, reason: inspection.error, attempts: [] } };
+    }
+    const order = strategyOrder(inspection);
+    const reasons = Object.values(inspection.reasons ?? []);
+    log(`  ${inspection.platform ? `space platform blueprint: ${reasons.join("; ")}` : "ordinary blueprint"}; trying ${order.join(", then ")}`);
+    const attempts = [];
+    let chosen = null;
+    for (const strategy of order) {
+        const surfaceName = `blueprint-render-${entry.number}-${strategy}`;
+        const { attempt, lines } = summariseAttempt({ strategy, ...await session.build(strategy, surfaceName, options.backdrop) });
+        attempts.push(attempt);
+        for (const line of lines) log(line);
+        if (!attempt.error && attempt.has_area) {
+            chosen = { attempt, surfaceName };
+            break;
+        }
+        log(`  [${strategy}] nothing to photograph${attempts.length < order.length ? "; trying the next strategy" : ""}`);
+        await session.remove(surfaceName);
+    }
+    if (!chosen) {
+        const reason = attempts.length === 1 && attempts[0].error ? attempts[0].error : `nothing of it could be built (tried ${order.join(", ")})`;
+        log(`  no image: ${reason}`);
+        const last = attempts[attempts.length - 1];
+        return { missing: { ...about, reason, failed: last.failed, missing: last.missing, problems: last.problems, attempts } };
+    }
+
+    return capture(session, entry, workDir, options, log, { ...about, attempt: chosen.attempt, attempts, surfaceName: chosen.surfaceName });
+}
+
+async function capture(session, entry, workDir, options, log, { attempt, attempts, surfaceName, ...about }) {
+    try {
+        await session.waitUntilTick(attempt.tick + SETTLE_TICKS, 60_000);
+        const plan = planCapture(attempt.area, options.framing);
+        log(`  [${attempt.strategy}] capturing ${plan.width}×${plan.height} px at ${plan.pixelsPerTile.toFixed(1)} px/tile${plan.shots.length > 1 ? ` in ${plan.shots.length} screenshots` : ""}`);
+        const shots = [];
+        for (const [index, shot] of plan.shots.entries()) {
+            await session.prepare(attempt.surface);
+            const file = await session.takeScreenshot({
+                name: `render-${entry.number}-${index}.png`, surface: attempt.surface, position: shot.position, resolution: shot.resolution,
+                zoom: shot.zoom, anti_alias: shot.anti_alias, timeoutMs: SCREENSHOT_TIMEOUT_MS,
+            });
+            shots.push({ ...shot, file });
+        }
+        const jpeg = path.join(workDir, "images", `${entry.number}.jpg`);
+        const written = shots.length === 1 ? await convertToJpeg(shots[0].file, jpeg) : await stitchToJpeg(plan, shots, jpeg);
+        return {
+            file: jpeg,
+            image: {
+                ...about, strategy: attempt.strategy, width: written.width, height: written.height, bytes: written.bytes,
+                pixels_per_tile: plan.pixelsPerTile, screenshots: shots.length, built: attempt.built, tiles: attempt.tiles,
+                failed: attempt.failed, missing: attempt.missing, problems: attempt.problems, import_errors: attempt.import_errors,
+                attempts,
+            },
+        };
+    } finally {
+        await session.remove(surfaceName);
+    }
+}
+
+/**
  * @param {RenderOptions} options
  * @param {(message: string) => void} log
  */
@@ -92,48 +193,18 @@ export async function render(options, log) {
             executable, workDir, extraModsDir: options.mods, save: options.save,
             hideStatusIcons: options.hideStatusIcons, timeoutSeconds: options.timeoutSeconds, log,
         });
+        const setup = await session.setup();
+        if (setup.error) throw new Error(`Could not research all technologies: ${setup.error}`);
+        log(`Researched all technologies (${setup.technologies_researched}); recipes still disabled: ${setup.recipes_still_disabled}`);
+        report.setup = setup;
         for (const entry of pending) {
-            const name = `${entry.number}${entry.label ? ` "${entry.label}"` : ""}`;
-            log(`Building blueprint ${name} (${entry.blueprint.entities?.length ?? 0} entities, ${entry.blueprint.tiles?.length ?? 0} tiles)`);
-            const surface = `blueprint-render-${entry.number}`;
-            const built = await session.build(blueprintStringOf(entry), surface);
-            const notes = {
-                failed: asCounts(built.failed), missing: asCounts(built.missing),
-                problems: Object.values(built.problems ?? []), import_errors: Boolean(built.import_errors),
-            };
-            if (built.error || !built.area) {
-                const reason = built.error ?? "nothing of it could be built";
-                log(`  no image: ${reason}`);
-                report.without_image.push({ number: entry.number, path: entry.path, label: entry.label, reason, ...notes });
-                await session.deleteSurface(surface);
-                continue;
+            const result = await renderOne(session, entry, workDir, options, log);
+            if (result.image) {
+                images.push({ number: entry.number, file: result.file });
+                report.images.push(result.image);
+            } else {
+                report.without_image.push(result.missing);
             }
-            for (const [what, counts] of [["could not be revived", notes.failed], ["got no ghost (not placeable here)", notes.missing]]) {
-                const list = Object.entries(counts).map(([entity, n]) => `${n}× ${entity}`).join(", ");
-                if (list) log(`  ${what}: ${list}`);
-            }
-            for (const problem of notes.problems) log(`  ${problem}`);
-            await session.waitUntilTick(built.tick + SETTLE_TICKS, 60_000);
-
-            const plan = planCapture(built.area, options.framing);
-            log(`  capturing ${plan.width}×${plan.height} px at ${plan.pixelsPerTile.toFixed(1)} px/tile${plan.shots.length > 1 ? ` in ${plan.shots.length} screenshots` : ""}`);
-            const shots = [];
-            for (const [index, shot] of plan.shots.entries()) {
-                const file = await session.takeScreenshot({
-                    name: `render-${entry.number}-${index}.png`, surface, position: shot.position, resolution: shot.resolution,
-                    zoom: shot.zoom, anti_alias: shot.anti_alias, timeoutMs: SCREENSHOT_TIMEOUT_MS,
-                });
-                shots.push({ ...shot, file });
-            }
-            const jpeg = path.join(workDir, "images", `${entry.number}.jpg`);
-            const written = shots.length === 1 ? await convertToJpeg(shots[0].file, jpeg) : await stitchToJpeg(plan, shots, jpeg);
-            images.push({ number: entry.number, file: jpeg });
-            report.images.push({
-                number: entry.number, path: entry.path, label: entry.label, width: written.width, height: written.height,
-                bytes: written.bytes, pixels_per_tile: plan.pixelsPerTile, screenshots: shots.length,
-                built: built.built, tiles: built.tiles, ...notes,
-            });
-            await session.deleteSurface(surface);
         }
         succeeded = true;
     } finally {
