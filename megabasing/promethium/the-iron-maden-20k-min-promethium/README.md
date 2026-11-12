@@ -4,6 +4,7 @@ authors: [abucnasty]
 version: MK3
 posted: 2026-03-16
 factoriobin: https://factoriobin.com/post/7lnqsx
+status: public
 entities: 6117
 tiles: 19091
 factorio_version: "2.0.76"

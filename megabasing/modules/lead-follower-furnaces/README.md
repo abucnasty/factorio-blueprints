@@ -6,7 +6,7 @@ version: "2"
 posted: 2025-06-28
 video: https://youtu.be/cjkMcoFJJOE
 factoriobin: https://factoriobin.com/post/jbcdkk
-deprecated: true
+status: deprecated
 entities: 1301
 blueprints: 10
 factorio_version: "2.0.55"

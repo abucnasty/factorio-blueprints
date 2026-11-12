@@ -4,7 +4,7 @@ authors: [abucnasty]
 version: MK3
 posted: 2026-03-16
 factoriobin: https://factoriobin.com/post/x54s7m
-deprecated: true
+status: deprecated
 entities: 2993
 tiles: 7790
 factorio_version: "2.0.76"

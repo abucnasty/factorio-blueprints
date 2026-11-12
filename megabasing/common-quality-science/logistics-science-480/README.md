@@ -4,7 +4,7 @@ authors: [The End]
 posted: 2025-08-30
 video: https://www.youtube.com/watch?v=2ENY4AjjdqE
 factoriobin: https://factoriobin.com/post/bmvzi0
-deprecated: true
+status: deprecated
 entities: 2296
 blueprints: 3
 factorio_version: "2.0.64.2"
