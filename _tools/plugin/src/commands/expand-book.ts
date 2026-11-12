@@ -56,7 +56,7 @@ export async function writeEntryFolder(host: Host, parent: string, entry: Expand
   else await host.files.write(joinPath(folder, BLUEPRINT_FILE), writeCanonicalJson(entry.value));
   await host.files.write(
     joinPath(folder, NOTES_FILE),
-    fillNotesTemplate(template, { title: entryTitle(entry), posted: notes.posted, authors: notes.authors }),
+    fillNotesTemplate(template, { title: entryTitle(entry), posted: notes.posted, authors: notes.authors, entry: true }),
   );
   let made = 1;
   for (const child of entry.entries ?? []) made += await writeEntryFolder(host, folder, child, notes, template);

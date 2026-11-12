@@ -9,6 +9,7 @@ import {
   fillNotesTemplate,
   readFrontmatter,
   readNotesMeta,
+  setNoteStatus,
   splitFrontmatter,
   updateFrontmatter,
 } from "../../src/core/index.ts";
@@ -50,7 +51,7 @@ describe("readNotesMeta", () => {
 
   test("empty and null optional fields are absent", () => {
     const meta = readNotesMeta(DEFAULT_NOTES_TEMPLATE);
-    assert.deepStrictEqual(meta, { authors: [], version: "1", previous_paths: [] });
+    assert.deepStrictEqual(meta, { authors: [], version: "1", status: "draft", previous_paths: [] });
     assert.ok(!("title" in meta) && !("posted" in meta) && !("video" in meta));
     assert.deepStrictEqual(readNotesMeta('---\ntitle: X\nvideo:\nfactoriobin: ""\nstatus:\nprevious_paths:\n---\n'), {
       title: "X",
@@ -99,7 +100,7 @@ describe("updateFrontmatter", () => {
 
   test("fills empty template fields", () => {
     const out = updateFrontmatter(DEFAULT_NOTES_TEMPLATE, { title: "Mall", posted: "2026-11-12", authors: ["a", "b c"] });
-    assert.equal(out, '---\ntitle: Mall\nauthors: [a, b c]\nversion: "1"\nposted: 2026-11-12\n---\n');
+    assert.equal(out, '---\ntitle: Mall\nauthors: [a, b c]\nversion: "1"\nposted: 2026-11-12\nstatus: draft\n---\n');
     assert.equal(readNotesMeta(out).posted, "2026-11-12");
   });
 
@@ -116,6 +117,20 @@ describe("updateFrontmatter", () => {
     const out = updateFrontmatter(crlf, { version: "4", added: true });
     assert.ok(!/[^\r]\n/.test(out), "every newline is CRLF");
     assert.equal(readNotesMeta(out).version, "4");
+  });
+
+  test("with before, new keys go in front of the first of those keys the note has", () => {
+    const note = "---\ntitle: X\nversion: \"1\"\nentities: 3\nfactorio_version: \"2.0.76\"\n---\nbody\n";
+    assert.equal(
+      updateFrontmatter(note, { status: "public", posted: "2026-01-01" }, { before: ["factorio_version", "entities"] }),
+      "---\ntitle: X\nversion: \"1\"\nstatus: public\nposted: 2026-01-01\nentities: 3\nfactorio_version: \"2.0.76\"\n---\nbody\n",
+    );
+    assert.equal(updateFrontmatter(note, { status: "public" }, { before: ["nothing"] }), note.replace("---\nbody", "status: public\n---\nbody"));
+    // The key in front of which it goes may itself be removed.
+    assert.equal(
+      updateFrontmatter(note, { status: "public", version: undefined }, { before: ["version"] }),
+      "---\ntitle: X\nstatus: public\nentities: 3\nfactorio_version: \"2.0.76\"\n---\nbody\n",
+    );
   });
 
   test("creates frontmatter when there is none", () => {
@@ -138,9 +153,9 @@ test("bumpVersion", () => {
   assert.equal(bumpVersion("beta"), undefined);
 });
 
-test("the template has the four keys and an empty body", () => {
-  assert.equal(DEFAULT_NOTES_TEMPLATE, '---\ntitle:\nauthors: []\nversion: "1"\nposted:\n---\n');
-  assert.deepStrictEqual(Object.keys(readFrontmatter(DEFAULT_NOTES_TEMPLATE)), ["title", "authors", "version", "posted"]);
+test("the template has the five keys, starts as a draft and has an empty body", () => {
+  assert.equal(DEFAULT_NOTES_TEMPLATE, '---\ntitle:\nauthors: []\nversion: "1"\nposted:\nstatus: draft\n---\n');
+  assert.deepStrictEqual(Object.keys(readFrontmatter(DEFAULT_NOTES_TEMPLATE)), ["title", "authors", "version", "posted", "status"]);
   assert.equal(splitFrontmatter(DEFAULT_NOTES_TEMPLATE).body, "");
 });
 
@@ -156,7 +171,34 @@ test("fillNotesTemplate", () => {
     authors: [],
     version: "1",
     posted: "2026-11-12",
+    status: "draft",
     previous_paths: [],
   });
-  assert.equal(out, '---\ntitle: Mall\nauthors: []\nversion: "1"\nposted: 2026-11-12\n---\n');
+  assert.equal(out, '---\ntitle: Mall\nauthors: []\nversion: "1"\nposted: 2026-11-12\nstatus: draft\n---\n');
+});
+
+test("fillNotesTemplate: a root note is a draft unless the template says otherwise; an entry note has no status", () => {
+  const fields = { title: "Mall", posted: "2026-11-12", authors: [] };
+  const old = '---\ntitle:\nauthors: []\nposted:\nentities: 0\n---\n';
+  assert.equal(fillNotesTemplate(old, fields), "---\ntitle: Mall\nauthors: []\nposted: 2026-11-12\nstatus: draft\nentities: 0\n---\n");
+  assert.equal(readNotesMeta(fillNotesTemplate(old.replace("posted:", "status: bogus\nposted:"), fields)).status, "draft");
+  assert.equal(readNotesMeta(fillNotesTemplate(DEFAULT_NOTES_TEMPLATE.replace("draft", "public"), fields)).status, "public");
+  const entry = fillNotesTemplate(DEFAULT_NOTES_TEMPLATE, { ...fields, entry: true });
+  assert.equal(entry, '---\ntitle: Mall\nauthors: []\nversion: "1"\nposted: 2026-11-12\n---\n');
+  assert.equal(fillNotesTemplate(old, { ...fields, entry: true }), "---\ntitle: Mall\nauthors: []\nposted: 2026-11-12\nentities: 0\n---\n");
+});
+
+test("setNoteStatus: takes the place of deprecated, else goes before the generated keys", () => {
+  const note = (fm: string) => `---\n${fm}\n---\n\n![x](https://example.com/cover.jpg)\n\nNotes.\n`;
+  const migrated = setNoteStatus(note("title: X\nauthors: []\nfactoriobin: https://f\ndeprecated: true\nprevious_paths: [a/b]\nentities: 3"), "deprecated");
+  assert.equal(migrated, note("title: X\nauthors: []\nfactoriobin: https://f\nstatus: deprecated\nprevious_paths: [a/b]\nentities: 3"));
+  assert.equal(
+    setNoteStatus(note("title: X\nauthors:\n  - me\nversion: \"2\"\nentities: 3\ntiles: 4\nfactorio_version: \"2.0.76\""), "public"),
+    note("title: X\nauthors:\n  - me\nversion: \"2\"\nstatus: public\nentities: 3\ntiles: 4\nfactorio_version: \"2.0.76\""),
+  );
+  assert.equal(setNoteStatus(note("title: X"), "unlisted"), note("title: X\nstatus: unlisted"));
+  assert.equal(setNoteStatus(note("title: X\nstatus: draft\nentities: 1"), "public"), note("title: X\nstatus: public\nentities: 1"), "in place");
+  const same = note("title: X\nstatus: public");
+  assert.equal(setNoteStatus(same, "public"), same);
+  assert.equal(setNoteStatus(note("title: X\nstatus: public\ndeprecated: false"), "public"), same, "a leftover deprecated goes");
 });

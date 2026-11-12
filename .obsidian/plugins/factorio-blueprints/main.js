@@ -7536,18 +7536,46 @@ function stringList(v) {
   return one === void 0 ? [] : [one];
 }
 
+// src/core/stats.ts
+var STATS_KEYS = ["entities", "tiles", "blueprints", "factorio_version"];
+function blueprintStats(value) {
+  const d = describeBlueprint(value);
+  const stats = {};
+  if (d.kind === "blueprint" || d.kind === "blueprint-book") {
+    stats.entities = d.counts.entities;
+    if (d.counts.tiles > 0) stats.tiles = d.counts.tiles;
+  }
+  if (d.kind === "blueprint-book") stats.blueprints = d.counts.blueprints;
+  if (d.factorioVersion !== void 0) stats.factorio_version = d.factorioVersion;
+  return stats;
+}
+function applyStatsToNote(note, stats) {
+  const fm = readFrontmatter(note);
+  const updates = {};
+  for (const key of STATS_KEYS) {
+    const want = stats[key];
+    const has = Object.prototype.hasOwnProperty.call(fm, key);
+    if (want === void 0 ? has : !has || fm[key] !== want) updates[key] = want;
+  }
+  return Object.keys(updates).length === 0 ? note : updateFrontmatter(note, updates);
+}
+
 // src/core/notes-template.ts
 var DEFAULT_NOTES_TEMPLATE = `---
 title:
 authors: []
 version: "1"
 posted:
+status: draft
 ---
 `;
 function fillNotesTemplate(template, fields) {
   const updates = { title: fields.title, posted: fields.posted };
   if (fields.authors.length > 0) updates["authors"] = fields.authors;
-  return updateFrontmatter(template, updates);
+  const status = readFrontmatter(template)["status"];
+  if (fields.entry) updates["status"] = void 0;
+  else if (!isBlueprintStatus(status)) updates["status"] = "draft";
+  return updateFrontmatter(template, updates, { before: STATS_KEYS });
 }
 
 // src/core/blueprint-folder.ts
@@ -8098,30 +8126,6 @@ function isObject4(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-// src/core/stats.ts
-var STATS_KEYS = ["entities", "tiles", "blueprints", "factorio_version"];
-function blueprintStats(value) {
-  const d = describeBlueprint(value);
-  const stats = {};
-  if (d.kind === "blueprint" || d.kind === "blueprint-book") {
-    stats.entities = d.counts.entities;
-    if (d.counts.tiles > 0) stats.tiles = d.counts.tiles;
-  }
-  if (d.kind === "blueprint-book") stats.blueprints = d.counts.blueprints;
-  if (d.factorioVersion !== void 0) stats.factorio_version = d.factorioVersion;
-  return stats;
-}
-function applyStatsToNote(note, stats) {
-  const fm = readFrontmatter(note);
-  const updates = {};
-  for (const key of STATS_KEYS) {
-    const want = stats[key];
-    const has = Object.prototype.hasOwnProperty.call(fm, key);
-    if (want === void 0 ? has : !has || fm[key] !== want) updates[key] = want;
-  }
-  return Object.keys(updates).length === 0 ? note : updateFrontmatter(note, updates);
-}
-
 // src/commands/expanded.ts
 async function locate(host, contextFolder) {
   for (const f of selfAndAncestors(contextFolder)) {
@@ -8443,7 +8447,7 @@ async function writeEntryFolder(host, parent, entry, notes, template) {
   else await host.files.write(joinPath(folder, BLUEPRINT_FILE), writeCanonicalJson(entry.value));
   await host.files.write(
     joinPath(folder, NOTES_FILE),
-    fillNotesTemplate(template, { title: entryTitle(entry), posted: notes.posted, authors: notes.authors })
+    fillNotesTemplate(template, { title: entryTitle(entry), posted: notes.posted, authors: notes.authors, entry: true })
   );
   let made = 1;
   for (const child of entry.entries ?? []) made += await writeEntryFolder(host, folder, child, notes, template);

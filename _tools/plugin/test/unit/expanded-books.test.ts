@@ -266,6 +266,24 @@ describe("importing onto an expanded book", () => {
     await importFromClipboard(yes, R);
     assert.ok(yes.vault.has(`${R}/7-rocks/blueprint.json`));
     assert.equal(readFrontmatter(yes.vault.get(`${R}/7-rocks/README.md`)!)["title"], "Rocks");
+    assert.equal("status" in readFrontmatter(yes.vault.get(`${R}/7-rocks/README.md`)!), false, "an entry note has no status");
+  });
+
+  test("status: only the root note has one; expanding and updating never add one to entry notes or change the root's", async () => {
+    const host = bookVault({ [`${R}/README.md`]: NOTE.replace("---\n\n", "status: public\n---\n\n") });
+    await expandBookIntoFolders(host, R);
+    const v = structuredClone(BOOK);
+    v.blueprint_book.blueprints.push({ index: 7, blueprint: { item: "blueprint", label: "New one", entities: [] } });
+    host.clipboardText = encodeBlueprintString(v);
+    await importFromClipboard(host, R);
+    assert.ok(host.vault.has(`${R}/7-new-one/README.md`));
+    const notes = [...host.vault.keys()].filter((k) => k.startsWith(R + "/") && k.endsWith("/README.md"));
+    assert.ok(notes.length > 5);
+    for (const n of notes) {
+      const fm = readFrontmatter(host.vault.get(n)!);
+      if (n === `${R}/README.md`) assert.equal(fm["status"], "public");
+      else assert.equal("status" in fm, false, n);
+    }
   });
 
   test("a book pasted from the category folder finds the expanded book by its slug", async () => {

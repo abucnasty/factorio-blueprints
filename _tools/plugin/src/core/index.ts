@@ -48,7 +48,7 @@ export {
 } from "./frontmatter.ts";
 export type { BlueprintStatus, NotesMeta, SplitNote } from "./frontmatter.ts";
 
-export { DEFAULT_NOTES_TEMPLATE, fillNotesTemplate } from "./notes-template.ts";
+export { DEFAULT_NOTES_TEMPLATE, fillNotesTemplate, setNoteStatus } from "./notes-template.ts";
 export type { NewNotesFields } from "./notes-template.ts";
 
 export {
