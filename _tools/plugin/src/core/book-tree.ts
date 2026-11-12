@@ -22,7 +22,7 @@ export interface BookNode {
   children: BookNode[];
 }
 
-const KIND_KEYS: [string, BlueprintKind][] = [
+export const KIND_KEYS: [string, BlueprintKind][] = [
   ["blueprint", "blueprint"],
   ["blueprint_book", "blueprint-book"],
   ["upgrade_planner", "upgrade-planner"],

@@ -6,11 +6,15 @@
 import { execFileSync } from "node:child_process";
 
 import {
+  assembleBook,
+  baseName,
   BLUEPRINT_FILE,
   type BlueprintKind,
+  BOOK_FILE,
   decodeBlueprintString,
   describeBlueprint,
   encodeBlueprintString,
+  type FolderReader,
   FrontmatterError,
   isBlueprintValue,
   isCanonicalJson,
@@ -18,10 +22,14 @@ import {
   joinPath,
   NOTES_FILE,
   parentFolder,
+  parseSlotFolder,
   plainLabel,
   readCanonicalJson,
   readFrontmatter,
   readNotesMeta,
+  selfAndAncestors,
+  slotFolders,
+  slugify,
 } from "../plugin/src/core/index.ts";
 import type { CatalogEntry, CatalogIndex, CatalogNode, CatalogRender, CatalogVersion } from "./catalog-index.ts";
 
@@ -42,8 +50,10 @@ export interface Catalog {
   problems: Problem[];
   /** Blueprint folders that exist at the commit but have problems, sorted. */
   invalid: string[];
-  /** blueprint.json blob id for every (path, sha) in the index, keyed by stringKey. */
+  /** blueprint.json blob id for every (path, sha) in the index whose value is one file, keyed by stringKey. */
   blobs: Map<string, string>;
+  /** For the other versions (of root books): the folder at that sha whose assembled tree is the value, keyed by stringKey. */
+  trees: Map<string, string>;
 }
 
 export interface StringJob {
@@ -95,10 +105,11 @@ export class Git {
     return this.run(["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`]).toString().trim();
   }
 
-  /** Every blob in the commit's tree: path -> blob id. */
-  tree(commit: string): Map<string, string> {
+  /** Every blob in the commit's tree (or under `folder` in it): path -> blob id. */
+  tree(commit: string, folder?: string): Map<string, string> {
     const out = new Map<string, string>();
-    for (const rec of this.run(["ls-tree", "-r", "-z", "--full-tree", commit]).toString().split("\0")) {
+    const args = ["ls-tree", "-r", "-z", "--full-tree", commit, ...(folder === undefined ? [] : ["--", folder])];
+    for (const rec of this.run(args).toString().split("\0")) {
       const m = /^\d+ blob ([0-9a-f]+)\t(.*)$/s.exec(rec);
       if (m) out.set(m[2]!, m[1]!);
     }
@@ -134,14 +145,23 @@ export class Git {
     return out;
   }
 
-  /** Commits that changed any of the paths, newest first, reachable from `commit`. */
-  log(commit: string, paths: string[]): CatalogVersion[] {
-    const text = this.run(["log", "--format=%x1e%H%x1f%aI%x1f%s", commit, "--", ...paths]).toString();
+  /**
+   * Commits that changed any of the paths, newest first, reachable from
+   * `commit`; with `changed`, only those where it accepts a changed file
+   * (merges, which list no files, are kept).
+   */
+  log(commit: string, paths: string[], changed?: (path: string) => boolean): CatalogVersion[] {
+    const names = changed ? ["--name-only"] : [];
+    const text = this.run(["log", "--format=%x1e%H%x1f%aI%x1f%s", ...names, commit, "--", ...paths]).toString();
     return text
       .split("\x1e")
       .slice(1)
+      .filter((rec) => {
+        const files = rec.split("\n").slice(1).filter((l) => l !== "");
+        return !changed || files.length === 0 || files.some(changed);
+      })
       .map((rec) => {
-        const [sha, date, subject] = rec.replace(/\n+$/, "").split("\x1f");
+        const [sha, date, subject] = rec.split("\n")[0]!.split("\x1f");
         // git prints a UTC offset as "+00:00" or "Z" depending on its version; keep one form
         return { sha: sha!, date: date!.replace(/\+00:00$/, "Z"), subject: subject ?? "" };
       });
@@ -151,30 +171,41 @@ export class Git {
 // ---------------------------------------------------------------------------
 // index
 
-/** Validate every blueprint folder at `commit` and build the index. */
-export function buildCatalog(repo: string, opts: { commit?: string; now?: Date } = {}): Catalog {
+/** Validate every blueprint folder and root book at `commit` and build the index. */
+export async function buildCatalog(repo: string, opts: { commit?: string; now?: Date } = {}): Promise<Catalog> {
   const git = new Git(repo);
   const commit = git.resolve(opts.commit ?? "HEAD");
   const files = git.tree(commit);
   const problems: Problem[] = [];
   const blobs = new Map<string, string>();
+  const trees = new Map<string, string>();
 
-  const folders = [...files.keys()]
-    .filter((p) => p.endsWith("/" + BLUEPRINT_FILE) && isScannedPath(p))
-    .map(parentFolder)
-    .sort();
+  const foldersWith = (name: string) =>
+    new Set([...files.keys()].filter((p) => p.endsWith("/" + name) && isScannedPath(p)).map(parentFolder));
+  const blueprintFolders = foldersWith(BLUEPRINT_FILE);
+  const books = foldersWith(BOOK_FILE);
+  /** The outermost expanded book that `f` is inside of, if any. */
+  const rootBookOf = (f: string) => selfAndAncestors(parentFolder(f)).reverse().find((a) => books.has(a));
+
+  // Catalog entries: blueprint folders and root books. Folders inside an
+  // expanded book are part of its root book's entry.
+  const folders = [...new Set([...blueprintFolders, ...books])].filter((f) => rootBookOf(f) === undefined).sort();
   const folderSet = new Set(folders);
 
   // Render images belong to the blueprint folder that holds their renders/
   // directory. Only the image types the LFS patterns track are renders;
   // anything else there (the render tool's render.json) is ignored.
   const renderFiles = new Map<string, { file: string; blob: string }[]>();
+  /** Folders with a renders/ directory. */
+  const renderDirs = new Set<string>();
   for (const [path, blob] of files) {
-    if (!isScannedPath(path) || !RENDER_IMAGE.test(path)) continue;
+    if (!isScannedPath(path)) continue;
     const segs = path.split("/");
+    segs.forEach((s, i) => s === "renders" && i > 0 && i < segs.length - 1 && renderDirs.add(segs.slice(0, i).join("/")));
+    if (!RENDER_IMAGE.test(path)) continue;
     for (let i = segs.length - 2; i >= 1; i--) {
       const folder = segs.slice(0, i).join("/");
-      if (segs[i] === "renders" && folderSet.has(folder)) {
+      if (segs[i] === "renders" && blueprintFolders.has(folder)) {
         const list = renderFiles.get(folder) ?? [];
         list.push({ file: segs.slice(i + 1).join("/"), blob });
         renderFiles.set(folder, list);
@@ -184,13 +215,18 @@ export function buildCatalog(repo: string, opts: { commit?: string; now?: Date }
   }
 
   const wanted: string[] = [];
-  for (const f of folders) {
-    wanted.push(files.get(`${f}/${BLUEPRINT_FILE}`)!);
-    const notes = files.get(`${f}/${NOTES_FILE}`);
-    if (notes) wanted.push(notes);
+  for (const f of new Set([...blueprintFolders, ...books])) {
+    for (const name of [BLUEPRINT_FILE, BOOK_FILE, NOTES_FILE]) {
+      const id = files.get(`${f}/${name}`);
+      if (id) wanted.push(id);
+    }
     for (const r of renderFiles.get(f) ?? []) wanted.push(r.blob);
   }
   const content = git.readBlobs(wanted);
+  const text = (path: string) => {
+    const id = files.get(path);
+    return id === undefined ? undefined : content.get(id)!.toString("utf8");
+  };
 
   // Previous paths: each may be claimed once and must not be a current folder.
   const claimed = new Map<string, string>();
@@ -199,22 +235,32 @@ export function buildCatalog(repo: string, opts: { commit?: string; now?: Date }
   for (const folder of folders) {
     const before = problems.length;
     const problem = (path: string, message: string) => problems.push({ folder, path, message });
+    const isBook = books.has(folder);
+    /** The folders inside this root book that hold blueprint.json or book.json. */
+    const inner = isBook
+      ? [...new Set([...blueprintFolders, ...books])].filter((f) => f.startsWith(folder + "/")).sort()
+      : [];
 
     // Everything after a blueprint folder's path is a slot path, so folders cannot nest.
-    const outer = folders.find((f) => folder.startsWith(f + "/"));
-    if (outer) problem(folder, `is inside the blueprint folder ${outer}; a blueprint folder cannot contain another`);
+    const nestedIn = new Set<string>();
+    for (const f of [folder, ...inner]) {
+      const outer = [...blueprintFolders].find((b) => f.startsWith(b + "/"));
+      if (!outer) continue;
+      nestedIn.add(f);
+      problem(f, `is inside the blueprint folder ${outer}; a blueprint folder cannot contain another blueprint folder or expanded book`);
+    }
 
-    // README.md frontmatter.
-    const notesBlob = files.get(`${folder}/${NOTES_FILE}`);
-    let meta: ReturnType<typeof readNotesMeta> | undefined;
-    if (!notesBlob) {
-      problem(folder, `has no ${NOTES_FILE}`);
-    } else {
-      const notesPath = `${folder}/${NOTES_FILE}`;
-      const text = content.get(notesBlob)!.toString("utf8");
+    // README.md frontmatter (title and authors also for every folder inside a root book).
+    const readNotes = (f: string) => {
+      const notesPath = `${f}/${NOTES_FILE}`;
+      const notesText = text(notesPath);
+      if (notesText === undefined) {
+        problem(f, `has no ${NOTES_FILE}`);
+        return undefined;
+      }
       try {
-        const fm = readFrontmatter(text);
-        meta = readNotesMeta(text);
+        const fm = readFrontmatter(notesText);
+        const meta = readNotesMeta(notesText);
         if (meta.title === undefined) problem(notesPath, "frontmatter needs a title");
         if (!Array.isArray(fm["authors"])) problem(notesPath, "frontmatter needs authors as a list (it may be empty: authors: [])");
         if (fm["deprecated"] != null && typeof fm["deprecated"] !== "boolean") {
@@ -223,87 +269,170 @@ export function buildCatalog(repo: string, opts: { commit?: string; now?: Date }
         if (fm["previous_paths"] != null && !Array.isArray(fm["previous_paths"])) {
           problem(notesPath, "previous_paths must be a list");
         }
-        meta.previous_paths = meta.previous_paths.map((p) => joinPath(p));
-        for (const prev of meta.previous_paths) {
-          if (prev === "" || !isScannedPath(prev)) problem(notesPath, `previous path "${prev}" is not a blueprint folder path`);
-          else if (prev === folder || folderSet.has(prev)) problem(notesPath, `previous path "${prev}" is a current blueprint folder`);
-          else if (claimed.has(prev)) problem(notesPath, `previous path "${prev}" is also claimed by ${claimed.get(prev)}`);
-          else claimed.set(prev, folder);
-        }
+        return { fm, meta, notesPath };
       } catch (e) {
         if (!(e instanceof FrontmatterError)) throw e;
         problem(notesPath, e.message);
+        return undefined;
+      }
+    };
+    const notes = readNotes(folder);
+    const meta = notes?.meta;
+    if (notes && meta) {
+      meta.previous_paths = meta.previous_paths.map((p) => joinPath(p));
+      for (const prev of meta.previous_paths) {
+        if (prev === "" || !isScannedPath(prev)) problem(notes.notesPath, `previous path "${prev}" is not a blueprint folder path`);
+        else if (prev === folder || folderSet.has(prev)) problem(notes.notesPath, `previous path "${prev}" is a current blueprint folder`);
+        else if (claimed.has(prev)) problem(notes.notesPath, `previous path "${prev}" is also claimed by ${claimed.get(prev)}`);
+        else claimed.set(prev, folder);
       }
     }
+    for (const f of inner) readNotes(f);
 
-    // blueprint.json.
-    const bpPath = `${folder}/${BLUEPRINT_FILE}`;
-    const bpBlob = files.get(bpPath)!;
-    const bpText = content.get(bpBlob)!.toString("utf8");
-    let description: ReturnType<typeof describeBlueprint> | undefined;
-    let tree: BookEntry[] = [];
-    if (!isCanonicalJson(bpText)) {
+    // blueprint.json, or book.json and the tree under it.
+    const readJson = (path: string): unknown => {
+      const t = text(path)!;
+      if (isCanonicalJson(t)) return readCanonicalJson(t);
       let parses = true;
       try {
-        readCanonicalJson(bpText);
+        readCanonicalJson(t);
       } catch {
         parses = false;
       }
-      problem(bpPath, parses ? "is not in the canonical format (re-import it with the plugin)" : "is not valid JSON");
+      problem(path, parses ? "is not in the canonical format (re-import it with the plugin)" : "is not valid JSON");
+      return undefined;
+    };
+    let description: ReturnType<typeof describeBlueprint> | undefined;
+    let tree: BookEntry[] = [];
+    let value: unknown;
+    const bpPath = `${folder}/${BLUEPRINT_FILE}`;
+    const folderFor = new Map<string, string>();
+    if (!isBook) {
+      const json = readJson(bpPath);
+      if (json !== undefined) {
+        if (isBlueprintValue(json)) value = json;
+        else problem(bpPath, "is not a blueprint, blueprint book, upgrade planner or deconstruction planner");
+      }
     } else {
-      const value = readCanonicalJson(bpText);
-      if (isBlueprintValue(value)) {
-        description = describeBlueprint(value);
-        const book = bookEntries(value);
-        tree = book.entries;
-        for (const d of book.duplicates) problem(bpPath, `has more than one entry in book slot ${d}`);
-      } else problem(bpPath, "is not a blueprint, blueprint book, upgrade planner or deconstruction planner");
+      const reported = new Set<string>();
+      for (const f of [folder, ...inner]) {
+        if (blueprintFolders.has(f) && books.has(f)) {
+          problem(f, `has both ${BOOK_FILE} and ${BLUEPRINT_FILE}; keep ${BLUEPRINT_FILE} for one string or ${BOOK_FILE} for a book stored as folders`);
+          continue;
+        }
+        if (books.has(f) && renderDirs.has(f)) {
+          problem(`${f}/renders`, "an expanded book has no renders of its own; images live in renders/ of its blueprint folders");
+        }
+        const json = readJson(`${f}/${books.has(f) ? BOOK_FILE : BLUEPRINT_FILE}`);
+        if (json === undefined) continue;
+        if (!books.has(f)) {
+          if (!isBlueprintValue(json)) problem(`${f}/${BLUEPRINT_FILE}`, "is not a blueprint, blueprint book, upgrade planner or deconstruction planner");
+        } else if (!isObject(json) || !isObject(json["blueprint_book"])) {
+          problem(`${f}/${BOOK_FILE}`, "must hold a blueprint_book object");
+        } else if ("blueprints" in json["blueprint_book"]) {
+          problem(`${f}/${BOOK_FILE}`, "must not list the book's entries: each entry is a slot folder next to it");
+        }
+        if (f === folder || nestedIn.has(f)) continue;
+        // Inside an expanded book, every folder that holds blueprints is a slot folder of a book.
+        const owner = selfAndAncestors(parentFolder(f)).find((a) => books.has(a))!;
+        const child = joinPath(owner, f.slice(owner.length + 1).split("/")[0]!);
+        if (child !== f) {
+          if (reported.has(child)) continue;
+          reported.add(child);
+          problem(
+            child,
+            `holds blueprints inside the expanded book ${owner}, so it must be a slot folder with ${BOOK_FILE} or ${BLUEPRINT_FILE}; move what is inside up or into a slot folder`,
+          );
+        } else if (parseSlotFolder(baseName(f)) === undefined) {
+          problem(f, `is in the expanded book ${owner} but is not named by slot: rename it <slot> or <slot>-<name>, such as 0 or 0-${slugify(baseName(f)) || "name"}`);
+        }
+      }
+      if (problems.length === before) {
+        const reader = treeReader(files, text);
+        try {
+          value = await assembleBook(folder, reader);
+          await walkSlots(folder, "", reader, books, folderFor);
+        } catch (e) {
+          problem(folder, (e as Error).message);
+        }
+      }
+    }
+    if (value !== undefined) {
+      description = describeBlueprint(value);
+      const book = bookEntries(value);
+      tree = book.entries;
+      for (const d of book.duplicates) problem(isBook ? folder : bpPath, `has more than one entry in book slot ${d}`);
     }
 
-    // renders/.
+    // renders/: a blueprint folder's own, or each leaf's of a root book, as <slot path>.<ext>.
     const renders: CatalogRender[] = [];
-    for (const { file, blob } of renderFiles.get(folder) ?? []) {
-      const path = `${folder}/renders/${file}`;
-      const name = RENDER_FILE.exec(file);
-      if (!name) {
-        problem(path, "render images must be named <slot path>.jpg, .jpeg, .png or .webp, such as 0.jpg or 3/1.jpg");
-        continue;
+    const kindAt = new Map([...flatten(tree)].map((e) => [e.path, e.kind]));
+    const sources: [string, string | undefined][] = isBook
+      ? [...folderFor].filter(([, f]) => blueprintFolders.has(f)).map(([slotPath, f]) => [f, slotPath])
+      : [[folder, undefined]];
+    for (const [owner, slotPath] of sources) {
+      for (const { file, blob } of renderFiles.get(owner) ?? []) {
+        const path = `${owner}/renders/${file}`;
+        const name = RENDER_FILE.exec(file);
+        if (!name) {
+          problem(path, "render images must be named <slot path>.jpg, .jpeg, .png or .webp, such as 0.jpg or 3/1.jpg");
+          continue;
+        }
+        let slot = name[1]!;
+        if (slotPath !== undefined) {
+          if (kindAt.get(slotPath) === "blueprint-book") slot = `${slotPath}/${slot}`;
+          else if (slot === "0") slot = slotPath;
+          else {
+            problem(path, "a blueprint in an expanded book has one image, renders/0.jpg (or .jpeg, .png, .webp)");
+            continue;
+          }
+        }
+        const pointer = LFS_POINTER.exec(content.get(blob)!.toString("latin1"));
+        if (!pointer) {
+          problem(path, "is not a Git LFS pointer (commit it with git-lfs installed)");
+          continue;
+        }
+        if (renders.some((r) => slotOf(r.file) === slot)) {
+          problem(path, `there is more than one render for slot ${slot}`);
+          continue;
+        }
+        renders.push({ file: `${slot}.${name[2]}`, oid: pointer[1]!, size: Number(pointer[2]) });
       }
-      const pointer = LFS_POINTER.exec(content.get(blob)!.toString("latin1"));
-      if (!pointer) {
-        problem(path, "is not a Git LFS pointer (commit it with git-lfs installed)");
-        continue;
-      }
-      if (renders.some((r) => slotOf(r.file) === name[1])) {
-        problem(path, `there is more than one render for slot ${name[1]}`);
-        continue;
-      }
-      renders.push({ file, oid: pointer[1]!, size: Number(pointer[2]) });
     }
     renders.sort((a, b) => compareSlotPaths(slotOf(a.file), slotOf(b.file)));
 
     if (problems.length > before || !meta || !description) continue;
 
-    // History: commits that changed blueprint.json here or at a previous path.
+    // History: commits that changed blueprint.json here or at a previous path;
+    // for a root book also any book.json or blueprint.json under it, the
+    // value being blueprint.json where a commit has one, else the assembled tree.
     const paths = [folder, ...meta.previous_paths];
-    const candidates = git.log(commit, paths.map((p) => `${p}/${BLUEPRINT_FILE}`));
-    const ids = git.blobIds(candidates.flatMap((c) => paths.map((p) => `${c.sha}:${p}/${BLUEPRINT_FILE}`)));
+    const candidates = isBook
+      ? git.log(commit, paths, (name) => paths.some((p) => name.startsWith(p + "/") && TREE_FILE.test(name)))
+      : git.log(commit, paths.map((p) => `${p}/${BLUEPRINT_FILE}`));
+    const names = isBook ? [BLUEPRINT_FILE, BOOK_FILE] : [BLUEPRINT_FILE];
+    const ids = git.blobIds(candidates.flatMap((c) => paths.flatMap((p) => names.map((n) => `${c.sha}:${p}/${n}`))));
     const history: CatalogVersion[] = [];
+    const per = paths.length * names.length;
     candidates.forEach((c, i) => {
       // A commit that only deleted the file at an old path has no version.
-      const id = ids.slice(i * paths.length, (i + 1) * paths.length).find((x) => x !== undefined);
-      if (id === undefined) return;
+      const found = ids.slice(i * per, (i + 1) * per).findIndex((x) => x !== undefined);
+      if (found === -1) return;
       history.push({ ...c, entries: true });
-      blobs.set(stringKey(folder, c.sha), id);
+      const key = stringKey(folder, c.sha);
+      if (names[found % names.length] === BLUEPRINT_FILE) blobs.set(key, ids[i * per + found]!);
+      else trees.set(key, paths[Math.floor(found / names.length)]!);
     });
-    const current = history.find((h) => blobs.get(stringKey(folder, h.sha)) === bpBlob);
+    const current = isBook
+      ? history.find((h, i) => i === 0 && trees.get(stringKey(folder, h.sha)) === folder)
+      : history.find((h) => blobs.get(stringKey(folder, h.sha)) === files.get(bpPath));
     if (!current) {
-      problem(bpPath, "has no commit in its history with the current content");
+      problem(isBook ? `${folder}/${BOOK_FILE}` : bpPath, "has no commit in its history with the current content");
       continue;
     }
 
     const renderFor = new Map(renders.map((r) => [slotOf(r.file), r.file]));
-    const nodes = toNodes(tree, renderFor);
+    const nodes = toNodes(tree, renderFor, folderFor);
     const cover = description.kind === "blueprint" ? renderFor.get("0") : firstRender(nodes);
     const { title, authors, deprecated, previous_paths, ...optional } = meta;
     entries.push({
@@ -332,7 +461,50 @@ export function buildCatalog(repo: string, opts: { commit?: string; now?: Date }
     problems,
     invalid: [...new Set(problems.map((p) => p.folder))].sort(),
     blobs,
+    trees,
   };
+}
+
+/** book.json and blueprint.json: the files whose changes make a version of a root book. */
+const TREE_FILE = /\/(book|blueprint)\.json$/;
+
+/** A FolderReader over a git tree listing (path -> blob id) and a way to read a path's text. */
+function treeReader(files: Map<string, string>, text: (path: string) => string | undefined): FolderReader {
+  return {
+    async folders(folder) {
+      const names = new Set<string>();
+      for (const path of files.keys()) {
+        if (!path.startsWith(folder + "/")) continue;
+        const rest = path.slice(folder.length + 1).split("/");
+        if (rest.length > 1) names.add(rest[0]!);
+      }
+      return [...names];
+    },
+    async read(path) {
+      return text(path);
+    },
+  };
+}
+
+/** Record the folder of every entry under an expanded book, by slot path. */
+async function walkSlots(folder: string, prefix: string, reader: FolderReader, books: Set<string>, out: Map<string, string>) {
+  for (const s of await slotFolders(folder, reader)) {
+    const slotPath = prefix === "" ? String(s.slot) : `${prefix}/${s.slot}`;
+    out.set(slotPath, s.path);
+    if (books.has(s.path)) await walkSlots(s.path, slotPath, reader, books, out);
+  }
+}
+
+/** The assembled value of the expanded book at `folder` as of `commit`. */
+async function assembleAt(git: Git, commit: string, folder: string): Promise<unknown> {
+  const files = git.tree(commit, folder);
+  const json = [...files].filter(([p]) => TREE_FILE.test(p));
+  const data = git.readBlobs(json.map(([, id]) => id));
+  const text = (path: string) => {
+    const id = files.get(path);
+    return id === undefined ? undefined : data.get(id)?.toString("utf8");
+  };
+  return assembleBook(folder, treeReader(files, text));
 }
 
 /**
@@ -414,12 +586,14 @@ function* flatten(entries: BookEntry[]): Generator<BookEntry> {
   }
 }
 
-function toNodes(entries: BookEntry[], renderFor: Map<string, string>): CatalogNode[] {
+function toNodes(entries: BookEntry[], renderFor: Map<string, string>, folderFor: Map<string, string>): CatalogNode[] {
   return entries.map((e) => {
     const node: CatalogNode = { slot: e.slot, path: e.path, kind: e.kind, label: e.label };
     const render = e.kind === "blueprint" ? renderFor.get(e.path) : undefined;
     if (render !== undefined) node.render = render;
-    if (e.children) node.children = toNodes(e.children, renderFor);
+    const folder = folderFor.get(e.path);
+    if (folder !== undefined) node.folder = folder;
+    if (e.children) node.children = toNodes(e.children, renderFor, folderFor);
     return node;
   });
 }
@@ -486,16 +660,16 @@ export function selectStrings(index: CatalogIndex, published?: LiveIndex): Strin
  * Encode the strings for each job and hand them to `emit`: the root string
  * and, for a book, one per entry at every depth, each the entry alone in
  * the shape the game exports it. Every entry string is decoded again and
- * checked against its sub-tree. A version whose blueprint.json was not a
- * valid blueprint at that commit gets no strings; it is removed from the
- * index's history and reported.
+ * checked against its sub-tree. A version whose blueprint.json (or assembled
+ * expanded book) was not a valid blueprint at that commit gets no strings;
+ * it is removed from the index's history and reported.
  */
-export function produceStrings(
+export async function produceStrings(
   repo: string,
   catalog: Catalog,
   jobs: StringJob[],
   emit: (key: string, text: string) => void,
-): { warnings: string[]; roots: number; entries: number } {
+): Promise<{ warnings: string[]; roots: number; entries: number }> {
   const git = new Git(repo);
   const warnings: string[] = [];
   let roots = 0;
@@ -503,16 +677,21 @@ export function produceStrings(
   const BATCH = 16;
   for (let i = 0; i < jobs.length; i += BATCH) {
     const batch = jobs.slice(i, i + BATCH);
-    const data = git.readBlobs(batch.map((j) => catalog.blobs.get(j.key)!));
+    const data = git.readBlobs(batch.flatMap((j) => catalog.blobs.get(j.key) ?? []));
     for (const job of batch) {
       let value: unknown;
+      const tree = catalog.trees.get(job.key);
       try {
-        value = readCanonicalJson(data.get(catalog.blobs.get(job.key)!)!.toString("utf8"));
+        value =
+          tree === undefined
+            ? readCanonicalJson(data.get(catalog.blobs.get(job.key)!)!.toString("utf8"))
+            : await assembleAt(git, job.sha, tree);
       } catch {
         value = undefined;
       }
       if (!isBlueprintValue(value)) {
-        warnings.push(`${job.path}@${job.sha}: blueprint.json was not a valid blueprint at that commit; left out of the history`);
+        const what = tree === undefined ? BLUEPRINT_FILE : `the expanded book ${tree}`;
+        warnings.push(`${job.path}@${job.sha}: ${what} was not a valid blueprint at that commit; left out of the history`);
         const entry = catalog.index.blueprints.find((e) => e.path === job.path)!;
         entry.history = entry.history.filter((h) => h.sha !== job.sha);
         continue;

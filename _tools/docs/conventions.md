@@ -26,11 +26,23 @@ _tools/                    everything that is not a blueprint
   README.md                notes + frontmatter
   blueprint.json           the decoded blueprint
   renders/<slot path>.jpg  one image per blueprint: 0.jpg, or 3/1.jpg in a book
+<category>/<book-slug>/    an expanded book
+  README.md  book.json     the book without its entries
+  0-<slug>/                slot folder: a blueprint folder or expanded book
 ```
 
-A directory is a **blueprint folder** if and only if it contains
-`blueprint.json`. Any directory whose name starts with `_` or `.` is never
-scanned for blueprints. Category nesting can be any depth.
+A **blueprint folder** has `blueprint.json` (one pasted string), `README.md`
+and optional `renders/`. An **expanded book** has `book.json` (the book
+without `blueprints`) and `README.md` instead; its entries are **slot
+folders** named `<slot>` or `<slot>-<slug of the label>` (at most 60
+characters; only the number counts), each a blueprint folder or expanded
+book. An expanded book has no `renders/`; its leaves keep their own. A
+**category folder** has neither file. A folder never has both files, a
+blueprint folder contains no other, and inside an expanded book every
+folder holding blueprints is a slot folder. The book's value is `book.json`
+with one entry per slot folder, `index` = slot (`assembleBook` /
+`expandBook` in the core). Any directory whose name starts with `_` or `.`
+is never scanned for blueprints. Category nesting can be any depth.
 
 Slugs are lowercase ASCII, words joined by `-`, no other punctuation
 (`Military Science (240/s)` becomes `military-science-240`). In detail:
@@ -210,6 +222,13 @@ Render files are `renders/<slot path>.jpg` for each blueprint in a book
 (`renders/3/1.jpg`) and `renders/0.jpg` for a single blueprint; nested
 books and planners get none. The cover is the first blueprint with an image,
 depth first, slots ascending.
+
+An expanded book not inside another (a root book) is addressed like a
+`blueprint.json` book at its folder path, by slot path, never by folder
+name; a leaf's `renders/0.jpg` is `<path>/renders/<slot path>.jpg`. Its
+versions are the commits that changed `blueprint.json` at its path or any
+`book.json` or `blueprint.json` under it, so expanding a book keeps its
+history and links.
 
 A path in some blueprint's `previous_paths` redirects to its current path.
 CI (`_tools/ci/catalog.ts`) writes the R2 bucket `factorio-blueprints-catalog`
