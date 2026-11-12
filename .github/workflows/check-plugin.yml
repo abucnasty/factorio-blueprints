@@ -1,0 +1,62 @@
+# Type-check, test and rebuild the Obsidian plugin, and fail if the built
+# files committed in .obsidian/plugins/factorio-blueprints/ are not exactly
+# what the source builds to. (The network corpus test is run by hand; see
+# _tools/plugin/README.md.)
+name: check plugin
+
+on:
+  pull_request:
+    paths:
+      - "_tools/plugin/**"
+      - ".obsidian/plugins/factorio-blueprints/**"
+      - "_tools/templates/blueprint-notes.md"
+      - ".github/workflows/check-plugin.yml"
+  push:
+    branches: [main]
+    paths:
+      - "_tools/plugin/**"
+      - ".obsidian/plugins/factorio-blueprints/**"
+      - "_tools/templates/blueprint-notes.md"
+      - ".github/workflows/check-plugin.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: _tools/plugin
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: _tools/plugin/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Committed build matches the source
+        working-directory: .
+        run: |
+          built=".obsidian/plugins/factorio-blueprints/main.js .obsidian/plugins/factorio-blueprints/manifest.json"
+          if [ -n "$(git status --porcelain --untracked-files=all -- $built)" ]; then
+            git --no-pager diff --stat -- $built
+            echo "::error::The committed plugin build differs from a fresh build. Run 'npm run build' in _tools/plugin and commit .obsidian/plugins/factorio-blueprints/."
+            exit 1
+          fi
