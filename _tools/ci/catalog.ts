@@ -29,14 +29,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
 
-import { buildCatalog, carryOverStale, produceStrings, selectStrings, type Problem } from "./build-catalog.ts";
-import type { CatalogIndex } from "./catalog-index.ts";
+import { buildCatalog, carryOverStale, type LiveIndex, produceStrings, selectStrings, type Problem } from "./build-catalog.ts";
 
 const BUCKET = "factorio-blueprints-catalog";
 const INDEX_KEY = "index.json";
 const STRING_TYPE = "text/plain; charset=utf-8";
 const INDEX_TYPE = "application/json; charset=utf-8";
-const CONCURRENCY = 4;
+const CONCURRENCY = 8;
 const ATTEMPTS = 3;
 
 const run = promisify(execFile);
@@ -69,16 +68,17 @@ async function main(): Promise<number> {
   // only once the valid ones are live.
   const live = await readPublished(out);
   const jobs = selectStrings(index, mode === "publish" ? live : undefined);
-  console.log(`${jobs.length} string(s) to produce${mode === "publish" && live ? " (diffed against the live index)" : ""}`);
+  console.log(`${jobs.length} version(s) need strings${mode === "publish" && live ? ` (diffed against the live schema ${live.schema} index)` : ""}`);
   const stale = carryOverStale(catalog, live);
   if (stale.length > 0) console.log(`kept the last published entry of ${stale.length} invalid blueprint(s): ${stale.join(", ")}`);
   const failed = problems.length > 0 ? 1 : 0;
   if (failed) console.error(`${catalog.invalid.length} invalid blueprint(s) were not updated; see the problems above.`);
 
   const staging = out ?? mkdtempSync(join(tmpdir(), "catalog-"));
+  mkdirSync(staging, { recursive: true });
   const files: { key: string; file: string }[] = [];
   let bytes = 0;
-  const { warnings } = produceStrings(repo, catalog, jobs, (key, text) => {
+  const { warnings, roots, entries } = produceStrings(repo, catalog, jobs, (key, text) => {
     const file = join(staging, key);
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, text);
@@ -92,7 +92,7 @@ async function main(): Promise<number> {
   const indexText = JSON.stringify(index);
   const indexFile = join(staging, INDEX_KEY);
   console.log(
-    `${files.length} string(s), ${bytes} bytes; index.json ${Buffer.byteLength(indexText)} bytes; ` +
+    `${files.length} string(s) (${roots} root, ${entries} entry), ${bytes} bytes; index.json ${Buffer.byteLength(indexText)} bytes; ` +
       `built in ${((performance.now() - started) / 1000).toFixed(1)} s`,
   );
 
@@ -138,7 +138,7 @@ function reportProblems(problems: Problem[], mode: string): void {
 }
 
 /** The live index, or undefined (with a warning) if it cannot be read. */
-async function readPublished(out: string | undefined): Promise<CatalogIndex | undefined> {
+async function readPublished(out: string | undefined): Promise<LiveIndex | undefined> {
   let text: string;
   try {
     if (out) {
@@ -153,8 +153,9 @@ async function readPublished(out: string | undefined): Promise<CatalogIndex | un
         rmSync(dir, { recursive: true, force: true });
       }
     }
-    const parsed = JSON.parse(text) as CatalogIndex;
-    if (parsed.schema === 1 && Array.isArray(parsed.blueprints)) return parsed;
+    // Schema 1 is read too: it has root strings only, so entry strings are all produced.
+    const parsed = JSON.parse(text) as LiveIndex;
+    if ((parsed.schema === 1 || parsed.schema === 2) && Array.isArray(parsed.blueprints)) return parsed;
     console.warn("warning: the live index has another schema; nothing to diff against or carry over");
   } catch (e) {
     console.warn(`warning: no live index readable (${firstLine(e)}); nothing to diff against or carry over`);

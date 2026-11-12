@@ -6,13 +6,19 @@
  *   GET /<path>.txt                      latest blueprint string
  *   GET /<path>@<sha>.txt                string as of a commit that changed it
  *                                        (full SHA or unique prefix of 7+)
- *   GET /<path>/renders/<n>.<ext>        preview image, from the LFS bucket
+ *   GET /<path>/<slot>[/<slot>...].txt   one entry of a book, latest
+ *   GET /<path>/<slot>/...@<sha>.txt     one entry of a book at a commit
+ *   GET /<path>/renders/<file path>      preview image, from the LFS bucket
+ *   GET /<path>/cover.jpg                the index's cover render
  *
- * A path listed in some blueprint's previous_paths redirects (301) to the
- * same request on its current path.
+ * <path> is the longest blueprint folder that prefixes the request (folders
+ * never nest, so there is one); what follows it is a slot path. A path
+ * listed in some blueprint's previous_paths redirects (301) to the same
+ * request on its current path. A schema 1 index (before the first schema 2
+ * publish) has root strings and renders only: entry links answer 503.
  */
 
-import type { CatalogEntry, CatalogIndex } from "../../ci/catalog-index.ts";
+import type { CatalogEntry, CatalogIndex, CatalogNode } from "../../ci/catalog-index.ts";
 
 export interface Env {
   /** factorio-blueprints-catalog: index.json and strings/<path>/<sha>.txt */
@@ -46,7 +52,8 @@ const BASE_HEADERS = {
 };
 
 const USAGE =
-  "Links look like /<path>.txt, /<path>@<commit>.txt, /<path>/renders/<n>.jpg; every blueprint is listed in /index.json.";
+  "Links look like /<path>.txt, /<path>@<commit>.txt, /<path>/<slot>.txt, /<path>/cover.jpg, /<path>/renders/<file>; every blueprint is listed in /index.json.";
+const SLOT = /^(0|[1-9][0-9]*)$/;
 
 interface LoadedIndex {
   etag: string;
@@ -54,6 +61,18 @@ interface LoadedIndex {
   byPath: Map<string, CatalogEntry>;
   /** previous path -> current path */
   moved: Map<string, string>;
+  /** Slot paths of each folder's latest version. */
+  slots: Map<string, Set<string>>;
+}
+
+type Found = { entry: CatalogEntry; to?: undefined } | { entry?: undefined; to: string };
+
+function addSlots(nodes: CatalogNode[] | undefined, into: Set<string>): Set<string> {
+  for (const n of nodes ?? []) {
+    into.add(n.path);
+    addSlots(n.children, into);
+  }
+  return into;
 }
 
 /** Same layout as the LFS Worker's r2Key. */
@@ -76,11 +95,13 @@ export function createHandler(now: () => number = Date.now) {
     const index = (await obj.json()) as CatalogIndex;
     const byPath = new Map<string, CatalogEntry>();
     const moved = new Map<string, string>();
+    const slots = new Map<string, Set<string>>();
     for (const e of index.blueprints) {
       byPath.set(e.path, e);
+      slots.set(e.path, addSlots(e.nodes, new Set()));
       for (const p of e.previous_paths) moved.set(p, e.path);
     }
-    return (cached = { etag: obj.etag, checkedAt: now(), byPath, moved });
+    return (cached = { etag: obj.etag, checkedAt: now(), byPath, moved, slots });
   }
 
   async function route(request: Request, env: Env): Promise<Response> {
@@ -113,27 +134,60 @@ export function createHandler(now: () => number = Date.now) {
       return (await serveObject(env.CATALOG, INDEX_KEY, request, JSON_TYPE, CACHE_SHORT)) ?? unavailable();
     }
 
-    const render = /^(.+)\/renders\/([^/]+)$/.exec(path);
-    const str = render ? null : /^([^@]+?)(?:@([^@/]*))?\.txt$/.exec(path);
-    if (!render && !str) return notFound(`Not found. ${USAGE}`);
-
     const index = await loadIndex(env.CATALOG);
     if (!index) return unavailable();
-    const bpPath = (render ?? str)![1]!;
-    const entry = index.byPath.get(bpPath);
-    if (!entry) {
-      const to = index.moved.get(bpPath);
-      if (to === undefined) return notFound(`No blueprint at "${bpPath}". ${USAGE}`);
-      const rest = render ? `/renders/${render[2]}` : `${str![2] !== undefined ? "@" + str![2] : ""}.txt`;
-      const location = new URL("/" + encodePath(to) + encodePath(rest) + url.search, url);
+    const find = (folder: string): Found | undefined => {
+      const entry = index.byPath.get(folder);
+      if (entry) return { entry };
+      const to = index.moved.get(folder);
+      return to === undefined ? undefined : { to };
+    };
+    const segs = path.split("/");
+
+    // Work out the form and the blueprint folder it is under.
+    let folder: string | undefined;
+    let found: Found | undefined;
+    let form: { kind: "render"; file: string } | { kind: "cover" } | { kind: "string"; slot: string; ref?: string } | undefined;
+    for (let i = segs.length - 2; i >= 1 && !found; i--) {
+      if (segs[i] !== "renders") continue;
+      folder = segs.slice(0, i).join("/");
+      found = find(folder);
+      if (found) form = { kind: "render", file: segs.slice(i + 1).join("/") };
+    }
+    if (!found && segs.length > 1 && segs[segs.length - 1] === "cover.jpg") {
+      folder = segs.slice(0, -1).join("/");
+      found = find(folder);
+      if (found) form = { kind: "cover" };
+    }
+    const txt = !found ? /^([^@/]+)(?:@([^@/]*))?\.txt$/.exec(segs[segs.length - 1]!) : null;
+    if (txt) {
+      const parts = [...segs.slice(0, -1), txt[1]!];
+      // The longest folder followed only by slot numbers.
+      for (let k = parts.length; k >= 1 && !found; k--) {
+        if (k < parts.length && !SLOT.test(parts[k]!)) break;
+        folder = parts.slice(0, k).join("/");
+        found = find(folder);
+        if (found) form = { kind: "string", slot: parts.slice(k).join("/"), ...(txt[2] !== undefined ? { ref: txt[2] } : {}) };
+      }
+    }
+    if (!found || !form || folder === undefined) {
+      const shown = txt ? [...segs.slice(0, -1), txt[1]!].join("/") : path;
+      const what = txt || /\/(renders\/|cover\.jpg$)/.test(path) ? `No blueprint at "${shown}". ` : "Not found. ";
+      return notFound(what + USAGE);
+    }
+
+    if (found.to !== undefined) {
+      const location = new URL("/" + encodePath(found.to + path.slice(folder.length)) + url.search, url);
       return new Response(null, {
         status: 301,
         headers: { ...BASE_HEADERS, Location: location.href, "Cache-Control": CACHE_REDIRECT },
       });
     }
+    const entry = found.entry;
 
-    if (render) {
-      const file = render[2]!;
+    if (form.kind !== "string") {
+      const file = form.kind === "cover" ? entry.cover : form.file;
+      if (file === undefined) return notFound(`"${entry.path}" has no render images, so no cover.`);
       const r = entry.renders.find((x) => x.file === file);
       if (!r) return notFound(`"${entry.path}" has no render "${file}".`);
       const type = IMAGE_TYPES[file.slice(file.lastIndexOf(".") + 1)] ?? "application/octet-stream";
@@ -145,8 +199,8 @@ export function createHandler(now: () => number = Date.now) {
       );
     }
 
-    // A blueprint string.
-    const ref = str![2];
+    // A blueprint string: the whole thing, or one entry of a book.
+    const { slot, ref } = form;
     let sha = entry.commit;
     let cache = CACHE_SHORT;
     if (ref !== undefined) {
@@ -168,11 +222,31 @@ export function createHandler(now: () => number = Date.now) {
       sha = matches[0]!.sha;
       cache = prefix.length === 40 ? CACHE_IMMUTABLE : CACHE_PREFIX;
     }
-    return (
-      (await serveObject(env.CATALOG, `strings/${entry.path}/${sha}.txt`, request, TEXT, cache, {
-        "X-Blueprint-Commit": sha,
-      })) ?? unavailable(`The string for "${entry.path}" at ${sha} is not published yet.`)
-    );
+    const headers = { "X-Blueprint-Commit": sha };
+    if (slot === "") {
+      return (
+        (await serveObject(env.CATALOG, `strings/${entry.path}/${sha}.txt`, request, TEXT, cache, headers)) ??
+        unavailable(`The string for "${entry.path}" at ${sha} is not published yet.`)
+      );
+    }
+
+    if (entry.history.find((h) => h.sha === sha)?.entries !== true) {
+      return unavailable(
+        `Links to single entries of "${entry.path}" are not published yet for ${sha}; the whole thing is at /${encodePath(entry.path)}.txt.`,
+      );
+    }
+    if (ref === undefined && !index.slots.get(entry.path)?.has(slot)) {
+      return notFound(
+        index.slots.get(entry.path)!.size === 0
+          ? `"${entry.path}" is not a book, so it has no entry ${slot}.`
+          : `"${entry.path}" has no entry at slot ${slot} in its latest version.`,
+      );
+    }
+    const res = await serveObject(env.CATALOG, `strings/${entry.path}/${sha}/${slot}.txt`, request, TEXT, cache, headers);
+    if (res) return res;
+    return ref === undefined
+      ? unavailable(`The string for "${entry.path}" slot ${slot} at ${sha} is not published yet.`)
+      : notFound(`"${entry.path}" has no entry at slot ${slot} in version ${sha}.`);
   }
 
   return async function handle(request: Request, env: Env): Promise<Response> {

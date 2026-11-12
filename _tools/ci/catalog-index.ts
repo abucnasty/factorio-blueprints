@@ -5,13 +5,23 @@
 // pulling in the core.
 //
 // R2 keys in factorio-blueprints-catalog:
-//   index.json                  this file
-//   strings/<path>/<sha>.txt    the blueprint string of <path> as of <sha>,
-//                               for every sha in that entry's history
+//   index.json                         this file
+//   strings/<path>/<sha>.txt           the blueprint string of <path> as of
+//                                      <sha>, for every sha in its history
+//   strings/<path>/<sha>/<slot>.txt    the string of one entry of a book as
+//                                      of <sha> (slot path such as "3/1"),
+//                                      for every version marked `entries`
+//
+// Slot path: the slot numbers from the root book down to an entry, each
+// the entry's `index`, or its position in `blueprints` when it has none.
 
 export interface CatalogIndex {
-  /** Bumped on any change a reader must know about. */
-  schema: 1;
+  /**
+   * Bumped on any change a reader must know about. 2 added nodes, cover,
+   * entry strings (CatalogVersion.entries) and nested render paths; a
+   * schema 1 index has none of those and renders with a number `n`.
+   */
+  schema: 2;
   /** When the index was built, ISO 8601. */
   generatedAt: string;
   /** The repo commit it was built from (full SHA). */
@@ -42,8 +52,12 @@ export interface CatalogEntry {
   commit: string;
   /** Commits that changed blueprint.json (at this path or a previous one), newest first. */
   history: CatalogVersion[];
-  /** renders/<n>.<ext>, sorted by n. */
+  /** Every image file under renders/, sorted by file path. */
   renders: CatalogRender[];
+  /** The book's entries, by slot ascending; absent for a single blueprint or planner. */
+  nodes?: CatalogNode[];
+  /** Render file used as the cover (/<path>/cover.jpg): the first blueprint with an image, depth first. */
+  cover?: string;
   /**
    * Present (true) when the folder's current files are invalid: this is the
    * last valid entry published, carried over unchanged, and its links serve
@@ -75,11 +89,31 @@ export interface CatalogVersion {
   date: string;
   /** First line of the commit message. */
   subject: string;
+  /**
+   * True once the strings of this version's book entries
+   * (strings/<path>/<sha>/<slot>.txt) are published; a version without it
+   * (any version in a schema 1 index) has only its root string. Set for
+   * single blueprints too, which have no entries.
+   */
+  entries?: true;
+}
+
+export interface CatalogNode {
+  /** Slot number in its book. */
+  slot: number;
+  /** Slot path from the root, e.g. "3/1". */
+  path: string;
+  kind: CatalogBlueprint["kind"];
+  /** Plain-text label (rich text turned into words); may be empty. */
+  label: string;
+  /** Render file under renders/ (e.g. "3/1.jpg"), blueprints with an image only. */
+  render?: string;
+  /** Entries of a nested book. */
+  children?: CatalogNode[];
 }
 
 export interface CatalogRender {
-  n: number;
-  /** File name in renders/, e.g. "0.jpg". */
+  /** File path under renders/: "<slot path>.<ext>", e.g. "3/1.jpg"; "0.jpg" for a single blueprint. */
   file: string;
   /** Git LFS object id (SHA-256 hex); the object is at <oid[0:2]>/<oid[2:4]>/<oid> in factorio-blueprints-lfs. */
   oid: string;

@@ -205,3 +205,136 @@ test("before the first publish: 503", async () => {
   assert.equal((await req("/cat/a.txt")).status, 503);
   assert.equal((await req("/index.json")).status, 503);
 });
+
+// Schema 2: entry links inside books, covers and nested renders.
+
+const OLD = "01d0000" + "1".repeat(33);
+const NEW = "ae70000" + "2".repeat(33);
+const PNG = "d".repeat(64);
+
+function bookSetup() {
+  const catalog = new FakeBucket();
+  const lfs = new FakeBucket();
+  const history = [NEW, OLD].map((sha) => ({ sha, date: "2026-01-01T00:00:00Z", subject: "s", entries: true }));
+  const index = {
+    schema: 2,
+    generatedAt: "2026-01-01T00:00:00Z",
+    commit: NEW,
+    blueprints: [
+      {
+        path: "cat/book",
+        title: "Book",
+        authors: [],
+        deprecated: false,
+        previous_paths: ["old/book"],
+        blueprint: { kind: "blueprint-book", counts: {} },
+        commit: NEW,
+        history,
+        renders: [{ file: "3/1.png", oid: PNG, size: 4 }],
+        nodes: [
+          { slot: 0, path: "0", kind: "upgrade-planner", label: "Up" },
+          { slot: 3, path: "3", kind: "blueprint-book", label: "Inner", children: [{ slot: 1, path: "3/1", kind: "blueprint", label: "X", render: "3/1.png" }] },
+        ],
+        cover: "3/1.png",
+      },
+      {
+        path: "cat/single",
+        title: "Single",
+        authors: [],
+        deprecated: false,
+        previous_paths: [],
+        blueprint: { kind: "blueprint", counts: {} },
+        commit: NEW,
+        history: [history[0]],
+        renders: [],
+      },
+    ],
+  };
+  catalog.put("index.json", JSON.stringify(index));
+  catalog.put(`strings/cat/book/${NEW}.txt`, "0root");
+  for (const [sha, slots] of [[NEW, ["0", "3", "3/1"]], [OLD, ["0", "2", "3", "3/1"]]] as const) {
+    for (const slot of slots) catalog.put(`strings/cat/book/${sha}/${slot}.txt`, `0${sha === NEW ? "new" : "old"}-${slot}`);
+  }
+  lfs.put(`dd/dd/${PNG}`, "PNG!");
+  const handle = createHandler(() => 0);
+  const env = { CATALOG: catalog, LFS: lfs } as any;
+  return (path: string, init: RequestInit = {}) => handle(new Request("https://blueprints.example" + path, init), env);
+}
+
+test("entry links: latest and @sha, nested books, entries only an old version has", async () => {
+  const req = bookSetup();
+  let res = await req("/cat/book/3/1.txt");
+  assert.equal(res.status, 200);
+  assert.equal(await res.text(), "0new-3/1");
+  assert.equal(res.headers.get("cache-control"), "public, max-age=60");
+  assert.equal(res.headers.get("x-blueprint-commit"), NEW);
+  assert.equal(await (await req("/cat/book/3.txt")).text(), "0new-3", "a nested book's own string");
+  assert.equal(await (await req("/cat/book.txt")).text(), "0root", "the root is unchanged");
+
+  res = await req(`/cat/book/3/1@${OLD}.txt`);
+  assert.equal(await res.text(), "0old-3/1");
+  assert.equal(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
+  res = await req(`/cat/book/2@${OLD.slice(0, 7)}.txt`);
+  assert.equal(await res.text(), "0old-2");
+  assert.equal(res.headers.get("cache-control"), "public, max-age=86400");
+
+  res = await req("/cat/book/2.txt");
+  assert.equal(res.status, 404);
+  assert.match(await res.text(), /no entry at slot 2 in its latest version/);
+  res = await req(`/cat/book/9/9@${NEW}.txt`);
+  assert.equal(res.status, 404);
+  assert.match(await res.text(), new RegExp(`no entry at slot 9/9 in version ${NEW}`));
+  res = await req("/cat/single/0.txt");
+  assert.equal(res.status, 404);
+  assert.match(await res.text(), /is not a book/);
+  assert.equal((await req("/cat/book/03.txt")).status, 404, "slots are plain numbers");
+
+  res = await req("/cat/book/3/1.txt", { method: "HEAD" });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("content-length"), "8");
+  assert.equal(await res.text(), "");
+});
+
+test("cover and nested renders", async () => {
+  const req = bookSetup();
+  let res = await req("/cat/book/cover.jpg");
+  assert.equal(res.status, 200);
+  assert.equal(await res.text(), "PNG!");
+  assert.equal(res.headers.get("content-type"), "image/png", "typed by the file actually used");
+  assert.equal(res.headers.get("cache-control"), "public, max-age=60");
+  const etag = res.headers.get("etag")!;
+  assert.equal((await req("/cat/book/cover.jpg", { headers: { "If-None-Match": etag } })).status, 304);
+  assert.equal((await req(`/cat/book/cover.jpg?v=${PNG}`)).headers.get("cache-control"), "public, max-age=31536000, immutable");
+  assert.equal(await (await req("/cat/book/renders/3/1.png")).text(), "PNG!");
+  assert.equal((await req("/cat/book/renders/3/2.png")).status, 404);
+  res = await req("/cat/single/cover.jpg");
+  assert.equal(res.status, 404);
+  assert.match(await res.text(), /no render images/);
+});
+
+test("previous paths redirect every form", async () => {
+  const req = bookSetup();
+  for (const [from, to] of [
+    ["/old/book/3/1@01d0000.txt?x=1", "/cat/book/3/1@01d0000.txt?x=1"],
+    ["/old/book/3/1.txt", "/cat/book/3/1.txt"],
+    ["/old/book/cover.jpg", "/cat/book/cover.jpg"],
+    ["/old/book/renders/3/1.png", "/cat/book/renders/3/1.png"],
+  ]) {
+    const res = await req(from!);
+    assert.equal(res.status, 301, from);
+    assert.equal(res.headers.get("location"), "https://blueprints.example" + to);
+  }
+});
+
+test("schema 1 index: root links and renders work, entry links say they are not published, no cover", async () => {
+  const { req } = setup(); // the fixture above is schema 1 shaped: no entries flags, nodes or cover
+  assert.equal(await (await req("/cat/a.txt")).text(), "0latest");
+  assert.equal((await req("/cat/a/renders/0.jpg")).status, 200);
+  let res = await req("/cat/a/0.txt");
+  assert.equal(res.status, 503);
+  assert.match(await res.text(), /not published yet/);
+  res = await req(`/cat/old/0@abcdef11.txt`);
+  assert.equal(res.status, 301);
+  res = await req("/cat/a/cover.jpg");
+  assert.equal(res.status, 404);
+});

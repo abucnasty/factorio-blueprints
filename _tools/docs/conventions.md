@@ -25,7 +25,7 @@ _tools/                    everything that is not a blueprint
 <category>/<sub-category>/<blueprint-slug>/
   README.md                notes + frontmatter
   blueprint.json           the decoded blueprint
-  renders/<n>.jpg          one image per blueprint in the string, 0-based
+  renders/<slot path>.jpg  one image per blueprint: 0.jpg, or 3/1.jpg in a book
 ```
 
 A directory is a **blueprint folder** if and only if it contains
@@ -129,13 +129,30 @@ bytes. There is exactly one implementation of the writer, in
 - `<path>.txt`: the latest blueprint string.
 - `<path>@<sha>.txt`: the string as of a commit that changed its
   `blueprint.json` (full SHA, or a unique prefix of at least 7).
-- `<path>/renders/<n>.<ext>`: a render image.
+- `<path>/<slot path>.txt` and `<path>/<slot path>@<sha>.txt`: one entry
+  of a book (a blueprint, nested book or planner), alone.
+- `<path>/renders/<file path>`: a render image.
+- `<path>/cover.jpg`: the cover render.
 - `index.json`: the catalog index (schema: `_tools/ci/catalog-index.ts`).
+
+A book entry's **slot path** is the slot numbers from the root book down to
+it, each the entry's `index` or, without one, its position in `blueprints`:
+`3/1` is the entry in slot 1 of the book in slot 3. If entries share a
+slot, the first in the array keeps it and later ones get no link or render.
+Slots are positions, so reordering a book changes what a latest entry link
+returns. A blueprint folder never contains another, so what follows its
+path is a slot path.
+
+Render files are `renders/<slot path>.jpg` for each blueprint in a book
+(`renders/3/1.jpg`) and `renders/0.jpg` for a single blueprint; nested
+books and planners get none. The cover is the first blueprint with an image,
+depth first, slots ascending.
 
 A path in some blueprint's `previous_paths` redirects to its current path.
 CI (`_tools/ci/catalog.ts`) writes the R2 bucket `factorio-blueprints-catalog`
-on every push to `main`: `strings/<path>/<sha>.txt` for every version,
-then `index.json`. Renders are read from `factorio-blueprints-lfs` at
+on every push to `main`: `strings/<path>/<sha>.txt` and
+`strings/<path>/<sha>/<slot path>.txt` for every version, then
+`index.json`. Renders are read from `factorio-blueprints-lfs` at
 `<oid[0:2]>/<oid[2:4]>/<oid>`.
 
 ## Branches and commits
