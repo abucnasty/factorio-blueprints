@@ -11,3 +11,6 @@
 # require, so Windows checkouts do not rewrite blueprint.json or notes.
 *.json text eol=lf
 *.md text eol=lf
+
+# Shell scripts must keep LF endings or bash on Windows cannot run them.
+*.sh text eol=lf
