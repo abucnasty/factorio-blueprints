@@ -10,13 +10,13 @@ cd factorio-blueprints
 _tools/setup/setup-machine.sh
 ```
 
-The script checks git and git-lfs, your commit name and email, that git can
-push to GitHub without a prompt, the Obsidian plugins, and the render image
-storage (it asks for the upload token from the password manager). It fixes
-what it can after asking. Anything only you can do is printed as ACTION
-NEEDED with the exact steps; do them and run it again until it ends with
-"All good". It is safe to re-run; `--check` only reports and changes nothing.
+On the owner's first machine only, create the render upload token before
+that last line: run `npx wrangler login` in `_tools/lfs-worker`, then
+`_tools/setup/setup-machine.sh --set-worker-secret` and save the token in
+the password manager. Every other machine pastes it when the script asks.
 
-Owner only, once (or to rotate the upload token): run
-`npx wrangler login` in `_tools/lfs-worker`, then
-`_tools/setup/setup-machine.sh --set-worker-secret`.
+The script checks git, your commit name and email, push access to GitHub,
+the Obsidian plugins and render storage, and fixes what it can after
+asking. Anything only you can do is printed as ACTION NEEDED with the exact
+steps; do them and re-run until it ends with "All good". `--check` only
+reports and changes nothing.
