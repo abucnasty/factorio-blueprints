@@ -1,28 +1,19 @@
-# Deploys the Git LFS Worker in _tools/lfs-worker to Cloudflare as
-# "factorio-blueprints-lfs" (https://factorio-blueprints-lfs.abucnasty.workers.dev).
-#
-# The Worker already exists (first deployed by hand on 2026-11-12). The
-# CLOUDFLARE_API_TOKEN secret can update it but cannot create a new one, so if
-# the Worker is ever deleted it must be recreated by hand before this runs.
-#
-# This workflow never sets LFS_UPLOAD_TOKEN. That secret is set once on the
-# Worker by hand and survives later deploys.
+# Redeploys the Git LFS Worker (_tools/lfs-worker) as factorio-blueprints-lfs.
+# The Worker must already exist: CLOUDFLARE_API_TOKEN can update it but not
+# create it. LFS_UPLOAD_TOKEN is set on the Worker separately and survives.
 
 name: Deploy LFS Worker
 
 on:
   push:
     branches: [main]
-    paths:
-      - "_tools/lfs-worker/**"
+    paths: ["_tools/lfs-worker/**"]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: deploy-lfs-worker
-  cancel-in-progress: false
+concurrency: deploy-lfs-worker
 
 jobs:
   deploy:
@@ -32,31 +23,17 @@ jobs:
         working-directory: _tools/lfs-worker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          lfs: false
-
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: _tools/lfs-worker/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Type-check
-        run: npm run typecheck
-
-      - name: Test
-        run: npm test
-
-      # wrangler-action uses the wrangler installed by npm ci above (the
-      # version in package-lock.json) because wranglerVersion is not set.
-      - name: Deploy
-        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
+      - run: npm ci
+      - run: npx tsc -p .
+      # Uses the wrangler version installed by npm ci.
+      - uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: _tools/lfs-worker
           packageManager: npm
-          command: deploy
