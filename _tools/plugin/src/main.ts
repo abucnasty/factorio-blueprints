@@ -151,7 +151,7 @@ export default class FactorioBlueprintsPlugin extends Plugin {
 
     this.addCommand({
       id: "refresh-generated-blocks",
-      name: "Refresh generated blocks in all notes",
+      name: "Refresh generated content in all notes",
       icon: "refresh-cw",
       callback: () => {
         const host = this.host();
@@ -161,7 +161,7 @@ export default class FactorioBlueprintsPlugin extends Plugin {
         }
         this.running = true;
         void refreshAllGeneratedBlocks(host)
-          .catch((e) => host.ui.notice(`Refreshing generated blocks failed: ${e instanceof Error ? e.message : String(e)}`, "error"))
+          .catch((e) => host.ui.notice(`Refreshing generated content failed: ${e instanceof Error ? e.message : String(e)}`, "error"))
           .finally(() => (this.running = false));
       },
     });
