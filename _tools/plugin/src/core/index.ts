@@ -63,6 +63,16 @@ export {
 export { bookTree, displayLabel, findNode, flattenTree } from "./book-tree.ts";
 export type { BookNode } from "./book-tree.ts";
 
+export {
+  assembleBook,
+  BOOK_FILE,
+  expandBook,
+  parseSlotFolder,
+  slotFolderName,
+  slotFolders,
+} from "./expanded-book.ts";
+export type { ExpandedEntry, FolderReader } from "./expanded-book.ts";
+
 export { coverUrl, DEFAULT_LINK_BASE, encodePath, renderUrl, stringUrl } from "./links.ts";
 
 export {
