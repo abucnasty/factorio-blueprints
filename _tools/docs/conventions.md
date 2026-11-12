@@ -42,7 +42,21 @@ names the folder. `slugify` in the core is the implementation.
 
 ## Notes file frontmatter
 
-`README.md` in a blueprint folder starts with YAML frontmatter:
+`README.md` in a blueprint folder starts with YAML frontmatter. A new
+blueprint's notes file has only the four keys of
+`_tools/templates/blueprint-notes.md` and an empty body (the frontmatter
+block followed by a single newline):
+
+```yaml
+---
+title: Military Science (240/s)
+authors: [abucnasty]
+version: "1"
+posted: 2026-03-10
+---
+```
+
+The keys, required and optional:
 
 ```yaml
 ---
@@ -52,10 +66,15 @@ version: "3"                        # optional, always a string
 posted: 2026-03-10                  # optional, ISO date
 video: https://youtu.be/...         # optional
 factoriobin: https://factoriobin.com/post/...   # optional
-deprecated: false                   # optional, default false
-previous_paths: []                  # optional, old folder paths, for link redirects
+deprecated: true                    # optional, absent means false
+previous_paths: [old/folder/path]   # optional, old folder paths, for link redirects
 ---
 ```
+
+Optional keys are omitted when they have no value: the owner adds `video`,
+`factoriobin`, `deprecated` or `previous_paths` only when needed, and an
+absent `deprecated` means false. The body below the frontmatter is free
+notes and may be empty.
 
 Unknown keys are preserved by every tool, and so are key order, comments
 and the notes body: tools rewrite only the lines of the keys they change.
