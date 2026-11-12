@@ -72,6 +72,16 @@ previous_paths: [old/folder/path]   # optional, old folder paths, for link redir
 ---
 ```
 
+Generated keys, written by the plugin from `blueprint.json` and
+overwritten each time (do not edit them; `index.json` computes its own):
+
+```yaml
+entities: 1234                # blueprints and books, even when 0
+tiles: 560                    # omitted when 0
+blueprints: 12                # books only, at every depth
+factorio_version: "2.1.24"    # the game version that saved the blueprint
+```
+
 Optional keys are omitted when they have no value: the owner adds `video`,
 `factoriobin`, `deprecated` or `previous_paths` only when needed, and an
 absent `deprecated` means false. The body below the frontmatter is free
@@ -111,8 +121,8 @@ marker lines:
   items (any indentation) each ending in a link to an http(s) URL ending in
   `.txt`, as `- [label](url)` or `- label ([book](url))`. It replaces that,
   whatever base URL or folder path it was written with, and never changes
-  anything below it. Import, Render preview and "Refresh generated blocks in
-  all notes" write it; `generatedBlockLines` and `applyGeneratedBlock` in the
+  anything below it. Import, Render preview and "Refresh generated content
+  in all notes" write it; `generatedBlockLines` and `applyGeneratedBlock` in the
   core are the implementation.
 
 ### Render state
