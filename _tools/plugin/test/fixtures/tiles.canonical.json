@@ -1,0 +1,29 @@
+{
+  "blueprint": {
+    "entities": [
+      {"entity_number":1,"name":"steel-chest","position":{"x":1.5,"y":1.5}}
+    ],
+    "icons": [
+      {
+        "index": 1,
+        "signal": {
+          "name": "refined-concrete"
+        }
+      }
+    ],
+    "item": "blueprint",
+    "label": "Concrete pad",
+    "tiles": [
+      {"name":"refined-concrete","position":{"x":0,"y":0}},
+      {"name":"refined-concrete","position":{"x":1,"y":0}},
+      {"name":"refined-concrete","position":{"x":2,"y":0}},
+      {"name":"refined-concrete","position":{"x":0,"y":1}},
+      {"name":"refined-concrete","position":{"x":1,"y":1}},
+      {"name":"refined-concrete","position":{"x":2,"y":1}},
+      {"name":"refined-concrete","position":{"x":0,"y":2}},
+      {"name":"refined-concrete","position":{"x":1,"y":2}},
+      {"name":"refined-concrete","position":{"x":2,"y":2}}
+    ],
+    "version": 562949958402048
+  }
+}

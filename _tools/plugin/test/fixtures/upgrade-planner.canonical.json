@@ -1,0 +1,33 @@
+{
+  "upgrade_planner": {
+    "item": "upgrade-planner",
+    "label": "Belts to turbo",
+    "settings": {
+      "mappers": [
+        {
+          "from": {
+            "name": "transport-belt",
+            "type": "entity"
+          },
+          "index": 0,
+          "to": {
+            "name": "turbo-transport-belt",
+            "type": "entity"
+          }
+        },
+        {
+          "from": {
+            "name": "fast-transport-belt",
+            "type": "entity"
+          },
+          "index": 1,
+          "to": {
+            "name": "turbo-transport-belt",
+            "type": "entity"
+          }
+        }
+      ]
+    },
+    "version": 562949958402048
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "blueprint_book": {
+    "active_index": 0,
+    "blueprints": [
+      {
+        "blueprint": {
+          "entities": [
+            {"entity_number":1,"name":"steel-chest","position":{"x":1.5,"y":1.5}}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "refined-concrete"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "Concrete pad",
+          "tiles": [
+            {"name":"refined-concrete","position":{"x":0,"y":0}},
+            {"name":"refined-concrete","position":{"x":1,"y":0}},
+            {"name":"refined-concrete","position":{"x":2,"y":0}},
+            {"name":"refined-concrete","position":{"x":0,"y":1}},
+            {"name":"refined-concrete","position":{"x":1,"y":1}},
+            {"name":"refined-concrete","position":{"x":2,"y":1}},
+            {"name":"refined-concrete","position":{"x":0,"y":2}},
+            {"name":"refined-concrete","position":{"x":1,"y":2}},
+            {"name":"refined-concrete","position":{"x":2,"y":2}}
+          ],
+          "version": 562949958402048
+        },
+        "index": 0
+      },
+      {
+        "blueprint_book": {
+          "active_index": 0,
+          "blueprints": [
+            {
+              "blueprint": {
+                "entities": [
+                  {"control_behavior":{"use_colors":true},"entity_number":1,"name":"small-lamp","position":{"x":0.5,"y":0.5}},
+                  {"entity_number":2,"name":"small-lamp","position":{"x":2.5,"y":0.5}},
+                  {"direction":4,"entity_number":3,"name":"constant-combinator","player_description":"","position":{"x":1.5,"y":2.5}},
+                  {"entity_number":4,"name":"medium-electric-pole","position":{"x":1.5,"y":0.5}}
+                ],
+                "icons": [
+                  {
+                    "index": 1,
+                    "signal": {
+                      "name": "small-lamp"
+                    }
+                  }
+                ],
+                "item": "blueprint",
+                "label": "Wired lamps",
+                "schedules": [
+                  {"locomotives":[5],"schedule":{"group":"","records":[{"station":"Iron pickup","wait_conditions":[{"compare_type":"or","type":"full"}]}]}}
+                ],
+                "stock_connections": [
+                  {"front":6,"stock":5}
+                ],
+                "version": 562949958402048,
+                "wires": [
+                  [1,1,3,1],
+                  [2,1,3,1],
+                  [1,5,4,5],
+                  [2,5,4,5]
+                ]
+              },
+              "index": 0
+            },
+            {
+              "deconstruction_planner": {
+                "item": "deconstruction-planner",
+                "label": "Trees only",
+                "settings": {
+                  "tree_rock_only": true
+                },
+                "version": 562949958402048
+              },
+              "index": 1
+            }
+          ],
+          "item": "blueprint-book",
+          "label": "Inner book",
+          "version": 562949958402048
+        },
+        "index": 1
+      },
+      {
+        "index": 2,
+        "upgrade_planner": {
+          "item": "upgrade-planner",
+          "label": "Belts to turbo",
+          "settings": {
+            "mappers": [
+              {
+                "from": {
+                  "name": "transport-belt",
+                  "type": "entity"
+                },
+                "index": 0,
+                "to": {
+                  "name": "turbo-transport-belt",
+                  "type": "entity"
+                }
+              },
+              {
+                "from": {
+                  "name": "fast-transport-belt",
+                  "type": "entity"
+                },
+                "index": 1,
+                "to": {
+                  "name": "turbo-transport-belt",
+                  "type": "entity"
+                }
+              }
+            ]
+          },
+          "version": 562949958402048
+        }
+      }
+    ],
+    "description": "- designed by abucnasty",
+    "icons": [
+      {
+        "index": 1,
+        "signal": {
+          "name": "military-science-pack",
+          "quality": "uncommon"
+        }
+      }
+    ],
+    "item": "blueprint-book",
+    "label": "[item=military-science-pack,quality=uncommon] (240/s) V3",
+    "version": 562949958402048
+  }
+}
