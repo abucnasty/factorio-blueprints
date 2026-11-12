@@ -1,0 +1,27 @@
+# Obsidian per-machine state: open tabs, layout, caches, graph view tweaks.
+.obsidian/workspace*.json
+.obsidian/cache
+.obsidian/graph.json
+.trash/
+
+# obsidian-git is installed per machine from the community plugin browser.
+# Keep its binaries out of git but commit its shared settings (data.json).
+.obsidian/plugins/obsidian-git/*
+!.obsidian/plugins/obsidian-git/data.json
+
+# OS junk
+.DS_Store
+._*
+Thumbs.db
+ehthumbs.db
+desktop.ini
+*~
+
+# Tooling and build scratch
+node_modules/
+*.log
+*.tsbuildinfo
+__pycache__/
+.venv/
+.wrangler/
+.dev.vars

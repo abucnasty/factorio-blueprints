@@ -1,0 +1,14 @@
+{
+  "autoPullOnBoot": true,
+  "autoPullInterval": 10,
+  "autoSaveInterval": 2,
+  "autoBackupAfterFileChange": true,
+  "differentIntervalCommitAndPush": false,
+  "pullBeforePush": true,
+  "disablePush": false,
+  "syncMethod": "merge",
+  "commitMessage": "sync edits from obsidian",
+  "autoCommitMessage": "sync edits from obsidian",
+  "listChangedFilesInMessageBody": true,
+  "disablePopupsForNoChanges": true
+}
