@@ -35,33 +35,44 @@ async function assertNothingRunning(work) {
     for (const pid of pids) assert.equal(alive(pid), false, `process ${pid} is still running`);
 }
 
-test("a book renders one image per blueprint, numbered in book order, and the game is closed", async t => {
+test("a book renders one image per blueprint at its slot path, and the game is closed", async t => {
     const env = await setup(t);
     const input = path.join(env.dir, "blueprint.json");
     const book = sampleBook();
     book.blueprint_book.blueprints.push({ index: 6, blueprint: row("unplaceable", 2, 0, "fake-unplaceable-thing") });
     await fs.writeFile(input, JSON.stringify(book, null, 2));
     await fs.mkdir(env.out, { recursive: true });
-    for (const stale of ["9.jpg", "5.jpg", "notes.txt"]) await fs.writeFile(path.join(env.out, stale), "old");
+    // stale render images (also nested), and files that are not render images and must stay
+    for (const file of ["9.jpg", "5.jpg", "7/1.jpg", "7/2/0.jpg", "notes.txt", "cover.jpg", "extra/0.jpg", "2/notes.md"]) {
+        await fs.mkdir(path.dirname(path.join(env.out, file)), { recursive: true });
+        await fs.writeFile(path.join(env.out, file), "old");
+    }
     const messages = [];
     const report = await render({ ...options(env), input }, message => messages.push(message));
 
-    // 0 A, 1 B, 2 C, 3 D render; 4 is tiles only (the fake builds no tiles), 5 is empty, 6 cannot be placed
-    assert.deepEqual(report.images.map(image => [image.number, image.label]), [[0, "A"], [1, "B"], [2, "C"], [3, "D"]]);
-    assert.deepEqual(report.without_image.map(item => [item.number, item.reason]), [
-        [5, "empty blueprint"], [4, "nothing of it could be built (tried ordinary, platform)"],
-        [6, "nothing of it could be built (tried ordinary, platform)"],
+    // A, B, C, D render; 4 is tiles only (the fake builds no tiles), 5 is empty, 6 cannot be placed
+    assert.equal(report.schema, 2);
+    assert.equal(report.only, null);
+    assert.deepEqual(report.images.map(image => [image.path, image.file, image.label]), [["0", "0.jpg", "A"], ["2/0", "2/0.jpg", "B"], ["2/1", "2/1.jpg", "C"], ["3", "3.jpg", "D"]]);
+    assert.deepEqual(report.without_image.map(item => [item.path, item.file, item.reason]), [
+        ["4", "4.jpg", "nothing of it could be built (tried ordinary, platform)"], ["5", "5.jpg", "empty blueprint"],
+        ["6", "6.jpg", "nothing of it could be built (tried ordinary, platform)"],
     ]);
-    assert.deepEqual(report.without_image.find(item => item.number === 6).attempts.map(attempt => attempt.strategy), ["ordinary", "platform"]);
+    assert.deepEqual(report.without_image.find(item => item.path === "6").attempts.map(attempt => attempt.strategy), ["ordinary", "platform"]);
     assert.ok(report.images.every(image => image.strategy === "ordinary"));
     // the plain log has the counts and every problem, not only --json
     assert.ok(messages.includes("  [ordinary] built 0 entities, 0 tiles; failed: none; missing: 2× fake-unplaceable-thing"), messages.join("\n"));
     assert.ok(messages.some(line => line.startsWith("  [ordinary] built 3 entities, 0 tiles; failed: none; missing: none")));
-    assert.deepEqual(report.without_image.find(item => item.number === 6).missing, { "fake-unplaceable-thing": 2 });
-    assert.deepEqual(report.skipped.map(item => item.kind), ["upgrade_planner", "deconstruction_planner"]);
-    assert.deepEqual((await fs.readdir(env.out)).sort(), ["0.jpg", "1.jpg", "2.jpg", "3.jpg", "notes.txt"]);
-    assert.deepEqual(report.removed.sort(), ["5.jpg", "9.jpg"]);
-    const meta = await sharp(path.join(env.out, "2.jpg")).metadata();
+    assert.deepEqual(report.without_image.find(item => item.path === "6").missing, { "fake-unplaceable-thing": 2 });
+    assert.deepEqual(report.skipped.map(item => item.kind), ["upgrade-planner", "deconstruction-planner"]);
+    assert.deepEqual((await fs.readdir(env.out, { recursive: true })).sort(),
+        ["0.jpg", "2", "2/0.jpg", "2/1.jpg", "2/notes.md", "3.jpg", "cover.jpg", "extra", "extra/0.jpg", "notes.txt"]);
+    // stale render images are gone, nested ones too, and the slot folders they leave empty
+    assert.deepEqual(report.removed, ["5.jpg", "7/1.jpg", "7/2/0.jpg", "9.jpg"]);
+    assert.ok(messages.includes(`Removed stale ${path.join(env.out, "7", "1.jpg")}`));
+    assert.ok(messages.includes(`Wrote ${path.join(env.out, "2", "1.jpg")} (${report.images[2].width}×${report.images[2].height})`));
+    assert.ok(messages.some(line => line.startsWith('Blueprint 2/1 "C"')), messages.join("\n"));
+    const meta = await sharp(path.join(env.out, "2", "1.jpg")).metadata();
     assert.equal(meta.format, "jpeg");
     assert.equal(meta.width, report.images[2].width);
     // C is 3 machines in a row, which the fake reports as a 7 × 1 tile area; plus 2 tiles of margin each side
@@ -90,7 +101,7 @@ test("a space platform blueprint is built on a platform first; others fall back 
     await fs.writeFile(input, JSON.stringify({ blueprint_book: { blueprints: [{ index: 0, blueprint: ship }, { index: 1, blueprint: row("plain", 1) }] } }));
     const messages = [];
     const report = await render({ ...options(env), input }, message => messages.push(message));
-    assert.deepEqual(report.images.map(image => [image.number, image.strategy, image.attempts.length]), [[0, "platform", 1], [1, "ordinary", 1]]);
+    assert.deepEqual(report.images.map(image => [image.path, image.strategy, image.attempts.length]), [["0", "platform", 1], ["1", "ordinary", 1]]);
     assert.ok(messages.some(line => line.startsWith("  space platform blueprint: thruster is platform only; foundation tiles; trying platform, then ordinary")), messages.join("\n"));
     assert.deepEqual(report.images[0].missing, { "steel-chest": 2 });
     assert.ok(messages.some(line => line.startsWith("  [platform] problem: steel-chest cannot be built here: it needs gravity")), messages.join("\n"));
@@ -106,7 +117,7 @@ test("the platform ship fixture renders on a platform", async t => {
     const env = await setup(t);
     const input = new URL("./fixtures/platform-ship.json", import.meta.url).pathname;
     const report = await render({ ...options(env), input }, () => {});
-    assert.deepEqual(report.images.map(image => [image.number, image.strategy]), [[0, "platform"]]);
+    assert.deepEqual(report.images.map(image => [image.path, image.file, image.strategy]), [["", "0.jpg", "platform"]]);
     // a ship with a hub is built on a real space platform
     const shots = (await fs.readFile(path.join(env.work, "server", "screenshots.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
     assert.deepEqual(shots.map(shot => shot.surface), ["platform-1"]);
@@ -146,7 +157,7 @@ test("a blueprint the game refuses completely gets the diagnosis matrix, and the
     const log = await fs.readFile(path.join(report.work_dir, "render.log"), "utf8");
     assert.match(log, /\[ordinary\] problem: build_blueprint placed no ghosts/);
     assert.match(log, /\[diagnose\] can_place_entity thruster/);
-    assert.match(log, /No image for blueprint 0/);
+    assert.match(log, /No image for blueprint \(single blueprint\) "x"/);
     const saved = JSON.parse(await fs.readFile(path.join(report.work_dir, "report.json"), "utf8"));
     assert.equal(saved.without_image[0].diagnosis.experiments[0].entity_ghosts, 0);
     assert.ok(messages.includes(`Run log: ${path.join(report.work_dir, "render.log")}`));
@@ -281,12 +292,39 @@ test("the command line: exit codes, --json report, --list", async t => {
 
     const listed = await run(["--input", input, "--list", "--json", "--config", config]);
     assert.equal(listed.code, 0, listed.stderr);
-    assert.deepEqual(JSON.parse(listed.stdout).blueprints.map(entry => entry.number), [0, 1, 2, 3, 4, 5]);
+    const listing = JSON.parse(listed.stdout);
+    assert.deepEqual(listing.blueprints.map(entry => entry.file), ["0.jpg", "2/0.jpg", "2/1.jpg", "3.jpg", "4.jpg", "5.jpg"]);
+    assert.deepEqual(listing.entries.map(entry => [entry.path, entry.kind]).slice(0, 4), [["", "blueprint-book"], ["0", "blueprint"], ["1", "upgrade-planner"], ["2", "blueprint-book"]]);
+    const plain = await run(["--input", input, "--list", "--config", config]);
+    assert.equal(plain.code, 0, plain.stderr);
+    assert.match(plain.stdout, /^\(root\)  blueprint-book  Main$/m);
+    assert.match(plain.stdout, /^  2\/1  blueprint  C  -> 2\/1\.jpg$/m);
+    assert.match(plain.stdout, /^1  upgrade-planner  \(no label\)$/m);
+    assert.match(plain.stdout, /^5  blueprint  E \(empty\)  -> 5\.jpg \[empty: no image\]$/m);
 
     const rendered = await run(["--input", input, "--out", env.out, "--json", "--config", config, "--work-dir", env.work]);
     assert.equal(rendered.code, 2, rendered.stderr); // the empty and tiles-only blueprints have no image
-    assert.deepEqual(JSON.parse(rendered.stdout).images.map(image => image.number), [0, 1, 2, 3]);
-    assert.match(rendered.stderr, /No image for blueprint 5: empty blueprint/);
+    const json = JSON.parse(rendered.stdout);
+    assert.deepEqual(json.images.map(image => [image.path, image.file]), [["0", "0.jpg"], ["2/0", "2/0.jpg"], ["2/1", "2/1.jpg"], ["3", "3.jpg"]]);
+    for (const image of json.images) {
+        for (const key of ["label", "width", "height", "failed", "missing", "problems"]) assert.ok(key in image, `${key} in image`);
+    }
+    assert.match(rendered.stderr, /No image for blueprint 5 "E \(empty\)": empty blueprint/);
+
+    // --only renders just that entry and leaves the other images alone
+    const before = await fs.stat(path.join(env.out, "0.jpg"));
+    await fs.writeFile(path.join(env.out, "2", "9.jpg"), "stale inside the selection");
+    const only = await run(["--input", input, "--out", env.out, "--json", "--config", config, "--only", "2/1,4", "--only", "2", "--work-dir", path.join(env.dir, "work-only")]);
+    assert.equal(only.code, 2, only.stderr); // 4 is tiles only and gets no image
+    const onlyReport = JSON.parse(only.stdout);
+    assert.deepEqual(onlyReport.only, ["2/1", "4", "2"]);
+    assert.deepEqual(onlyReport.images.map(image => image.file), ["2/0.jpg", "2/1.jpg"]);
+    assert.deepEqual(onlyReport.removed, ["2/9.jpg"]);
+    assert.equal((await fs.stat(path.join(env.out, "0.jpg"))).mtimeMs, before.mtimeMs);
+    assert.deepEqual((await fs.readdir(env.out, { recursive: true })).filter(file => file.endsWith(".jpg")).sort(), ["0.jpg", "2/0.jpg", "2/1.jpg", "3.jpg"]);
+    const unknown = await run(["--input", input, "--out", env.out, "--config", config, "--only", "8"]);
+    assert.equal(unknown.code, 1);
+    assert.match(unknown.stderr, /--only 8: no blueprint at this slot path/);
     await assertNothingRunning(env.work);
 
     const failed = await run(["--input", path.join(env.dir, "missing.json"), "--out", env.out, "--config", config]);
