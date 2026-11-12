@@ -49,6 +49,7 @@ Slugs are lowercase ASCII, words joined by `-`, no other punctuation
 rich text icons become their name (`[item=iron-plate]` gives `iron-plate`)
 and other rich text tags are dropped; accents are dropped (`ß` becomes
 `ss`); a rate keeps only its number (`240/s`, `/sec`, `/m`, `/min`, `/h`);
+`%` becomes the word `percent` (`100%` gives `100-percent`);
 any other run of characters that are not ASCII letters or digits is one
 `-`. A label with no ASCII letters or digits gives no slug, and the user
 names the folder. `slugify` in the core is the implementation.

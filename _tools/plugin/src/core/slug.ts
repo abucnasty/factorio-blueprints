@@ -48,7 +48,8 @@ function humanize(name: string): string {
 /**
  * Slug for a title: lowercase ASCII words joined by "-", nothing else.
  * Accents are dropped ("Fußgänger" -> "fussganger"), rates keep only the
- * number ("240/s" -> "240"), and anything else that is not a letter or digit
+ * number ("240/s" -> "240"), "%" is the word "percent" ("100%" -> "100-percent"),
+ * and anything else that is not a letter or digit
  * separates words. May return "" (for example for a label in Chinese).
  */
 export function slugify(title: string): string {
@@ -58,6 +59,7 @@ export function slugify(title: string): string {
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/(\d)\s*\/\s*(?:s|sec|m|min|h)\b/g, "$1")
+    .replace(/%/g, " percent ")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }

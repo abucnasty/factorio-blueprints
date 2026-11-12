@@ -63,7 +63,10 @@ const nested = decodeBlueprintString(fixture("book-nested.txt")).value;
 
 describe("slot folder names", () => {
   test("slot and slug of the plain label, capped at 60 characters", () => {
-    assert.equal(slotFolderName(0, "Any% Patch Sizes"), "0-any-patch-sizes");
+    assert.equal(slotFolderName(0, "Any% Patch Sizes"), "0-any-percent-patch-sizes");
+    assert.equal(slotFolderName(1, "Expansion with %"), "1-expansion-with-percent");
+    assert.equal(slotFolderName(0, "Resource (RYG) %"), "0-resource-ryg-percent");
+    assert.equal(slotFolderName(1, "100% Stone Patch Size"), "1-100-percent-stone-patch-size");
     assert.equal(slotFolderName(6, "[item=stone]480/s"), "6-stone-480");
     assert.equal(slotFolderName(3, "日本語"), "3");
     assert.equal(slotFolderName(3, undefined), "3");

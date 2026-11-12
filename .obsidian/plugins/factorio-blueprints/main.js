@@ -1105,7 +1105,7 @@ function humanize(name) {
   return name.split(/[-_]+/).filter((w) => w !== "").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
 }
 function slugify(title) {
-  return plainLabel(title).replace(/ß/g, "ss").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/(\d)\s*\/\s*(?:s|sec|m|min|h)\b/g, "$1").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return plainLabel(title).replace(/ß/g, "ss").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/(\d)\s*\/\s*(?:s|sec|m|min|h)\b/g, "$1").replace(/%/g, " percent ").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 function isValidSlug(slug) {
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
