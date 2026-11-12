@@ -44,23 +44,27 @@ describe("readNotesMeta", () => {
       authors: ["abucnasty", "yuu"],
       version: "3",
       posted: "2026-03-10",
-      deprecated: false,
       previous_paths: [],
     });
   });
 
   test("empty and null optional fields are absent", () => {
     const meta = readNotesMeta(DEFAULT_NOTES_TEMPLATE);
-    assert.deepStrictEqual(meta, { authors: [], version: "1", deprecated: false, previous_paths: [] });
+    assert.deepStrictEqual(meta, { authors: [], version: "1", previous_paths: [] });
     assert.ok(!("title" in meta) && !("posted" in meta) && !("video" in meta));
-    assert.deepStrictEqual(readNotesMeta('---\ntitle: X\nvideo:\nfactoriobin: ""\ndeprecated:\nprevious_paths:\n---\n'), {
+    assert.deepStrictEqual(readNotesMeta('---\ntitle: X\nvideo:\nfactoriobin: ""\nstatus:\nprevious_paths:\n---\n'), {
       title: "X",
       authors: [],
-      deprecated: false,
       previous_paths: [],
     });
     assert.equal(readNotesMeta('---\ntitle: ""\nversion: 4\nauthors: solo\n---\n').version, "4");
     assert.deepStrictEqual(readNotesMeta("---\nauthors: solo\n---\n").authors, ["solo"]);
+  });
+
+  test("status: one of the four values, else absent", () => {
+    for (const s of ["draft", "public", "deprecated", "unlisted"]) assert.equal(readNotesMeta(`---\nstatus: ${s}\n---\n`).status, s);
+    for (const s of ["Public", "true", "[public]", "hidden"]) assert.equal(readNotesMeta(`---\nstatus: ${s}\n---\n`).status, undefined);
+    assert.equal("deprecated" in readNotesMeta("---\ndeprecated: true\n---\n"), false, "deprecated is no longer read");
   });
 
   test("no frontmatter", () => {
@@ -152,7 +156,6 @@ test("fillNotesTemplate", () => {
     authors: [],
     version: "1",
     posted: "2026-11-12",
-    deprecated: false,
     previous_paths: [],
   });
   assert.equal(out, '---\ntitle: Mall\nauthors: []\nversion: "1"\nposted: 2026-11-12\n---\n');

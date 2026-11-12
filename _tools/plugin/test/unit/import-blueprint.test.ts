@@ -90,7 +90,6 @@ describe("import: create", () => {
       authors: ["abucnasty"],
       version: "1",
       posted: "2026-11-12",
-      deprecated: false,
       previous_paths: [],
     });
     assert.deepStrictEqual(host.commits, [{ folder, message: "add Military Science Pack (240/s) V3" }]);

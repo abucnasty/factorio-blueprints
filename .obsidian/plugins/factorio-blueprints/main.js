@@ -7382,6 +7382,10 @@ function parse(src, reviver, options) {
 }
 
 // src/core/frontmatter.ts
+var BLUEPRINT_STATUSES = ["draft", "public", "deprecated", "unlisted"];
+function isBlueprintStatus(v) {
+  return typeof v === "string" && BLUEPRINT_STATUSES.includes(v);
+}
 var FrontmatterError = class extends Error {
   constructor(message) {
     super(message);
@@ -7427,16 +7431,16 @@ function readNotesMeta(text) {
   const fm = readFrontmatter(text);
   const meta = {
     authors: stringList(fm["authors"]),
-    deprecated: fm["deprecated"] === true,
     previous_paths: stringList(fm["previous_paths"])
   };
   for (const key of ["title", "version", "posted", "video", "factoriobin"]) {
     const v = optionalString(fm[key]);
     if (v !== void 0) meta[key] = v;
   }
+  if (isBlueprintStatus(fm["status"])) meta.status = fm["status"];
   return meta;
 }
-function updateFrontmatter(text, updates) {
+function updateFrontmatter(text, updates, opts = {}) {
   const note = splitFrontmatter(text);
   const yaml = note.yaml ?? "";
   const eol = note.eol;
@@ -7455,12 +7459,13 @@ function updateFrontmatter(text, updates) {
     while (end > start + 1 && /^(?:\s*|#.*)$/.test(lines2[end - 1])) end--;
     edits.push({ key, start, end });
   }
-  edits.sort((a, b) => b.start - a.start);
-  for (const { key, start, end } of edits) {
+  const at = keyLines.find((k) => opts.before?.includes(k.key))?.line;
+  const placed = at === void 0 ? [] : [{ key: "", start: at, end: at }];
+  for (const { key, start, end } of [...edits, ...placed].sort((a, b) => b.start - a.start || b.end - a.end)) {
     const value = updates[key];
-    lines2.splice(start, end - start, ...value === void 0 ? [] : renderPair(key, value));
+    lines2.splice(start, end - start, ...key === "" ? appended : value === void 0 ? [] : renderPair(key, value));
   }
-  lines2.push(...appended);
+  if (at === void 0) lines2.push(...appended);
   const open = note.yaml === void 0 ? "---" + eol : note.open;
   const close = note.yaml === void 0 ? "---" + eol : note.close || "---";
   const out = open + lines2.map((l) => l + eol).join("") + close + note.body;

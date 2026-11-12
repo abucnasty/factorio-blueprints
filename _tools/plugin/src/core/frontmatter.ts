@@ -7,6 +7,18 @@
 
 import { Document, isMap, isScalar, isSeq, parse, parseDocument } from "yaml";
 
+/**
+ * Where a blueprint is published (the root note's `status`; see the
+ * conventions): draft is not published, public is listed, deprecated is
+ * listed behind a switch, unlisted is served but not listed.
+ */
+export const BLUEPRINT_STATUSES = ["draft", "public", "deprecated", "unlisted"] as const;
+export type BlueprintStatus = (typeof BLUEPRINT_STATUSES)[number];
+
+export function isBlueprintStatus(v: unknown): v is BlueprintStatus {
+  return typeof v === "string" && (BLUEPRINT_STATUSES as readonly string[]).includes(v);
+}
+
 export interface NotesMeta {
   title?: string;
   authors: string[];
@@ -14,7 +26,8 @@ export interface NotesMeta {
   posted?: string;
   video?: string;
   factoriobin?: string;
-  deprecated: boolean;
+  /** Absent when the note has none or an unknown value. */
+  status?: BlueprintStatus;
   previous_paths: string[];
 }
 
@@ -87,22 +100,23 @@ export function readNotesMeta(text: string): NotesMeta {
   const fm = readFrontmatter(text);
   const meta: NotesMeta = {
     authors: stringList(fm["authors"]),
-    deprecated: fm["deprecated"] === true,
     previous_paths: stringList(fm["previous_paths"]),
   };
   for (const key of ["title", "version", "posted", "video", "factoriobin"] as const) {
     const v = optionalString(fm[key]);
     if (v !== undefined) meta[key] = v;
   }
+  if (isBlueprintStatus(fm["status"])) meta.status = fm["status"];
   return meta;
 }
 
 /**
  * Set (or with undefined, remove) top-level frontmatter keys. Existing keys
- * keep their position; new keys are added at the end. A note without
+ * keep their position; new keys are added at the end, or with `before`, in
+ * front of the first of those keys the note has. A note without
  * frontmatter gets one.
  */
-export function updateFrontmatter(text: string, updates: Record<string, unknown>): string {
+export function updateFrontmatter(text: string, updates: Record<string, unknown>, opts: { before?: readonly string[] } = {}): string {
   const note = splitFrontmatter(text);
   const yaml = note.yaml ?? "";
   const eol = note.eol;
@@ -124,12 +138,14 @@ export function updateFrontmatter(text: string, updates: Record<string, unknown>
     while (end > start + 1 && /^(?:\s*|#.*)$/.test(lines[end - 1]!)) end--;
     edits.push({ key, start, end });
   }
-  edits.sort((a, b) => b.start - a.start);
-  for (const { key, start, end } of edits) {
+  const at = keyLines.find((k) => opts.before?.includes(k.key))?.line;
+  // At one line, replace or remove the key there before inserting in front of it.
+  const placed = at === undefined ? [] : [{ key: "", start: at, end: at }];
+  for (const { key, start, end } of [...edits, ...placed].sort((a, b) => b.start - a.start || b.end - a.end)) {
     const value = updates[key];
-    lines.splice(start, end - start, ...(value === undefined ? [] : renderPair(key, value)));
+    lines.splice(start, end - start, ...(key === "" ? appended : value === undefined ? [] : renderPair(key, value)));
   }
-  lines.push(...appended);
+  if (at === undefined) lines.push(...appended);
 
   const open = note.yaml === undefined ? "---" + eol : note.open;
   const close = note.yaml === undefined ? "---" + eol : note.close || "---";
