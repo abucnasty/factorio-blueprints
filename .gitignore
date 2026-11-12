@@ -4,6 +4,10 @@
 .obsidian/graph.json
 .trash/
 
+# Appearance is a per-machine choice: the theme and its files stay local.
+.obsidian/appearance.json
+.obsidian/themes/
+
 # obsidian-git is installed per machine from the community plugin browser.
 # Keep its binaries out of git but commit its shared settings (data.json).
 .obsidian/plugins/obsidian-git/*
