@@ -92,6 +92,8 @@ test("a space platform blueprint is built on a platform first; others fall back 
     const report = await render({ ...options(env), input }, message => messages.push(message));
     assert.deepEqual(report.images.map(image => [image.number, image.strategy, image.attempts.length]), [[0, "platform", 1], [1, "ordinary", 1]]);
     assert.ok(messages.some(line => line.startsWith("  space platform blueprint: thruster is platform only; foundation tiles; trying platform, then ordinary")), messages.join("\n"));
+    assert.deepEqual(report.images[0].missing, { "steel-chest": 2 });
+    assert.ok(messages.some(line => line.startsWith("  [platform] problem: steel-chest cannot be built here: it needs gravity")), messages.join("\n"));
     const shots = (await fs.readFile(path.join(env.work, "server", "screenshots.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
     assert.deepEqual(shots.map(shot => shot.surface), ["platform-1", "blueprint-render-1-ordinary"]);
     assert.deepEqual((await fs.readFile(path.join(env.work, "server", "prepared.log"), "utf8")).trim().split("\n"), ["platform-1", "blueprint-render-1-ordinary"]);
