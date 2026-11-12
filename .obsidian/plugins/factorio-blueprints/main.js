@@ -7702,7 +7702,7 @@ async function assembleBook(folder, reader) {
         );
       }
       const nested = await assembleBook(child.path, reader);
-      items.push({ index: child.slot, blueprint_book: nested.blueprint_book });
+      items.push(sortedKeys2({ index: child.slot, blueprint_book: nested.blueprint_book }));
       continue;
     }
     if (await reader.read(joinPath(child.path, BOOK_FILE)) !== void 0) {
@@ -7711,9 +7711,9 @@ async function assembleBook(folder, reader) {
     const found = kindOf(parse2(leafPath, leafText));
     if (!found) throw new Error(`${leafPath} is not a blueprint, book or planner.`);
     const [key, , entryBody] = found;
-    items.push({ index: child.slot, [key]: entryBody });
+    items.push(sortedKeys2({ index: child.slot, [key]: entryBody }));
   }
-  return { blueprint_book: { ...body, blueprints: items } };
+  return { blueprint_book: sortedKeys2({ ...body, blueprints: items }) };
 }
 async function slotFolders(folder, reader) {
   const out = [];
@@ -7745,6 +7745,9 @@ function kindOf(value) {
     if (isObject3(body)) return [key, kind, body];
   }
   return void 0;
+}
+function sortedKeys2(obj) {
+  return Object.fromEntries(Object.entries(obj).sort(([a], [b]) => compareCodePoints(a, b)));
 }
 function isObject3(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
