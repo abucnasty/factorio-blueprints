@@ -8,10 +8,19 @@ vault: blueprints are pasted in and copied out as normal blueprint strings.
 
 ## Status
 
-The vault, its sync and the blueprint plugin (import from the clipboard,
-copy back as a string) work. Preview renders and live links are not built
-yet, and there are no blueprints yet; the catalog still lives in
-[factorio-benchmarks](https://github.com/abucnasty/factorio-benchmarks/blob/master/docs/blueprints/README.md).
+The catalog is imported: 28 blueprints, each with its version history.
+Every blueprint has a live link that returns its string, for the latest
+version or any earlier one:
+
+```
+https://blueprints.abucnasty.dev/<folder path>.txt
+https://blueprints.abucnasty.dev/<folder path>@<commit>.txt
+https://blueprints.abucnasty.dev/index.json
+```
+
+The Obsidian plugin imports a string from the clipboard and copies one back.
+The render tool makes preview images from the real game; no previews are
+committed yet.
 
 ## Layout
 
@@ -21,8 +30,11 @@ _tools/docs/                setup and conventions
 _tools/setup/               per-machine setup script
 _tools/templates/           note templates
 _tools/plugin/              blueprint plugin source and the shared core library
+_tools/render/              in-game preview renderer
+_tools/ci/                  catalog validation and index builder
+_tools/link-worker/         serves the live links
 _tools/lfs-worker/          Git LFS server for render images
-<category>/.../<slug>/      one folder per blueprint (none yet)
+<category>/.../<slug>/      one folder per blueprint
   README.md                 notes, with metadata in the frontmatter
   blueprint.json            the decoded blueprint
   renders/<n>.jpg           preview images (Git LFS)
