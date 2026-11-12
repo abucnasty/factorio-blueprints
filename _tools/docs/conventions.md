@@ -57,7 +57,7 @@ names the folder. `slugify` in the core is the implementation.
 ## Notes file frontmatter
 
 `README.md` in a blueprint folder starts with YAML frontmatter. A new
-blueprint's notes file has only the four keys of
+blueprint's notes file has only the five keys of
 `_tools/templates/blueprint-notes.md` and an empty body (the frontmatter
 block followed by a single newline):
 
@@ -67,6 +67,7 @@ title: Military Science (240/s)
 authors: [abucnasty]
 version: "1"
 posted: 2026-03-10
+status: draft
 ---
 ```
 
@@ -80,10 +81,28 @@ version: "3"                        # optional, always a string
 posted: 2026-03-10                  # optional, ISO date
 video: https://youtu.be/...         # optional
 factoriobin: https://factoriobin.com/post/...   # optional
-deprecated: true                    # optional, absent means false
+status: public                      # draft, public, deprecated or unlisted; absent means draft
 previous_paths: [old/folder/path]   # optional, old folder paths, for link redirects
 ---
 ```
+
+`status` says where the blueprint is published:
+
+| status | website | live link |
+|---|---|---|
+| `draft` | not shown | does not work |
+| `public` | listed | works |
+| `deprecated` | listed behind "Show deprecated" | works |
+| `unlisted` | opens by its address only, not listed or searched | works |
+
+A draft is not in `index.json`, except one that was published before: it
+keeps its entry exactly as at the last commit before it became a draft
+(string, notes, renders, history), and changes saved as a draft never
+become versions. Making it public again makes its current string a new
+version. In an expanded book only the root book's note has a status; slot
+folders' notes have none. `status` replaced the `deprecated: true`
+checkbox: a note may not have `deprecated`. Commits from before any note
+had a `status` key count as published (`deprecated: true` as deprecated).
 
 Generated keys, written by the plugin from `blueprint.json` and
 overwritten each time (do not edit them; `index.json` has the same numbers
@@ -97,8 +116,7 @@ factorio_version: "2.1.24"    # the game version that saved the blueprint
 ```
 
 Optional keys are omitted when they have no value: the owner adds `video`,
-`factoriobin`, `deprecated` or `previous_paths` only when needed, and an
-absent `deprecated` means false. The body below the frontmatter is free
+`factoriobin` or `previous_paths` only when needed. The body below the frontmatter is free
 notes and may be empty.
 
 Unknown keys are preserved by every tool, and so are key order, comments
@@ -206,7 +224,8 @@ bytes. There is exactly one implementation of the writer, in
 
 - `<path>.txt`: the latest blueprint string.
 - `<path>@<sha>.txt`: the string as of a commit that changed its
-  `blueprint.json` (full SHA, or a unique prefix of at least 7).
+  `blueprint.json` while published, or made it public again with a new
+  string (full SHA, or a unique prefix of at least 7).
 - `<path>/<slot path>.txt` and `<path>/<slot path>@<sha>.txt`: one entry
   of a book (a blueprint, nested book or planner), alone.
 - `<path>/renders/<file path>`: a render image.
