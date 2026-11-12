@@ -896,10 +896,10 @@ function writeValue(value, indent, compactItems) {
   if (isPlainObject(value)) {
     const keys = sortedKeys(value).filter((k) => value[k] !== void 0);
     if (keys.length === 0) return "{}";
-    const lines = keys.map(
+    const lines2 = keys.map(
       (k) => inner + JSON.stringify(k) + ": " + writeValue(value[k], inner, COMPACT_ROW_KEYS.has(k))
     );
-    return "{\n" + lines.join(",\n") + "\n" + indent + "}";
+    return "{\n" + lines2.join(",\n") + "\n" + indent + "}";
   }
   return scalar(value);
 }
@@ -1436,7 +1436,7 @@ var Directives = class _Directives {
     return tag[0] === "!" ? tag : `!<${tag}>`;
   }
   toString(doc) {
-    const lines = this.yaml.explicit ? [`%YAML ${this.yaml.version || "1.2"}`] : [];
+    const lines2 = this.yaml.explicit ? [`%YAML ${this.yaml.version || "1.2"}`] : [];
     const tagEntries = Object.entries(this.tags);
     let tagNames;
     if (doc && tagEntries.length > 0 && isNode(doc.contents)) {
@@ -1452,9 +1452,9 @@ var Directives = class _Directives {
       if (handle === "!!" && prefix === "tag:yaml.org,2002:")
         continue;
       if (!doc || tagNames.some((tn) => tn.startsWith(prefix)))
-        lines.push(`%TAG ${handle} ${prefix}`);
+        lines2.push(`%TAG ${handle} ${prefix}`);
     }
-    return lines.join("\n");
+    return lines2.join("\n");
   }
 };
 Directives.defaultYaml = { explicit: false, version: "1.2" };
@@ -2739,22 +2739,22 @@ function stringifyBlockCollection({ comment, items }, ctx, { blockItemPrefix, fl
   const { indent, options: { commentString } } = ctx;
   const itemCtx = Object.assign({}, ctx, { indent: itemIndent, type: null });
   let chompKeep = false;
-  const lines = [];
+  const lines2 = [];
   for (let i2 = 0; i2 < items.length; ++i2) {
     const item = items[i2];
     let comment2 = null;
     if (isNode(item)) {
       if (!chompKeep && item.spaceBefore)
-        lines.push("");
-      addCommentBefore(ctx, lines, item.commentBefore, chompKeep);
+        lines2.push("");
+      addCommentBefore(ctx, lines2, item.commentBefore, chompKeep);
       if (item.comment)
         comment2 = item.comment;
     } else if (isPair(item)) {
       const ik = isNode(item.key) ? item.key : null;
       if (ik) {
         if (!chompKeep && ik.spaceBefore)
-          lines.push("");
-        addCommentBefore(ctx, lines, ik.commentBefore, chompKeep);
+          lines2.push("");
+        addCommentBefore(ctx, lines2, ik.commentBefore, chompKeep);
       }
     }
     chompKeep = false;
@@ -2763,15 +2763,15 @@ function stringifyBlockCollection({ comment, items }, ctx, { blockItemPrefix, fl
       str2 += lineComment(str2, itemIndent, commentString(comment2));
     if (chompKeep && comment2)
       chompKeep = false;
-    lines.push(blockItemPrefix + str2);
+    lines2.push(blockItemPrefix + str2);
   }
   let str;
-  if (lines.length === 0) {
+  if (lines2.length === 0) {
     str = flowChars.start + flowChars.end;
   } else {
-    str = lines[0];
-    for (let i2 = 1; i2 < lines.length; ++i2) {
-      const line = lines[i2];
+    str = lines2[0];
+    for (let i2 = 1; i2 < lines2.length; ++i2) {
+      const line = lines2[i2];
       str += line ? `
 ${indent}${line}` : "\n";
     }
@@ -2794,22 +2794,22 @@ function stringifyFlowCollection({ items }, ctx, { flowChars, itemIndent }) {
   });
   let reqNewline = false;
   let linesAtValue = 0;
-  const lines = [];
+  const lines2 = [];
   for (let i2 = 0; i2 < items.length; ++i2) {
     const item = items[i2];
     let comment = null;
     if (isNode(item)) {
       if (item.spaceBefore)
-        lines.push("");
-      addCommentBefore(ctx, lines, item.commentBefore, false);
+        lines2.push("");
+      addCommentBefore(ctx, lines2, item.commentBefore, false);
       if (item.comment)
         comment = item.comment;
     } else if (isPair(item)) {
       const ik = isNode(item.key) ? item.key : null;
       if (ik) {
         if (ik.spaceBefore)
-          lines.push("");
-        addCommentBefore(ctx, lines, ik.commentBefore, false);
+          lines2.push("");
+        addCommentBefore(ctx, lines2, ik.commentBefore, false);
         if (ik.comment)
           reqNewline = true;
       }
@@ -2826,12 +2826,12 @@ function stringifyFlowCollection({ items }, ctx, { flowChars, itemIndent }) {
     if (comment)
       reqNewline = true;
     let str = stringify(item, itemCtx, () => comment = null);
-    reqNewline || (reqNewline = lines.length > linesAtValue || str.includes("\n"));
+    reqNewline || (reqNewline = lines2.length > linesAtValue || str.includes("\n"));
     if (i2 < items.length - 1) {
       str += ",";
     } else if (ctx.options.trailingComma) {
       if (ctx.options.lineWidth > 0) {
-        reqNewline || (reqNewline = lines.reduce((sum, line) => sum + line.length + 2, 2) + (str.length + 2) > ctx.options.lineWidth);
+        reqNewline || (reqNewline = lines2.reduce((sum, line) => sum + line.length + 2, 2) + (str.length + 2) > ctx.options.lineWidth);
       }
       if (reqNewline) {
         str += ",";
@@ -2839,35 +2839,35 @@ function stringifyFlowCollection({ items }, ctx, { flowChars, itemIndent }) {
     }
     if (comment)
       str += lineComment(str, itemIndent, commentString(comment));
-    lines.push(str);
-    linesAtValue = lines.length;
+    lines2.push(str);
+    linesAtValue = lines2.length;
   }
   const { start, end } = flowChars;
-  if (lines.length === 0) {
+  if (lines2.length === 0) {
     return start + end;
   } else {
     if (!reqNewline) {
-      const len = lines.reduce((sum, line) => sum + line.length + 2, 2);
+      const len = lines2.reduce((sum, line) => sum + line.length + 2, 2);
       reqNewline = ctx.options.lineWidth > 0 && len > ctx.options.lineWidth;
     }
     if (reqNewline) {
       let str = start;
-      for (const line of lines)
+      for (const line of lines2)
         str += line ? `
 ${indentStep}${indent}${line}` : "\n";
       return `${str}
 ${indent}${end}`;
     } else {
-      return `${start}${fcPadding}${lines.join(" ")}${fcPadding}${end}`;
+      return `${start}${fcPadding}${lines2.join(" ")}${fcPadding}${end}`;
     }
   }
 }
-function addCommentBefore({ indent, options: { commentString } }, lines, comment, chompKeep) {
+function addCommentBefore({ indent, options: { commentString } }, lines2, comment, chompKeep) {
   if (comment && chompKeep)
     comment = comment.replace(/^\n+/, "");
   if (comment) {
     const ic = indentComment(commentString(comment), indent);
-    lines.push(ic.trimStart());
+    lines2.push(ic.trimStart());
   }
 }
 
@@ -3383,11 +3383,11 @@ var binary = {
     if (type !== Scalar.QUOTE_DOUBLE) {
       const lineWidth = Math.max(ctx.options.lineWidth - ctx.indent.length, ctx.options.minContentWidth);
       const n = Math.ceil(str.length / lineWidth);
-      const lines = new Array(n);
+      const lines2 = new Array(n);
       for (let i2 = 0, o = 0; i2 < n; ++i2, o += lineWidth) {
-        lines[i2] = str.substr(o, lineWidth);
+        lines2[i2] = str.substr(o, lineWidth);
       }
-      str = lines.join(type === Scalar.BLOCK_LITERAL ? "\n" : " ");
+      str = lines2.join(type === Scalar.BLOCK_LITERAL ? "\n" : " ");
     }
     return stringifyString({ comment, type, value: str }, ctx, onComment, onChompKeep);
   }
@@ -3934,35 +3934,35 @@ var Schema = class _Schema {
 
 // node_modules/yaml/browser/dist/stringify/stringifyDocument.js
 function stringifyDocument(doc, options) {
-  const lines = [];
+  const lines2 = [];
   let hasDirectives = options.directives === true;
   if (options.directives !== false && doc.directives) {
     const dir = doc.directives.toString(doc);
     if (dir) {
-      lines.push(dir);
+      lines2.push(dir);
       hasDirectives = true;
     } else if (doc.directives.docStart)
       hasDirectives = true;
   }
   if (hasDirectives)
-    lines.push("---");
+    lines2.push("---");
   const ctx = createStringifyContext(doc, options);
   const { commentString } = ctx.options;
   if (doc.commentBefore) {
-    if (lines.length !== 1)
-      lines.unshift("");
+    if (lines2.length !== 1)
+      lines2.unshift("");
     const cs = commentString(doc.commentBefore);
-    lines.unshift(indentComment(cs, ""));
+    lines2.unshift(indentComment(cs, ""));
   }
   let chompKeep = false;
   let contentComment = null;
   if (doc.contents) {
     if (isNode(doc.contents)) {
       if (doc.contents.spaceBefore && hasDirectives)
-        lines.push("");
+        lines2.push("");
       if (doc.contents.commentBefore) {
         const cs = commentString(doc.contents.commentBefore);
-        lines.push(indentComment(cs, ""));
+        lines2.push(indentComment(cs, ""));
       }
       ctx.forceBlockIndent = !!doc.comment;
       contentComment = doc.contents.comment;
@@ -3971,36 +3971,36 @@ function stringifyDocument(doc, options) {
     let body = stringify(doc.contents, ctx, () => contentComment = null, onChompKeep);
     if (contentComment)
       body += lineComment(body, "", commentString(contentComment));
-    if ((body[0] === "|" || body[0] === ">") && lines[lines.length - 1] === "---") {
-      lines[lines.length - 1] = `--- ${body}`;
+    if ((body[0] === "|" || body[0] === ">") && lines2[lines2.length - 1] === "---") {
+      lines2[lines2.length - 1] = `--- ${body}`;
     } else
-      lines.push(body);
+      lines2.push(body);
   } else {
-    lines.push(stringify(doc.contents, ctx));
+    lines2.push(stringify(doc.contents, ctx));
   }
   if (doc.directives?.docEnd) {
     if (doc.comment) {
       const cs = commentString(doc.comment);
       if (cs.includes("\n")) {
-        lines.push("...");
-        lines.push(indentComment(cs, ""));
+        lines2.push("...");
+        lines2.push(indentComment(cs, ""));
       } else {
-        lines.push(`... ${cs}`);
+        lines2.push(`... ${cs}`);
       }
     } else {
-      lines.push("...");
+      lines2.push("...");
     }
   } else {
     let dc = doc.comment;
     if (dc && chompKeep)
       dc = dc.replace(/^\n+/, "");
     if (dc) {
-      if ((!chompKeep || contentComment) && lines[lines.length - 1] !== "")
-        lines.push("");
-      lines.push(indentComment(commentString(dc), ""));
+      if ((!chompKeep || contentComment) && lines2[lines2.length - 1] !== "")
+        lines2.push("");
+      lines2.push(indentComment(commentString(dc), ""));
     }
   }
-  return lines.join("\n") + "\n";
+  return lines2.join("\n") + "\n";
 }
 
 // node_modules/yaml/browser/dist/doc/Document.js
@@ -4949,17 +4949,17 @@ function resolveBlockScalar(ctx, scalar2, onError) {
   if (!header)
     return { value: "", type: null, comment: "", range: [start, start, start] };
   const type = header.mode === ">" ? Scalar.BLOCK_FOLDED : Scalar.BLOCK_LITERAL;
-  const lines = scalar2.source ? splitLines(scalar2.source) : [];
-  let chompStart = lines.length;
-  for (let i2 = lines.length - 1; i2 >= 0; --i2) {
-    const content = lines[i2][1];
+  const lines2 = scalar2.source ? splitLines(scalar2.source) : [];
+  let chompStart = lines2.length;
+  for (let i2 = lines2.length - 1; i2 >= 0; --i2) {
+    const content = lines2[i2][1];
     if (content === "" || content === "\r")
       chompStart = i2;
     else
       break;
   }
   if (chompStart === 0) {
-    const value2 = header.chomp === "+" && lines.length > 0 ? "\n".repeat(Math.max(1, lines.length - 1)) : "";
+    const value2 = header.chomp === "+" && lines2.length > 0 ? "\n".repeat(Math.max(1, lines2.length - 1)) : "";
     let end2 = start + header.length;
     if (scalar2.source)
       end2 += scalar2.source.length;
@@ -4969,7 +4969,7 @@ function resolveBlockScalar(ctx, scalar2, onError) {
   let offset = scalar2.offset + header.length;
   let contentStart = 0;
   for (let i2 = 0; i2 < chompStart; ++i2) {
-    const [indent, content] = lines[i2];
+    const [indent, content] = lines2[i2];
     if (content === "" || content === "\r") {
       if (header.indent === 0 && indent.length > trimIndent)
         trimIndent = indent.length;
@@ -4989,17 +4989,17 @@ function resolveBlockScalar(ctx, scalar2, onError) {
     }
     offset += indent.length + content.length + 1;
   }
-  for (let i2 = lines.length - 1; i2 >= chompStart; --i2) {
-    if (lines[i2][0].length > trimIndent)
+  for (let i2 = lines2.length - 1; i2 >= chompStart; --i2) {
+    if (lines2[i2][0].length > trimIndent)
       chompStart = i2 + 1;
   }
   let value = "";
   let sep = "";
   let prevMoreIndented = false;
   for (let i2 = 0; i2 < contentStart; ++i2)
-    value += lines[i2][0].slice(trimIndent) + "\n";
+    value += lines2[i2][0].slice(trimIndent) + "\n";
   for (let i2 = contentStart; i2 < chompStart; ++i2) {
-    let [indent, content] = lines[i2];
+    let [indent, content] = lines2[i2];
     offset += indent.length + content.length + 1;
     const crlf = content[content.length - 1] === "\r";
     if (crlf)
@@ -5036,8 +5036,8 @@ function resolveBlockScalar(ctx, scalar2, onError) {
     case "-":
       break;
     case "+":
-      for (let i2 = chompStart; i2 < lines.length; ++i2)
-        value += "\n" + lines[i2][0].slice(trimIndent);
+      for (let i2 = chompStart; i2 < lines2.length; ++i2)
+        value += "\n" + lines2[i2][0].slice(trimIndent);
       if (value[value.length - 1] !== "\n")
         value += "\n";
       break;
@@ -5112,10 +5112,10 @@ function splitLines(source) {
   const first = split[0];
   const m = first.match(/^( *)/);
   const line0 = m?.[1] ? [m[1], first.slice(m[1].length)] : ["", first];
-  const lines = [line0];
+  const lines2 = [line0];
   for (let i2 = 1; i2 < split.length; i2 += 2)
-    lines.push([split[i2], split[i2 + 1]]);
-  return lines;
+    lines2.push([split[i2], split[i2 + 1]]);
+  return lines2;
 }
 
 // node_modules/yaml/browser/dist/compose/resolve-flow-scalar.js
@@ -7440,7 +7440,7 @@ function updateFrontmatter(text, updates) {
   const note = splitFrontmatter(text);
   const yaml = note.yaml ?? "";
   const eol = note.eol;
-  const lines = yaml === "" ? [] : yaml.replace(/\r?\n$/, "").split(/\r?\n/);
+  const lines2 = yaml === "" ? [] : yaml.replace(/\r?\n$/, "").split(/\r?\n/);
   const keyLines = topLevelKeyLines(yaml);
   const edits = [];
   const appended = [];
@@ -7451,19 +7451,19 @@ function updateFrontmatter(text, updates) {
       continue;
     }
     const start = keyLines[i2].line;
-    let end = i2 + 1 < keyLines.length ? keyLines[i2 + 1].line : lines.length;
-    while (end > start + 1 && /^(?:\s*|#.*)$/.test(lines[end - 1])) end--;
+    let end = i2 + 1 < keyLines.length ? keyLines[i2 + 1].line : lines2.length;
+    while (end > start + 1 && /^(?:\s*|#.*)$/.test(lines2[end - 1])) end--;
     edits.push({ key, start, end });
   }
   edits.sort((a, b) => b.start - a.start);
   for (const { key, start, end } of edits) {
     const value = updates[key];
-    lines.splice(start, end - start, ...value === void 0 ? [] : renderPair(key, value));
+    lines2.splice(start, end - start, ...value === void 0 ? [] : renderPair(key, value));
   }
-  lines.push(...appended);
+  lines2.push(...appended);
   const open = note.yaml === void 0 ? "---" + eol : note.open;
   const close = note.yaml === void 0 ? "---" + eol : note.close || "---";
-  const out = open + lines.map((l) => l + eol).join("") + close + note.body;
+  const out = open + lines2.map((l) => l + eol).join("") + close + note.body;
   const check = readFrontmatter(out);
   for (const [key, value] of Object.entries(updates)) {
     if (JSON.stringify(check[key]) !== JSON.stringify(value)) {
@@ -7655,7 +7655,7 @@ function folderUrl(base, folder) {
   return `${base.trim().replace(/\/+$/, "")}/${path}`;
 }
 function encodePath(path) {
-  return path.split("/").filter((s) => s !== "").map((s) => encodeURIComponent(s)).join("/");
+  return path.split("/").filter((s) => s !== "").map((s) => encodeURIComponent(s).replace(/\(/g, "%28").replace(/\)/g, "%29")).join("/");
 }
 function checkSlot(slot) {
   if (!Number.isInteger(slot) || slot < 0) throw new Error(`Not a slot number: ${slot}`);
@@ -7667,8 +7667,6 @@ function checkSha(sha) {
 }
 
 // src/core/generated-block.ts
-var BLOCK_START = "<!-- blueprint:generated:start -->";
-var BLOCK_END = "<!-- blueprint:generated:end -->";
 function generatedBlockLines(input) {
   const inner = [];
   if (input.hasRenders) {
@@ -7685,62 +7683,74 @@ function generatedBlockLines(input) {
     };
     for (const c of input.tree.children) visit3(c, 0);
   }
-  return inner.length === 0 ? void 0 : [BLOCK_START, ...inner, BLOCK_END];
+  return inner.length === 0 ? void 0 : inner;
 }
-function applyGeneratedBlock(note, lines) {
+var COVER_LINE = /^!\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\/cover\.jpg\)[ \t]*$/;
+var LIST_ITEM = /^[ \t]*- (?:\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\.txt\)|.*\(\[book\]\(https?:\/\/[^\s()]+\.txt\)\))[ \t]*$/;
+function lines(body) {
+  const out = [];
+  for (let start = 0; start < body.length; ) {
+    const nl = body.indexOf("\n", start);
+    const end = nl === -1 ? body.length : nl + 1;
+    out.push({ text: body.slice(start, nl === -1 ? end : nl).replace(/\r$/, ""), start, end });
+    start = end;
+  }
+  return out;
+}
+var blank = (l) => l.text.trim() === "";
+function findGeneratedBlock(body) {
+  const ls = lines(body);
+  let i2 = 0;
+  while (i2 < ls.length && blank(ls[i2])) i2++;
+  const first = i2;
+  let end;
+  if (i2 < ls.length && COVER_LINE.test(ls[i2].text)) {
+    end = ls[i2].end;
+    i2++;
+    while (i2 < ls.length && blank(ls[i2])) i2++;
+  }
+  while (i2 < ls.length && LIST_ITEM.test(ls[i2].text)) {
+    end = ls[i2].end;
+    i2++;
+  }
+  return end === void 0 ? void 0 : { start: ls[first].start, end };
+}
+function applyGeneratedBlock(note, blockLines) {
   const split = splitFrontmatter(note);
   const head = note.slice(0, note.length - split.body.length);
-  const body = split.body;
   const eol = split.yaml !== void 0 ? split.eol : /\r\n/.test(note) ? "\r\n" : "\n";
-  const block = lines === void 0 ? void 0 : lines.join(eol);
-  const found = findBlock(body);
-  if (found === "invalid") {
+  const legacy = removeLegacyMarkedBlock(split.body);
+  if (legacy === "invalid") {
     return {
       status: "invalid",
       text: note,
-      reason: "The generated block markers in this note are incomplete or repeated; fix them by hand."
+      reason: "This note has an incomplete or repeated <!-- blueprint:generated --> marker; remove it by hand."
     };
   }
-  if (found === void 0) {
-    if (block === void 0) return { status: "unchanged", text: note };
-    const after2 = body === "" || body.startsWith("\n") || body.startsWith("\r\n") ? body : eol + body;
-    const lead = split.yaml !== void 0 ? eol : "";
-    return { status: "inserted", text: head + lead + block + eol + after2 };
-  }
-  const before = body.slice(0, found.start);
-  const after = body.slice(found.end);
-  if (block === void 0) {
-    const atTop = /^(\r?\n)?$/.test(before);
-    const rest = after.replace(/^\r?\n/, "");
-    return { status: "removed", text: head + (atTop ? "" : before) + rest };
-  }
-  const current = body.slice(found.start, found.end);
-  if (current === block) return { status: "unchanged", text: note };
-  return { status: "replaced", text: head + before + block + after };
+  const body = legacy ?? split.body;
+  const found = findGeneratedBlock(body);
+  if (found === void 0 && legacy === void 0 && blockLines === void 0) return { status: "unchanged", text: note };
+  const rest = (found ? body.slice(found.end) : body).replace(/^(?:[ \t]*\r?\n)+/, "");
+  const lead = split.yaml !== void 0 ? eol : "";
+  const text = blockLines === void 0 ? head + (rest === "" ? "" : lead + rest) : head + lead + blockLines.join(eol) + eol + (rest === "" ? "" : eol + rest);
+  if (text === note) return { status: "unchanged", text };
+  const existed = found !== void 0 || legacy !== void 0;
+  return { status: blockLines === void 0 ? "removed" : existed ? "replaced" : "inserted", text };
 }
-function findBlock(body) {
-  const starts = markerLines(body, BLOCK_START);
-  const ends = markerLines(body, BLOCK_END);
-  const anywhere = (m) => body.split(m).length - 1;
-  if (starts.length === 0 && ends.length === 0) {
-    return anywhere(BLOCK_START) + anywhere(BLOCK_END) === 0 ? void 0 : "invalid";
-  }
-  if (starts.length !== 1 || ends.length !== 1 || anywhere(BLOCK_START) !== 1 || anywhere(BLOCK_END) !== 1) {
-    return "invalid";
-  }
-  const start = starts[0];
-  const end = ends[0] + BLOCK_END.length;
-  return start < end - BLOCK_END.length ? { start, end } : "invalid";
-}
-function markerLines(body, marker) {
-  const out = [];
-  for (let i2 = body.indexOf(marker); i2 !== -1; i2 = body.indexOf(marker, i2 + 1)) {
-    const lineStart = i2 === 0 || body[i2 - 1] === "\n";
-    const next = body.slice(i2 + marker.length, i2 + marker.length + 2);
-    const lineEnd = next === "" || next[0] === "\n" || next === "\r\n";
-    if (lineStart && lineEnd) out.push(i2);
-  }
-  return out;
+var LEGACY_START = "<!-- blueprint:generated:start -->";
+var LEGACY_END = "<!-- blueprint:generated:end -->";
+function removeLegacyMarkedBlock(body) {
+  const count2 = (m) => body.split(m).length - 1;
+  if (count2(LEGACY_START) + count2(LEGACY_END) === 0) return void 0;
+  if (count2(LEGACY_START) !== 1 || count2(LEGACY_END) !== 1) return "invalid";
+  const ls = lines(body);
+  const s = ls.findIndex((l) => l.text.trim() === LEGACY_START);
+  const e = ls.findIndex((l) => l.text.trim() === LEGACY_END);
+  if (s === -1 || e === -1 || e < s) return "invalid";
+  const before = body.slice(0, ls[s].start);
+  let after = body.slice(ls[e].end);
+  if (/(?:^|\n)[ \t]*\r?\n$/.test(before) || before === "") after = after.replace(/^[ \t]*\r?\n/, "");
+  return before + after;
 }
 function escapeInline(text) {
   const oneLine2 = text.replace(/\s+/g, " ").trim();
@@ -8041,8 +8051,8 @@ async function noteWithBlock(host, folder, note, value) {
     title = baseName(folder);
   }
   const hasRenders = (await listRenderFiles(host, folder)).length > 0;
-  const lines = generatedBlockLines({ base: host.settings.linkBase, folder, title, tree, hasRenders });
-  return applyGeneratedBlock(note, lines);
+  const lines2 = generatedBlockLines({ base: host.settings.linkBase, folder, title, tree, hasRenders });
+  return applyGeneratedBlock(note, lines2);
 }
 async function refreshGeneratedBlock(host, folder) {
   const notesPath = joinPath(folder, NOTES_FILE);
@@ -8078,11 +8088,11 @@ async function refreshAllGeneratedBlocks(host) {
   const changed = results.filter((r) => r.status === "changed").length;
   const unchanged = results.filter((r) => r.status === "unchanged").length;
   const skipped = results.filter((r) => r.status === "skipped");
-  const lines = [
+  const lines2 = [
     `Generated blocks: ${changed} note${changed === 1 ? "" : "s"} changed, ${unchanged} already current` + (skipped.length > 0 ? `, ${skipped.length} skipped` : "") + ". Not committed; the Git plugin's sync will pick the changes up.",
     ...skipped.map((s) => `Skipped ${s.folder}: ${s.reason}`)
   ];
-  host.ui.notice(lines.join("\n"), skipped.length > 0 ? "error" : "info");
+  host.ui.notice(lines2.join("\n"), skipped.length > 0 ? "error" : "info");
   return results;
 }
 
@@ -8314,8 +8324,8 @@ function reportedProblems(report) {
   return out;
 }
 function lastErrorLine(stderr) {
-  const lines = stderr.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "");
-  const line = [...lines].reverse().find((l) => /^render: /.test(l)) ?? lines.at(-1) ?? "no output";
+  const lines2 = stderr.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "");
+  const line = [...lines2].reverse().find((l) => /^render: /.test(l)) ?? lines2.at(-1) ?? "no output";
   return line.length > 300 ? line.slice(0, 297) + "…" : line;
 }
 function absolute(vaultPath, path) {
@@ -8424,11 +8434,11 @@ async function renderAll(host, folders) {
     overall.close();
     queueCancelled = false;
   }
-  const lines = [
+  const lines2 = [
     `Render all: ${result.rendered.length} of ${folders.length} rendered` + (result.failed.length > 0 ? `, ${result.failed.length} failed` : "") + (result.cancelled ? ", cancelled" : "") + ".",
     ...result.failed.map((f) => `${f.folder}: ${f.reason.split("\n")[0]}`)
   ];
-  host.ui.notice(lines.join("\n"), result.failed.length > 0 || result.cancelled ? "error" : "info");
+  host.ui.notice(lines2.join("\n"), result.failed.length > 0 || result.cancelled ? "error" : "info");
   return result;
 }
 
@@ -8705,8 +8715,8 @@ function fail2(step, committed, what, out, commit) {
   return result;
 }
 function firstErrorLine(out) {
-  const lines = (out.stderr + "\n" + out.stdout).split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "" && !/^hint:/i.test(l));
-  const line = lines.find((l) => /\blfs\b|batch response/i.test(l) && !/^(?:uploading lfs objects|git lfs)/i.test(l)) ?? lines.find((l) => /^(fatal|error):/i.test(l)) ?? lines.find((l) => /conflict/i.test(l)) ?? lines[0] ?? "";
+  const lines2 = (out.stderr + "\n" + out.stdout).split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "" && !/^hint:/i.test(l));
+  const line = lines2.find((l) => /\blfs\b|batch response/i.test(l) && !/^(?:uploading lfs objects|git lfs)/i.test(l)) ?? lines2.find((l) => /^(fatal|error):/i.test(l)) ?? lines2.find((l) => /conflict/i.test(l)) ?? lines2[0] ?? "";
   return line.length > 200 ? line.slice(0, 197) + "..." : line;
 }
 async function lfsAvailable(run2) {
@@ -8793,9 +8803,9 @@ var nodeProcessRunner = {
       child.stderr?.on("data", (d) => {
         stderr += d;
         partial += d;
-        const lines = partial.split(/\r?\n/);
-        partial = lines.pop() ?? "";
-        for (const line of lines) onStderrLine?.(line);
+        const lines2 = partial.split(/\r?\n/);
+        partial = lines2.pop() ?? "";
+        for (const line of lines2) onStderrLine?.(line);
       });
       child.on("error", (e) => finish({ code: -1, stdout, stderr, error: e.message }));
       child.on("close", (code) => {

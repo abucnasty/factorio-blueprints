@@ -3,7 +3,9 @@ import { describe, test } from "node:test";
 
 import { copyLiveLink } from "../../src/commands/copy-link.ts";
 import { findBlueprintFolders, refreshAllGeneratedBlocks, refreshGeneratedBlock } from "../../src/commands/generated-notes.ts";
-import { BLOCK_START, decodeBlueprintString, writeCanonicalJson } from "../../src/core/index.ts";
+import { decodeBlueprintString, writeCanonicalJson } from "../../src/core/index.ts";
+
+const BLOCK_START = "<!-- blueprint:generated:start -->";
 import { BASE, fakeHost, fixture } from "./helpers.ts";
 
 const json = (name: string) => writeCanonicalJson(decodeBlueprintString(fixture(name)).value);
@@ -87,13 +89,13 @@ describe("refresh generated blocks", () => {
       ],
     );
     assert.match(host.notices[0]!.message, /^Generated blocks: 2 notes changed, 1 already current, 2 skipped\. Not committed/);
-    assert.match(host.notices[0]!.message, /Skipped cat\/broken: The generated block markers/);
+    assert.match(host.notices[0]!.message, /Skipped cat\/broken: This note has an incomplete or repeated/);
     assert.equal(host.commits.length, 0);
     assert.equal(
       host.vault.get("cat/rendered/README.md"),
-      `---\ntitle: Lamps\n---\n\n${BLOCK_START}\n![Lamps](${BASE}/cat/rendered/cover.jpg)\n<!-- blueprint:generated:end -->\n`,
+      `---\ntitle: Lamps\n---\n\n![Lamps](${BASE}/cat/rendered/cover.jpg)\n`,
     );
-    assert.ok(host.vault.get("cat/book/README.md")!.endsWith("<!-- blueprint:generated:end -->\n\nMine.\n"));
+    assert.ok(host.vault.get("cat/book/README.md")!.endsWith(`/cat/book/2.txt)\n\nMine.\n`));
     assert.equal(host.vault.get("cat/broken/README.md"), FILES["cat/broken/README.md"]);
 
     const again = await refreshAllGeneratedBlocks(host);

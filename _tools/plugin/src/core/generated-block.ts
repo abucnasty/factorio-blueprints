@@ -1,14 +1,12 @@
 // The generated block at the top of a blueprint's notes, per
 // _tools/docs/conventions.md ("Generated block"): a cover image when the
 // folder has renders, and for books a nested list of links to every entry.
-// Everything outside the markers belongs to the owner and is never touched.
+// It has no markers: the plugin recognises it by its shape at the top of the
+// body, and never changes anything below it.
 
 import { type BookNode, displayLabel } from "./book-tree.ts";
 import { splitFrontmatter } from "./frontmatter.ts";
 import { coverUrl, stringUrl } from "./links.ts";
-
-export const BLOCK_START = "<!-- blueprint:generated:start -->";
-export const BLOCK_END = "<!-- blueprint:generated:end -->";
 
 export interface BlockInput {
   /** Link Worker base URL. */
@@ -23,8 +21,8 @@ export interface BlockInput {
 }
 
 /**
- * The block's lines (markers included, no line endings), or undefined when
- * it would be empty: a non-book without renders.
+ * The block's lines (no line endings), or undefined when it would be
+ * empty: a non-book without renders.
  */
 export function generatedBlockLines(input: BlockInput): string[] | undefined {
   const inner: string[] = [];
@@ -42,86 +40,117 @@ export function generatedBlockLines(input: BlockInput): string[] | undefined {
     };
     for (const c of input.tree.children) visit(c, 0);
   }
-  return inner.length === 0 ? undefined : [BLOCK_START, ...inner, BLOCK_END];
+  return inner.length === 0 ? undefined : inner;
 }
 
 export type BlockUpdate =
   | { status: "unchanged" | "inserted" | "replaced" | "removed"; text: string }
   | { status: "invalid"; text: string; reason: string };
 
+/** A line that is exactly one image of an http(s) URL ending in /cover.jpg. */
+const COVER_LINE = /^!\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\/cover\.jpg\)[ \t]*$/;
+/** A list item ending in a link to an http(s) URL ending in .txt: `- [label](url)` or `- label ([book](url))`. */
+const LIST_ITEM =
+  /^[ \t]*- (?:\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\.txt\)|.*\(\[book\]\(https?:\/\/[^\s()]+\.txt\)\))[ \t]*$/;
+
+interface Line {
+  /** Text without its line ending. */
+  text: string;
+  start: number;
+  /** Offset after the line ending. */
+  end: number;
+}
+
+function lines(body: string): Line[] {
+  const out: Line[] = [];
+  for (let start = 0; start < body.length; ) {
+    const nl = body.indexOf("\n", start);
+    const end = nl === -1 ? body.length : nl + 1;
+    out.push({ text: body.slice(start, nl === -1 ? end : nl).replace(/\r$/, ""), start, end });
+    start = end;
+  }
+  return out;
+}
+
+const blank = (l: Line) => l.text.trim() === "";
+
+/** Offsets [start, end) of the generated block at the top of the body, or undefined. */
+export function findGeneratedBlock(body: string): { start: number; end: number } | undefined {
+  const ls = lines(body);
+  let i = 0;
+  while (i < ls.length && blank(ls[i]!)) i++;
+  const first = i;
+  let end: number | undefined;
+  if (i < ls.length && COVER_LINE.test(ls[i]!.text)) {
+    end = ls[i]!.end;
+    i++;
+    while (i < ls.length && blank(ls[i]!)) i++;
+  }
+  while (i < ls.length && LIST_ITEM.test(ls[i]!.text)) {
+    end = ls[i]!.end;
+    i++;
+  }
+  return end === undefined ? undefined : { start: ls[first]!.start, end };
+}
+
 /**
- * Put the block into a note (or take it out, with `lines` undefined).
- * - An existing block is replaced in place, wherever it is.
- * - A new block goes at the top of the body, right after the frontmatter,
- *   followed by a blank line before any text.
- * - Removing a block at the top also removes the blank line before it.
- * Line endings follow the note. Text outside the markers is not changed,
- * and applying the same block twice changes nothing. Markers that are
- * unpaired, repeated or not on their own lines leave the note alone.
+ * Put the block at the top of a note's body (or take it out, with `lines`
+ * undefined): one blank line after the frontmatter, one blank line before
+ * the owner's text. An existing block is recognised by its shape and
+ * replaced. Line endings follow the note; text below the block is kept
+ * byte for byte (only the blank lines between it and the block are
+ * normalised to one); applying the same block twice changes nothing.
  */
-export function applyGeneratedBlock(note: string, lines: string[] | undefined): BlockUpdate {
+export function applyGeneratedBlock(note: string, blockLines: string[] | undefined): BlockUpdate {
   const split = splitFrontmatter(note);
   const head = note.slice(0, note.length - split.body.length);
-  const body = split.body;
   const eol = split.yaml !== undefined ? split.eol : /\r\n/.test(note) ? "\r\n" : "\n";
-  const block = lines === undefined ? undefined : lines.join(eol);
 
-  const found = findBlock(body);
-  if (found === "invalid") {
+  // Migration: notes from before the block lost its markers. Delete this once no note has markers.
+  const legacy = removeLegacyMarkedBlock(split.body);
+  if (legacy === "invalid") {
     return {
       status: "invalid",
       text: note,
-      reason: "The generated block markers in this note are incomplete or repeated; fix them by hand.",
+      reason: "This note has an incomplete or repeated <!-- blueprint:generated --> marker; remove it by hand.",
     };
   }
+  const body = legacy ?? split.body;
 
-  if (found === undefined) {
-    if (block === undefined) return { status: "unchanged", text: note };
-    const after = body === "" || body.startsWith("\n") || body.startsWith("\r\n") ? body : eol + body;
-    // After frontmatter, a blank line separates it from the block.
-    const lead = split.yaml !== undefined ? eol : "";
-    return { status: "inserted", text: head + lead + block + eol + after };
-  }
-
-  const before = body.slice(0, found.start);
-  const after = body.slice(found.end);
-  if (block === undefined) {
-    // At the top of the body: also drop the line break we put before it.
-    const atTop = /^(\r?\n)?$/.test(before);
-    const rest = after.replace(/^\r?\n/, "");
-    return { status: "removed", text: head + (atTop ? "" : before) + rest };
-  }
-  const current = body.slice(found.start, found.end);
-  if (current === block) return { status: "unchanged", text: note };
-  return { status: "replaced", text: head + before + block + after };
+  const found = findGeneratedBlock(body);
+  if (found === undefined && legacy === undefined && blockLines === undefined) return { status: "unchanged", text: note };
+  const rest = (found ? body.slice(found.end) : body).replace(/^(?:[ \t]*\r?\n)+/, "");
+  const lead = split.yaml !== undefined ? eol : "";
+  const text =
+    blockLines === undefined
+      ? head + (rest === "" ? "" : lead + rest)
+      : head + lead + blockLines.join(eol) + eol + (rest === "" ? "" : eol + rest);
+  if (text === note) return { status: "unchanged", text };
+  const existed = found !== undefined || legacy !== undefined;
+  return { status: blockLines === undefined ? "removed" : existed ? "replaced" : "inserted", text };
 }
 
-/** Offsets of the block in the body, from the start marker to the end of the end marker. */
-function findBlock(body: string): { start: number; end: number } | undefined | "invalid" {
-  const starts = markerLines(body, BLOCK_START);
-  const ends = markerLines(body, BLOCK_END);
-  const anywhere = (m: string) => body.split(m).length - 1;
-  if (starts.length === 0 && ends.length === 0) {
-    return anywhere(BLOCK_START) + anywhere(BLOCK_END) === 0 ? undefined : "invalid";
-  }
-  if (starts.length !== 1 || ends.length !== 1 || anywhere(BLOCK_START) !== 1 || anywhere(BLOCK_END) !== 1) {
-    return "invalid";
-  }
-  const start = starts[0]!;
-  const end = ends[0]! + BLOCK_END.length;
-  return start < end - BLOCK_END.length ? { start, end } : "invalid";
-}
+// Legacy markers, written by the plugin before the block lost them.
+const LEGACY_START = "<!-- blueprint:generated:start -->";
+const LEGACY_END = "<!-- blueprint:generated:end -->";
 
-/** Offsets where a marker stands alone on a line. */
-function markerLines(body: string, marker: string): number[] {
-  const out: number[] = [];
-  for (let i = body.indexOf(marker); i !== -1; i = body.indexOf(marker, i + 1)) {
-    const lineStart = i === 0 || body[i - 1] === "\n";
-    const next = body.slice(i + marker.length, i + marker.length + 2);
-    const lineEnd = next === "" || next[0] === "\n" || next === "\r\n";
-    if (lineStart && lineEnd) out.push(i);
-  }
-  return out;
+/**
+ * The body without a well-formed legacy marked block (wherever it is), or
+ * undefined if there are no markers, or "invalid" for stray or repeated ones.
+ */
+function removeLegacyMarkedBlock(body: string): string | undefined | "invalid" {
+  const count = (m: string) => body.split(m).length - 1;
+  if (count(LEGACY_START) + count(LEGACY_END) === 0) return undefined;
+  if (count(LEGACY_START) !== 1 || count(LEGACY_END) !== 1) return "invalid";
+  const ls = lines(body);
+  const s = ls.findIndex((l) => l.text.trim() === LEGACY_START);
+  const e = ls.findIndex((l) => l.text.trim() === LEGACY_END);
+  if (s === -1 || e === -1 || e < s) return "invalid";
+  const before = body.slice(0, ls[s]!.start);
+  let after = body.slice(ls[e]!.end);
+  // Do not leave two blank lines where the block was.
+  if (/(?:^|\n)[ \t]*\r?\n$/.test(before) || before === "") after = after.replace(/^[ \t]*\r?\n/, "");
+  return before + after;
 }
 
 /**
