@@ -297,39 +297,64 @@ store_cred() {
   printf 'protocol=%s\nhost=%s\n\n' "$PROTO" "$HOST" | g credential reject >/dev/null 2>&1 || true
   printf 'protocol=%s\nhost=%s\nusername=lfs\npassword=%s\n\n' "$PROTO" "$HOST" "$1" | g credential approve
 }
-# prompt_and_store: read a token with echo off and store it.
+SECRET_CMDS="npx wrangler login in _tools/lfs-worker, then _tools/setup/setup-machine.sh --set-worker-secret"
+SECRET_STEP="owner: $SECRET_CMDS"
+
+# prompt_and_store: read a token with echo off and store it. Empty or
+# whitespace-only input stores nothing.
 prompt_and_store() {
   local tok=""
-  printf 'Paste the LFS upload token from the password manager (hidden): '
+  printf 'Paste the LFS upload token (hidden; leave empty to skip): '
   read -rs tok || true; echo
-  tok=${tok%$'\r'}
-  [ -n "$tok" ] || { echo "No token entered."; return 1; }
+  tok=${tok#"${tok%%[![:space:]]*}"}; tok=${tok%"${tok##*[![:space:]]}"}
+  [ -n "$tok" ] || { echo "Nothing entered; no token stored."; return 1; }
   store_cred "$tok"; tok=""
   read_cred
 }
 
+# refused_causes NEW: both reasons the Worker answers 401; the never-set one
+# first when this machine stored its first token in this run.
+refused_causes() {
+  local never="the upload token has never been set on the Worker ($SECRET_STEP)"
+  local stale="this token is old or mistyped (re-run and paste the current one from the password manager)"
+  if [ "$1" = 1 ]; then echo "either $never, or $stale"; else echo "either $stale, or $never"; fi
+}
+
 check_token() {
+  local new=0 tries=0 code
   if read_cred; then
     pass "an LFS upload token is stored for $HOST"
-  elif [ "$MODE" != check ] && prompt_and_store; then
-    fixed "LFS upload token stored in git's credential store"
   else
-    action "no LFS upload token is stored for $HOST" "re-run this script (without --check) and paste the token"
-    return
+    if [ "$MODE" != check ]; then
+      echo "The LFS upload token is in the owner's password manager. If it has never been"
+      echo "created (first-time setup), leave this empty and instead run: $SECRET_CMDS"
+      if prompt_and_store; then new=1; fixed "LFS upload token stored in git's credential store"; fi
+    fi
+    if [ "$new" = 0 ]; then
+      action "no LFS upload token is stored for $HOST" \
+        "paste it from the owner's password manager by re-running this script; if it was never created: $SECRET_STEP"
+      return
+    fi
   fi
-  local tries=0 code
   while :; do
     code=$(probe upload "$CUSER" "$CPASS")
     if [ "$code" = 200 ]; then
-      if [ "$tries" = 0 ]; then pass "the LFS Worker accepts the stored token"; else fixed "new token accepted"; fi
+      if [ "$tries" = 0 ]; then pass "the LFS Worker accepts the stored token"
+      else fixed "the LFS Worker accepts the stored token"; fi
       break
     fi
-    if [ "$code" = 401 ] && [ "$tries" -lt 2 ] && ask "The LFS Worker refused the stored token. Enter another?" && prompt_and_store; then
-      tries=$((tries + 1)); continue
+    if [ "$code" != 401 ]; then
+      action "the LFS Worker answered HTTP $code when testing the token" "try again later"
+      break
     fi
     # The Worker answers 401 both for a wrong token and when no secret is set.
-    action "the LFS Worker refused the stored token (HTTP $code)" \
-      "paste the current token from the password manager; if it is right, the owner has not set the secret yet: run with --set-worker-secret"
+    if [ "$MODE" != check ] && [ "$tries" -lt 2 ]; then
+      echo "The LFS Worker refused the stored token: $(refused_causes "$new")."
+      if ask "Enter a different token?" && prompt_and_store; then
+        tries=$((tries + 1)); continue
+      fi
+    fi
+    action "the LFS Worker refused the stored token (HTTP 401)" "$(refused_causes "$new")"
     break
   done
   CPASS=""
