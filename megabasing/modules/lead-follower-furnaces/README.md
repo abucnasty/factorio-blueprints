@@ -12,6 +12,8 @@ blueprints: 10
 factorio_version: "2.0.55"
 ---
 
+![Lead Follower Furnaces](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/cover.jpg)
+
 - [Lead Furnace](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/0.txt)
 - [Iron Plate](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/6.txt)
 - [Iron Plate Mini](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/7.txt)
