@@ -113,7 +113,7 @@ export class Git {
 
   /** Commits that changed any of the paths, newest first, reachable from `commit`. */
   log(commit: string, paths: string[]): CatalogVersion[] {
-    const text = this.run(["log", "--format=%x1e%H%x1f%cI%x1f%s", commit, "--", ...paths]).toString();
+    const text = this.run(["log", "--format=%x1e%H%x1f%aI%x1f%s", commit, "--", ...paths]).toString();
     return text
       .split("\x1e")
       .slice(1)

@@ -95,6 +95,30 @@ test("builds the index: history, renames via previous_paths, renders, frontmatte
   assert.deepEqual(b.history.map((h) => h.sha), [c3, c1], "history follows the old path");
 });
 
+test("history dates are author dates, in git log order", () => {
+  const r = repo();
+  r.write("cat/a/blueprint.json", bp("A1"));
+  r.write("cat/a/README.md", notes("title: A\nauthors: []"));
+  r.git("add", "-A");
+  r.git("commit", "-q", "-m", "posted long ago", "--date", "2024-03-10T12:00:00+01:00");
+  const old = r.git("rev-parse", "HEAD");
+  r.write("cat/a/blueprint.json", bp("A2"));
+  r.git("add", "-A");
+  // Authored earlier than the first commit, committed later: order stays git log's.
+  r.git("commit", "-q", "-m", "back-dated", "--date", "2023-01-01T00:00:00Z");
+  const newer = r.git("rev-parse", "HEAD");
+  assert.notEqual(r.git("log", "-1", "--format=%cI", newer).slice(0, 4), "2023");
+
+  const [a] = buildCatalog(r.dir).index.blueprints;
+  assert.deepEqual(
+    a!.history.map((h) => [h.sha, h.date]),
+    [
+      [newer, "2023-01-01T00:00:00+00:00"],
+      [old, "2024-03-10T12:00:00+01:00"],
+    ],
+  );
+});
+
 test("produces each version's string from that commit, under the current path", () => {
   const r = repo();
   r.write("cat/a/blueprint.json", bp("A1"));

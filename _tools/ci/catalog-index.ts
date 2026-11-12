@@ -65,7 +65,7 @@ export interface CatalogBlueprint {
 
 export interface CatalogVersion {
   sha: string;
-  /** Committer date, ISO 8601 with offset. */
+  /** Author date, ISO 8601 with offset (the import back-dates it to when the blueprint was posted). Order is git log's, not re-sorted by date. */
   date: string;
   /** First line of the commit message. */
   subject: string;
