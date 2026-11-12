@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { strategyOrder, summariseAttempt } from "../src/render.js";
+import { needsDiagnosis, strategyOrder, summariseAttempt } from "../src/render.js";
 
 test("strategy order: platform blueprints on a platform first, others on an ordinary surface first", () => {
     assert.deepEqual(strategyOrder({ platform: true, platforms_available: true }), ["platform", "ordinary"]);
@@ -23,4 +23,14 @@ test("an attempt is summarised with counts, every problem and diagnostics", () =
         "  [ordinary] diagnostics: {\"surface_kind\":\"lab-tile surface\",\"ghosts\":0}",
     ]);
     assert.deepEqual(summariseAttempt({ strategy: "platform", error: "no starter pack" }).lines, ["  [platform] error: no starter pack"]);
+});
+
+test("the diagnosis runs when asked, or when an attempt got no ghosts for a blueprint with entities", () => {
+    const withEntities = { blueprint: { entities: [{}] } }, tilesOnly = { blueprint: { tiles: [{}] } };
+    const zero = [{ diagnostics: { ghosts: 0 } }], some = [{ diagnostics: { ghosts: 4 } }], failed = [{ error: "x", diagnostics: {} }];
+    assert.equal(needsDiagnosis(withEntities, zero, false), true);
+    assert.equal(needsDiagnosis(withEntities, some, false), false);
+    assert.equal(needsDiagnosis(withEntities, failed, false), false);
+    assert.equal(needsDiagnosis(tilesOnly, zero, false), false);
+    assert.equal(needsDiagnosis(tilesOnly, some, true), true);
 });

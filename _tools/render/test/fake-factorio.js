@@ -6,7 +6,7 @@
 //   client (--mp-connect): tells the server where its write-data folder is (over the game's UDP port), so the server
 //     can write screenshots into the client's script-output, as the real client would draw them.
 // Each process writes its pid to <write-data>/fake.pid so tests can check nothing is left running.
-// FAKE_FACTORIO_MODE: ok (default) | exit-early | hang | client-crash | no-screenshot | stall-build
+// FAKE_FACTORIO_MODE: ok (default) | exit-early | hang | client-crash | no-screenshot | stall-build | refuse-all
 import dgram from "node:dgram";
 import fs from "node:fs";
 import net from "node:net";
@@ -118,12 +118,12 @@ function startServer() {
         const entities = blueprint.entities ?? [];
         const wanted = {};
         for (const entity of entities) wanted[entity.name] = (wanted[entity.name] ?? 0) + 1;
-        const refused = job.strategy === "ordinary" && isPlatformBlueprint;
+        const refused = mode === "refuse-all" || (job.strategy === "ordinary" && isPlatformBlueprint);
         const placed = refused ? [] : entities.filter(entity => !entity.name.startsWith("fake-unplaceable"));
         const missing = { ...wanted };
         for (const entity of placed) if (--missing[entity.name] === 0) delete missing[entity.name];
         const problems = refused ? ["build_blueprint placed no ghosts at all on a lab-tile surface"] : [];
-        const report = { strategy: job.strategy, surface, built: placed.length, tiles: 0, failed: [], missing: Object.keys(missing).length ? missing : [], problems, diagnostics: { surface_kind: job.strategy }, tick: tick() };
+        const report = { strategy: job.strategy, surface, built: placed.length, tiles: 0, failed: [], missing: Object.keys(missing).length ? missing : [], problems, diagnostics: { surface_kind: job.strategy, ghosts: placed.length }, tick: tick() };
         if (!placed.length) return report;
         const xs = placed.map(entity => entity.position.x), ys = placed.map(entity => entity.position.y);
         return { ...report, area: { left_top: { x: Math.min(...xs) - 0.5, y: Math.min(...ys) - 0.5 }, right_bottom: { x: Math.max(...xs) + 0.5, y: Math.max(...ys) + 0.5 } } };
@@ -147,6 +147,12 @@ function startServer() {
                 if (mode === "stall-build") return new Promise(() => {});
                 fs.appendFileSync(path.join(writeData, "builds.jsonl"), text + "\n");
                 return JSON.stringify(build(JSON.parse(text)));
+            }
+            if (name === "diagnose") {
+                fs.appendFileSync(path.join(writeData, "diagnose.log"), `${text}\n`);
+                const lines = ["[diagnose] full (1 entities, 0 tiles) | lab tiles: 0 entity ghosts, 0 tile ghosts",
+                    "[diagnose] can_place_entity thruster | lab + real space-platform-foundation: ghost no, entity yes"];
+                return JSON.stringify({ lines, experiments: [{ experiment: "full | lab tiles", entity_ghosts: 0, tile_ghosts: 0 }] });
             }
             if (name === "prepare") {
                 fs.appendFileSync(path.join(writeData, "prepared.log"), `${text}\n`);

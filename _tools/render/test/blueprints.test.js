@@ -71,3 +71,14 @@ test("the platform ship fixture is one blueprint with a hub, foundation and plat
     assert.deepEqual(names, ["space-platform-hub", "thruster", "asteroid-collector", "steel-chest"]);
     assert.ok(blueprints[0].blueprint.tiles.every(tile => tile.name === "space-platform-foundation"));
 });
+
+test("the real ship fixture (Heisenberg MK3A, exported from the game) decodes to one blueprint with a hub", async () => {
+    const { value, format } = await readInput(new URL("./fixtures/heisenberg-ship.txt", import.meta.url).pathname);
+    assert.equal(format, "string");
+    const { blueprints } = listBlueprints(value);
+    assert.equal(blueprints.length, 1);
+    const { entities, tiles } = blueprints[0].blueprint;
+    assert.equal(entities.length, 2550);
+    assert.equal(tiles.length, 6991);
+    assert.deepEqual(entities.find(entity => entity.name === "space-platform-hub").position, { x: 0, y: 0 });
+});

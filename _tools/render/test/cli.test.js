@@ -19,6 +19,8 @@ test("just input and output, with Factorio from the environment", async () => {
     assert.equal(options.keepWork, false);
     assert.equal(options.mods, undefined);
     assert.deepEqual(options.backdrop, ["lab-dark-1", "black-refined-concrete"]);
+    assert.equal(options.diagnose, false);
+    assert.equal((await parse(["--input", "a", "--out", "b", "--diagnose"], { env: { FACTORIO_PATH: "f" } })).diagnose, true);
 });
 
 test("the backdrop tiles come from the argument, environment or config, and are checked", async () => {

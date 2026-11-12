@@ -124,6 +124,51 @@ test("without Space Age a platform blueprint gets an ordinary attempt that says 
     assert.ok(messages.some(line => line.startsWith("  [ordinary] diagnostics: ")));
 });
 
+test("a blueprint the game refuses completely gets the diagnosis matrix, and the run's log and report are kept", async t => {
+    const env = await setup(t);
+    const input = path.join(env.dir, "bp.txt");
+    await fs.writeFile(input, encodeBlueprintString({ blueprint: row("x", 1) }));
+    process.env.FAKE_FACTORIO_MODE = "refuse-all";
+    t.after(() => { delete process.env.FAKE_FACTORIO_MODE; });
+    const messages = [];
+    const report = await render({ ...options(env), input, workDir: undefined }, message => messages.push(message));
+    assert.equal(report.images.length, 0);
+    const [missing] = report.without_image;
+    assert.deepEqual(missing.diagnosis.lines.length, 2);
+    assert.ok(messages.includes("  [diagnose] full (1 entities, 0 tiles) | lab tiles: 0 entity ghosts, 0 tile ghosts"));
+    // a temporary work directory is kept because a blueprint got no image, with render.log and report.json
+    const log = await fs.readFile(path.join(report.work_dir, "render.log"), "utf8");
+    assert.match(log, /\[ordinary\] problem: build_blueprint placed no ghosts/);
+    assert.match(log, /\[diagnose\] can_place_entity thruster/);
+    assert.match(log, /No image for blueprint 0/);
+    const saved = JSON.parse(await fs.readFile(path.join(report.work_dir, "report.json"), "utf8"));
+    assert.equal(saved.without_image[0].diagnosis.experiments[0].entity_ghosts, 0);
+    assert.ok(messages.includes(`Run log: ${path.join(report.work_dir, "render.log")}`));
+    assert.equal((await fs.readFile(path.join(report.work_dir, "server", "diagnose.log"), "utf8")).trim(), "blueprint-render-0-diagnose");
+    await fs.rm(report.work_dir, { recursive: true, force: true });
+});
+
+test("--diagnose runs the matrix for a blueprint that renders fine", async t => {
+    const env = await setup(t);
+    const input = path.join(env.dir, "bp.txt");
+    await fs.writeFile(input, encodeBlueprintString({ blueprint: row("x", 1) }));
+    const report = await render({ ...options(env), input, diagnose: true }, () => {});
+    assert.equal(report.images.length, 1);
+    assert.equal(report.images[0].diagnosis.lines.length, 2);
+    await assertNothingRunning(env.work);
+});
+
+test("a failed run writes its log and report into the work directory", async t => {
+    const env = await setup(t);
+    const input = path.join(env.dir, "bp.txt");
+    await fs.writeFile(input, encodeBlueprintString({ blueprint: row("x", 1) }));
+    process.env.FAKE_FACTORIO_MODE = "client-crash";
+    t.after(() => { delete process.env.FAKE_FACTORIO_MODE; });
+    await assert.rejects(render({ ...options(env), input }, () => {}), /game window closed/);
+    assert.match(await fs.readFile(path.join(env.work, "render.log"), "utf8"), /Failed: The Factorio game window closed/);
+    assert.match(JSON.parse(await fs.readFile(path.join(env.work, "report.json"), "utf8")).error, /game window closed/);
+});
+
 test("without --work-dir, a temporary work directory is used and removed after success", async t => {
     const env = await setup(t);
     const input = path.join(env.dir, "bp.txt");
