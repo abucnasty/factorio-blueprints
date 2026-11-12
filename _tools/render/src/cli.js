@@ -34,6 +34,8 @@ Options:
   --min-pixels-per-tile <px>    below this, capture a grid and stitch, default ${FRAMING_DEFAULTS.minPixelsPerTile}
   --max-output-size <px>        longest side of a stitched image, default ${FRAMING_DEFAULTS.maxOutputSize}
   --mods <dir>                  extra mods for modded blueprints (copied, never modified) (env FACTORIO_RENDER_MODS)
+  --enable-mods <name>[,...]    only these mods (and the mods they require) from the --mods folder, or from the
+                                game's own mods folder without --mods (env FACTORIO_RENDER_ENABLE_MODS)
   --save <file>                 start from a copy of this save instead of the built-in scenario
   --show-status-icons           keep "no power" / "no fuel" icons (hidden by default)
   --show-window                 show the game window while rendering (Linux renders without one by default;
@@ -71,6 +73,7 @@ const OPTIONS = {
     "min-pixels-per-tile": { type: "string" },
     "max-output-size": { type: "string" },
     mods: { type: "string" },
+    "enable-mods": { type: "string" },
     save: { type: "string" },
     "show-status-icons": { type: "boolean" },
     "show-window": { type: "boolean" },
@@ -142,6 +145,7 @@ export async function parseCommandLine(argv, context = {}) {
         out: args.out,
         framing,
         mods: pick(args.mods, "FACTORIO_RENDER_MODS", "mods") || undefined,
+        enableMods: parseModNames(pick(args["enable-mods"], "FACTORIO_RENDER_ENABLE_MODS", null)),
         save: args.save,
         workDir: args["work-dir"],
         keepWork: Boolean(args["keep-work"]),
@@ -153,6 +157,12 @@ export async function parseCommandLine(argv, context = {}) {
         timeoutSeconds: number("--timeout", pick(args.timeout, null, "timeout"), { min: 10 }) ?? 300,
         json: Boolean(args.json),
     };
+}
+
+/** Mod names from "a,b"; undefined when there are none */
+export function parseModNames(value) {
+    const names = (value ?? "").split(",").map(name => name.trim()).filter(Boolean);
+    return names.length ? [...new Set(names)] : undefined;
 }
 
 /** Slot paths from repeated or comma-separated --only values */

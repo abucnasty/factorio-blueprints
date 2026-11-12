@@ -25,6 +25,7 @@ export const REPORT_SCHEMA = 2;
  * @property {string[]} [only]        slot paths to render; the rest of <out> is left alone
  * @property {import("./framing.js").FRAMING_DEFAULTS} framing
  * @property {string} [mods]          extra mods folder
+ * @property {string[]} [enableMods]  only these mods (and those they require) from `mods` or the game's mods folder
  * @property {string} [save]          start from this save instead of the mod's scenario
  * @property {string} [workDir]       must be empty or missing
  * @property {boolean} keepWork
@@ -333,7 +334,7 @@ export async function render(options, print) {
     };
     try {
         session = await Session.start({
-            executable, workDir, extraModsDir: options.mods, save: options.save,
+            executable, workDir, extraModsDir: options.mods, enableMods: options.enableMods, save: options.save,
             hideStatusIcons: options.hideStatusIcons, showWindow: options.showWindow, timeoutSeconds: options.timeoutSeconds, log,
         });
         report.window = session.window;
