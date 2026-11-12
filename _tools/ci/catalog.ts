@@ -57,7 +57,7 @@ async function main(): Promise<number> {
   const out = values.out;
   const started = performance.now();
 
-  const catalog = buildCatalog(repo, values.commit ? { commit: values.commit } : {});
+  const catalog = await buildCatalog(repo, values.commit ? { commit: values.commit } : {});
   const { index, problems } = catalog;
   reportProblems(catalog.problems, mode);
   const versions = index.blueprints.reduce((n, e) => n + e.history.length, 0);
@@ -78,7 +78,7 @@ async function main(): Promise<number> {
   mkdirSync(staging, { recursive: true });
   const files: { key: string; file: string }[] = [];
   let bytes = 0;
-  const { warnings, roots, entries } = produceStrings(repo, catalog, jobs, (key, text) => {
+  const { warnings, roots, entries } = await produceStrings(repo, catalog, jobs, (key, text) => {
     const file = join(staging, key);
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, text);

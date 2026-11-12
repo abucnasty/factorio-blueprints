@@ -26,12 +26,12 @@ export interface CatalogIndex {
   generatedAt: string;
   /** The repo commit it was built from (full SHA). */
   commit: string;
-  /** Every blueprint folder, sorted by path. */
+  /** Every blueprint folder and root book (an expanded book not inside another), sorted by path. */
   blueprints: CatalogEntry[];
 }
 
 export interface CatalogEntry {
-  /** Blueprint folder path from the repo root, e.g. "megabasing/modules/lead-follower-furnaces". */
+  /** Blueprint folder or root book path from the repo root, e.g. "megabasing/modules/lead-follower-furnaces". */
   path: string;
 
   // README.md frontmatter, normalized by the core's readNotesMeta; unknown keys are dropped.
@@ -45,14 +45,17 @@ export interface CatalogEntry {
   /** Old folder paths; the Worker redirects them here. */
   previous_paths: string[];
 
-  /** The current blueprint.json, as the core's describeBlueprint sees it. */
+  /** The current blueprint.json (for a root book, its assembled tree), as the core's describeBlueprint sees it. */
   blueprint: CatalogBlueprint;
 
-  /** Full SHA of the last commit that changed blueprint.json; history[0].sha. */
+  /** Full SHA of the last commit that changed the blueprint; history[0].sha. */
   commit: string;
-  /** Commits that changed blueprint.json (at this path or a previous one), newest first. */
+  /**
+   * Commits that changed blueprint.json at this path or a previous one, or
+   * (for a root book) any book.json or blueprint.json under it, newest first.
+   */
   history: CatalogVersion[];
-  /** Every image file under renders/, sorted by file path. */
+  /** Every image file under renders/ (for a root book, each leaf's renders/0.jpg as <slot path>.jpg), sorted by file path. */
   renders: CatalogRender[];
   /** The book's entries, by slot ascending; absent for a single blueprint or planner. */
   nodes?: CatalogNode[];
@@ -108,6 +111,8 @@ export interface CatalogNode {
   label: string;
   /** Render file under renders/ (e.g. "3/1.jpg"), blueprints with an image only. */
   render?: string;
+  /** Repo path of the entry's own folder, for entries of a root book (expanded book). */
+  folder?: string;
   /** Entries of a nested book. */
   children?: CatalogNode[];
 }
