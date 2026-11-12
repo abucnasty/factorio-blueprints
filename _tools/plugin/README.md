@@ -15,8 +15,9 @@ notes beside them, and back. The built plugin is committed in
 - **Copy live link**: the folder's link on the link service; for a book, a
   picker offers the whole book or any entry.
 - **Render preview** (also: click the `Render: …` status bar item): runs
-  `_tools/render` for the folder, writes `renders/` and `renders/render.json`,
-  refreshes the notes' generated block, commits and pushes. **Show
+  `_tools/render` for the folder (with `--only` for just the outdated
+  entries when clicked from the status bar), refreshes the notes' generated
+  block, commits and pushes. **Show
   blueprints needing a render** and **Render all that need it** work across
   the vault; **Cancel render preview** stops a run.
 - **Refresh generated blocks in all notes**: writes the link list and cover

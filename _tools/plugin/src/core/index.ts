@@ -77,13 +77,11 @@ export type { BlockInput, BlockUpdate } from "./generated-block.ts";
 export { sha256Hex } from "./sha256.ts";
 export {
   blueprintHash,
-  comparePaths,
   parseRenderManifest,
   RENDER_MANIFEST,
   renderState,
   renderStateLabel,
   renderTargets,
-  writeRenderManifest,
 } from "./render-state.ts";
 export type {
   EntryRenderState,

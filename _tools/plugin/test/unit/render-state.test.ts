@@ -4,14 +4,12 @@ import { describe, test } from "node:test";
 
 import {
   blueprintHash,
-  comparePaths,
   decodeBlueprintString,
   parseRenderManifest,
   renderState,
   renderStateLabel,
   renderTargets,
   sha256Hex,
-  writeRenderManifest,
 } from "../../src/core/index.ts";
 import type { RenderManifest } from "../../src/core/index.ts";
 import { fixture } from "./fixtures.ts";
@@ -151,13 +149,6 @@ describe("render state", () => {
     assert.equal(renderStateLabel(s), "Render: 2 of 3 outdated");
   });
 
-  test("an older tool's numbered images count through the manifest", () => {
-    const m = manifestFor(value, ["0", "1/0", "1/2"], { "0": { file: "0.jpg" }, "1/0": { file: "1.jpg" }, "1/2": { file: "2.jpg" } });
-    const s = renderState(value, m, ["0.jpg", "1.jpg", "2.jpg"]);
-    assert.equal(s.overall, "current");
-    assert.deepStrictEqual(s.orphans, []);
-  });
-
   test("single blueprint: current, then outdated after a change", () => {
     const one = bp("a");
     const m = manifestFor(one, ["0"]);
@@ -173,19 +164,19 @@ describe("render state", () => {
 });
 
 describe("manifest file", () => {
-  test("parse and write", () => {
-    const m: RenderManifest = {
+  test("parse", () => {
+    const text = JSON.stringify({
       schema: 1,
       rendered_at: "t",
-      entries: { "10": { file: "10.jpg", sha256: "a" }, "2/1": { file: "2/1.jpg", sha256: "b", width: 3, height: 4 } },
-    };
-    const text = writeRenderManifest(m);
-    assert.ok(text.endsWith("}\n") && text.includes('\n  "schema": 1,'));
-    assert.equal(writeRenderManifest(parseRenderManifest(text)!), text, "stable");
-    assert.deepStrictEqual(parseRenderManifest(text), m);
+      entries: { "2/1": { file: "2/1.jpg", sha256: "b", width: 3, height: 4 }, bad: { file: 1 } },
+    });
+    assert.deepStrictEqual(parseRenderManifest(text), {
+      schema: 1,
+      rendered_at: "t",
+      entries: { "2/1": { file: "2/1.jpg", sha256: "b", width: 3, height: 4 } },
+    });
     assert.equal(parseRenderManifest("{"), undefined);
     assert.equal(parseRenderManifest('{"schema":2,"entries":{}}'), undefined);
     assert.equal(parseRenderManifest(undefined), undefined);
-    assert.deepStrictEqual(["10", "2", "3/1", "3"].sort(comparePaths), ["2", "3", "3/1", "10"]);
   });
 });

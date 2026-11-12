@@ -9,74 +9,80 @@ import { join } from "node:path";
 import { after, beforeEach, describe, test } from "node:test";
 
 import type { GitSync } from "../../src/commands/host.ts";
-import { cancelRender, renderPreview, resetRenderToolCache } from "../../src/commands/render-preview.ts";
+import { cancelRender, renderPreview } from "../../src/commands/render-preview.ts";
 import { folderRenderState, foldersNeedingRender, renderAllNeeded } from "../../src/commands/render-status.ts";
 import { importFromClipboard } from "../../src/commands/import-blueprint.ts";
 import { commitAndSync } from "../../src/git/commit-and-sync.ts";
 import { createGitRunner, nodePathExists } from "../../src/git/node-runner.ts";
 import { decodeBlueprintString, parseRenderManifest, renderTargets, writeCanonicalJson } from "../../src/core/index.ts";
+
 import { fakeHost, fixture } from "./helpers.ts";
 import type { FakeOptions } from "./helpers.ts";
 
 process.env["GIT_CONFIG_GLOBAL"] = "/dev/null";
 process.env["GIT_CONFIG_NOSYSTEM"] = "1";
+process.env["FAKE_RENDER_CORE"] = join(import.meta.dirname, "..", "..", "src", "core", "index.ts");
 
 const root = mkdtempSync(join(tmpdir(), "fbp-render-test-"));
 after(() => rmSync(root, { recursive: true, force: true }));
 
+// A stand-in for the render tool with its real contract: the --json report
+// shape of _tools/render/src/render.js and a render.json it writes (and
+// merges on --only) itself, hashed with the core's blueprintHash.
 const STAND_IN = String.raw`
 const fs = require("fs");
 const path = require("path");
-const argv = process.argv.slice(2);
-if (process.env.FAKE_RENDER_LOG) fs.appendFileSync(process.env.FAKE_RENDER_LOG, JSON.stringify(argv) + "\n");
-if (argv.includes("--help")) {
-  console.log("Usage: render --input <file> --out <dir>" + (process.env.FAKE_RENDER_ONLY ? " [--only <slot>,<slot>]" : ""));
-  process.exit(0);
-}
-const arg = (n) => argv[argv.indexOf(n) + 1];
-const out = arg("--out");
-const mode = process.env.FAKE_RENDER;
-const write = (rel) => { const f = path.join(out, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, "jpeg " + rel); return f; };
-const report = (images, without = []) => console.log(JSON.stringify({ images, without_image: without, skipped: [], removed: [] }));
-process.stderr.write("Starting Factorio\n");
-const only = argv.includes("--only") ? arg("--only").split(",") : undefined;
-const want = (p) => !only || only.includes(p);
-switch (mode) {
-  case "report-single":
-    report([{ number: 0, path: "", label: "Wired lamps", output: write("0.jpg"), width: 10, height: 20, failed: [], missing: [] }]);
-    break;
-  case "report-book": {
-    const images = [];
-    if (want("0")) images.push({ number: 0, path: "0", label: "Concrete pad", output: write("0.jpg"), width: 1, height: 1 });
-    if (want("1/0")) images.push({ number: 1, path: "1/0", label: "Wired lamps", output: write("1/0.jpg"), width: 1, height: 1, missing: ["foo"] });
-    report(images);
-    break;
-  }
-  case "noreport":
-    write("0.jpg");
-    break;
-  case "old-naming":
-    report([{ number: 0, path: "0", label: "Concrete pad", width: 1, height: 1 }, { number: 1, path: "1/0", label: "Wired lamps", width: 1, height: 1 }].map((i) => (write(i.number + ".jpg"), i)));
-    break;
-  case "partial":
-    report([{ number: 0, path: "0", label: "Concrete pad", output: write("0.jpg") }], [{ number: 1, path: "1/0", label: "Wired lamps", reason: "nothing of it could be built" }]);
-    process.exit(2);
-  case "writes-manifest":
-    write("0.jpg");
-    fs.writeFileSync(path.join(out, "render.json"), JSON.stringify({ schema: 1, rendered_at: "tool", entries: { "0": { file: "0.jpg", sha256: "from-tool" } } }));
-    report([{ number: 0, path: "", output: path.join(out, "0.jpg") }]);
-    break;
-  case "nothing":
-    report([], [{ number: 0, path: "", reason: "empty" }]);
-    process.exit(2);
-  case "fail":
+(async () => {
+  const { renderTargets } = await import(process.env.FAKE_RENDER_CORE);
+  const argv = process.argv.slice(2);
+  if (process.env.FAKE_RENDER_LOG) fs.appendFileSync(process.env.FAKE_RENDER_LOG, JSON.stringify(argv) + "\n");
+  const arg = (n) => argv[argv.indexOf(n) + 1];
+  const out = arg("--out");
+  const mode = process.env.FAKE_RENDER;
+  const only = argv.includes("--only") ? arg("--only").split(",") : null;
+  process.stderr.write("Starting Factorio\n");
+  if (mode === "fail") {
     process.stderr.write("render: Factorio did not start within 300 s\n");
     process.exit(1);
-  case "slow":
+  }
+  if (mode === "slow") {
     process.on("SIGINT", () => { process.stderr.write("Received SIGINT: stopping Factorio\n"); process.exit(130); });
     setTimeout(() => process.exit(0), 20000);
-    break;
-}
+    return;
+  }
+  const value = JSON.parse(fs.readFileSync(arg("--input"), "utf8"));
+  const targets = renderTargets(value).filter((t) => !only || only.includes(t.path));
+  const images = [];
+  const without = [];
+  targets.forEach((t, i) => {
+    if (mode === "nothing" || (mode === "partial" && i === targets.length - 1)) {
+      without.push({ path: t.path, file: t.file, label: t.label, reason: "nothing of it could be built", failed: {}, missing: { "assembling-machine-3": 4 } });
+      return;
+    }
+    const f = path.join(out, t.file);
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, "jpeg " + t.file);
+    const build = mode === "build-problems" && i === 0 ? { failed: { "stone-furnace": 2 }, missing: { "small-lamp": 1 } } : { failed: {}, missing: {} };
+    images.push({ path: t.path, file: t.file, label: t.label, sha256: t.hash, width: 10, height: 20, bytes: 5, pixels_per_tile: 32, screenshots: 1, strategy: "ordinary", built: 1, tiles: 0, ...build, problems: [], import_errors: false, attempts: [] });
+  });
+  if (mode === "empty-too") without.push({ path: "9", file: "9.jpg", label: "", reason: "empty blueprint" });
+  const manifestFile = path.join(out, "render.json");
+  if (images.length > 0 || without.length > 0) {
+    fs.mkdirSync(out, { recursive: true });
+    const previous = only && fs.existsSync(manifestFile) ? JSON.parse(fs.readFileSync(manifestFile, "utf8")).entries : {};
+    const entries = { ...previous };
+    for (const i of images) entries[i.path === "" ? "0" : i.path] = { file: i.file, sha256: i.sha256, width: i.width, height: i.height };
+    fs.writeFileSync(manifestFile, JSON.stringify({ schema: 1, rendered_at: new Date().toISOString(), entries }, null, 2) + "\n");
+  }
+  if (mode !== "noreport") {
+    console.log(JSON.stringify({
+      schema: 1, input: path.resolve(arg("--input")), format: "json", out: path.resolve(out), only,
+      images, without_image: without, skipped: [], problems: mode === "problems" ? ["slot 3 appears twice; the second is ignored"] : [],
+      removed: [], manifest: manifestFile, work_dir: null,
+    }, null, 2));
+  }
+  process.exit(without.length > 0 ? 2 : 0);
+})();
 `;
 
 function git(cwd: string, ...args: string[]): string {
@@ -113,8 +119,6 @@ beforeEach(() => {
   git(vault, "commit", "-qm", "initial");
   git(vault, "push", "-q", "-u", "origin", "main");
   process.env["FAKE_RENDER_LOG"] = log;
-  delete process.env["FAKE_RENDER_ONLY"];
-  resetRenderToolCache();
 });
 
 function realGit(dir: string, lfs = true): GitSync {
@@ -140,8 +144,8 @@ const lastArgs = () => JSON.parse(readFileSync(log, "utf8").trim().split("\n").a
 const remoteLog = () => git(remote, "log", "--format=%s", "main").trim().split("\n");
 
 describe("render preview", () => {
-  test("single blueprint with a report: images, manifest, block, commit", async () => {
-    const h = host("report-single");
+  test("single blueprint: images, the tool's manifest, block, commit", async () => {
+    const h = host("ok");
     const out = await renderPreview(h, SINGLE_DIR);
     assert.equal(out.action, "rendered");
     assert.deepStrictEqual(out.action === "rendered" && out.images, ["0.jpg"]);
@@ -155,47 +159,55 @@ describe("render preview", () => {
       "--json",
       "--show-window",
     ]);
-    const manifest = parseRenderManifest(read(`${SINGLE_DIR}/renders/render.json`))!;
     const target = renderTargets(JSON.parse(read(`${SINGLE_DIR}/blueprint.json`)))[0]!;
-    assert.deepStrictEqual(manifest.entries, { "0": { file: "0.jpg", sha256: target.hash, width: 10, height: 20 } });
+    assert.equal(parseRenderManifest(read(`${SINGLE_DIR}/renders/render.json`))!.entries["0"]!.sha256, target.hash);
     assert.ok(read(`${SINGLE_DIR}/README.md`).includes(`![Lamps](https://blueprints.abucnasty.dev/${SINGLE_DIR}/cover.jpg)`));
     assert.deepStrictEqual(remoteLog(), ["render Lamps", "initial"]);
-    assert.match(h.notices.at(-1)!.message, /^Rendered 1 image for cat\/lamps, committed and pushed/);
+    const last = h.notices.at(-1)!;
+    assert.match(last.message, /^Rendered 1 image for cat\/lamps, committed and pushed/);
+    assert.equal(last.kind, "info");
     assert.ok(h.progress.includes(`Rendering ${SINGLE_DIR}: Starting Factorio`));
     assert.equal(h.progress.at(-1), "(closed)");
     assert.equal((await folderRenderState(h, SINGLE_DIR)).overall, "current");
   });
 
-  test("book with a report: nested files, version in the message, problems listed", async () => {
-    const h = host("report-book");
+  test("book: nested files, version in the commit message", async () => {
+    const h = host("ok");
     const out = await renderPreview(h, `${BOOK_DIR}/renders`);
     assert.deepStrictEqual(out.action === "rendered" && out.images, ["0.jpg", "1/0.jpg"]);
     assert.deepStrictEqual(Object.keys(parseRenderManifest(read(`${BOOK_DIR}/renders/render.json`))!.entries).sort(), ["0", "1/0"]);
     assert.deepStrictEqual(remoteLog(), ["render The Book 3", "initial"]);
-    assert.match(h.notices.at(-1)!.message, /1 problem: slot 1\/0 "Wired lamps": 1 entity not built/);
     assert.ok(read(`${BOOK_DIR}/README.md`).includes("cover.jpg)\n\n- [Concrete pad]"));
+    assert.equal((await folderRenderState(h, BOOK_DIR)).overall, "current");
   });
 
-  test("success without a report: files found by scanning renders/", async () => {
-    const h = host("noreport");
-    const out = await renderPreview(h, SINGLE_DIR);
-    assert.deepStrictEqual(out.action === "rendered" && out.images, ["0.jpg"]);
-    assert.deepStrictEqual(Object.keys(parseRenderManifest(read(`${SINGLE_DIR}/renders/render.json`))!.entries), ["0"]);
-  });
-
-  test("an older tool's numbered images: the plugin writes the manifest from the report", async () => {
-    const h = host("old-naming");
+  test("entities not built are summed from the failed and missing objects", async () => {
+    const h = host("build-problems");
     await renderPreview(h, BOOK_DIR);
-    const m = parseRenderManifest(read(`${BOOK_DIR}/renders/render.json`))!;
-    assert.deepStrictEqual(Object.fromEntries(Object.entries(m.entries).map(([k, e]) => [k, e.file])), { "0": "0.jpg", "1/0": "1.jpg" });
-    const state = await folderRenderState(h, BOOK_DIR);
-    assert.equal(state.overall, "current");
+    const last = h.notices.at(-1)!;
+    assert.match(last.message, /\(1 problem: slot 0 "Concrete pad": 3 entities not built\)/);
+    assert.equal(last.kind, "error");
   });
 
-  test("a manifest the tool wrote is left alone", async () => {
-    const h = host("writes-manifest");
-    await renderPreview(h, SINGLE_DIR);
-    assert.equal(parseRenderManifest(read(`${SINGLE_DIR}/renders/render.json`))!.entries["0"]!.sha256, "from-tool");
+  test("the report's problems with the input are listed", async () => {
+    const h = host("problems");
+    await renderPreview(h, BOOK_DIR);
+    assert.match(h.notices.at(-1)!.message, /1 problem: slot 3 appears twice; the second is ignored/);
+  });
+
+  test("an empty blueprint without an image is not a problem", async () => {
+    const h = host("empty-too");
+    const out = await renderPreview(h, BOOK_DIR);
+    assert.ok(out.action === "rendered" && out.problems.length === 0);
+    const last = h.notices.at(-1)!;
+    assert.match(last.message, /^Rendered 2 images for cat\/book, committed and pushed/);
+    assert.equal(last.kind, "info");
+  });
+
+  test("no parsable report: files found by scanning renders/", async () => {
+    const h = host("noreport");
+    const out = await renderPreview(h, BOOK_DIR);
+    assert.deepStrictEqual(out.action === "rendered" && out.images, ["0.jpg", "1/0.jpg"]);
   });
 
   test("partial failure (exit 2): commits what was made and lists what is missing", async () => {
@@ -226,7 +238,7 @@ describe("render preview", () => {
   });
 
   test("missing Factorio path: says so and opens the settings", async () => {
-    const h = host("report-single", { settings: { render: { factorioPath: " " } } });
+    const h = host("ok", { settings: { render: { factorioPath: " " } } });
     assert.deepStrictEqual(await renderPreview(h, SINGLE_DIR), { action: "needs-settings" });
     assert.equal(h.settingsOpened, 1);
     assert.match(h.notices[0]!.message, /Set the Factorio path/);
@@ -235,7 +247,7 @@ describe("render preview", () => {
 
   test("missing node_modules: the exact command to run", async () => {
     rmSync(join(vault, "_tools/render/node_modules"), { recursive: true });
-    const h = host("report-single");
+    const h = host("ok");
     const out = await renderPreview(h, SINGLE_DIR);
     assert.equal(out.action, "rejected");
     assert.equal(
@@ -245,15 +257,14 @@ describe("render preview", () => {
   });
 
   test("Node that cannot start", async () => {
-    const h = host("report-single", { settings: { render: { nodePath: join(root, "no-node") } } });
+    const h = host("ok", { settings: { render: { nodePath: join(root, "no-node") } } });
     const out = await renderPreview(h, SINGLE_DIR);
     assert.equal(out.action, "failed");
     assert.match(h.notices[0]!.message, /^Could not start Node\.js .*Set "Node path"/);
   });
 
   test("outside a blueprint folder", async () => {
-    const h = host("report-single");
-    assert.equal((await renderPreview(h, "cat")).action, "rejected");
+    assert.equal((await renderPreview(host("ok"), "cat")).action, "rejected");
   });
 
   test("one render at a time, and cancel stops it", async () => {
@@ -271,7 +282,7 @@ describe("render preview", () => {
     const hook = join(vault, ".git", "hooks", "pre-push");
     writeFileSync(hook, "#!/bin/sh\necho 'batch response: Authentication required: LFS upload token missing' >&2\necho 'error: failed to push some refs' >&2\nexit 1\n");
     chmodSync(hook, 0o755);
-    const h = host("report-single");
+    const h = host("ok");
     const out = await renderPreview(h, SINGLE_DIR);
     assert.ok(out.action === "rendered" && out.committed);
     const notice = h.notices.at(-1)!;
@@ -283,7 +294,7 @@ describe("render preview", () => {
   });
 
   test("without git-lfs the images are not committed", async () => {
-    const h = host("report-single", { lfs: false });
+    const h = host("ok", { lfs: false });
     const out = await renderPreview(h, SINGLE_DIR);
     assert.ok(out.action === "rendered" && !out.committed);
     assert.match(h.notices.at(-1)!.message, /git-lfs is not installed/);
@@ -292,16 +303,13 @@ describe("render preview", () => {
 });
 
 describe("render only what needs it", () => {
-  test("--only with the outdated entries when the tool supports it", async () => {
-    process.env["FAKE_RENDER_ONLY"] = "1";
-    await renderPreview(host("report-book"), BOOK_DIR);
-    // Change one entry of the book: only that slot is outdated.
+  test("--only with the outdated entries; the tool merges render.json", async () => {
+    await renderPreview(host("ok"), BOOK_DIR);
     const value = JSON.parse(read(`${BOOK_DIR}/blueprint.json`));
     value.blueprint_book.blueprints[1].blueprint_book.blueprints[0].blueprint.label = "Changed lamps";
     writeFileSync(join(vault, BOOK_DIR, "blueprint.json"), writeCanonicalJson(value));
-    const h = host("report-book");
-    const before = await folderRenderState(h, BOOK_DIR);
-    assert.deepStrictEqual(before.entries.map((e) => e.state), ["current", "outdated"]);
+    const h = host("ok");
+    assert.deepStrictEqual((await folderRenderState(h, BOOK_DIR)).entries.map((e) => e.state), ["current", "outdated"]);
     await renderPreview(h, BOOK_DIR, { onlyNeeded: true });
     const args = lastArgs();
     assert.deepStrictEqual(args.slice(args.indexOf("--only"), args.indexOf("--only") + 2), ["--only", "1/0"]);
@@ -313,26 +321,23 @@ describe("render only what needs it", () => {
     assert.match(h.notices.at(-1)!.message, /already current/);
   });
 
-  test("the whole folder when the tool has no --only", async () => {
-    await renderPreview(host("report-book"), BOOK_DIR);
-    const value = JSON.parse(read(`${BOOK_DIR}/blueprint.json`));
-    value.blueprint_book.blueprints[0].blueprint.label = "Changed pad";
-    writeFileSync(join(vault, BOOK_DIR, "blueprint.json"), writeCanonicalJson(value));
-    await renderPreview(host("report-book"), BOOK_DIR, { onlyNeeded: true });
+  test("everything needed, or a single blueprint: a whole run without --only", async () => {
+    await renderPreview(host("ok"), BOOK_DIR, { onlyNeeded: true });
+    assert.ok(!lastArgs().includes("--only"));
+    await renderPreview(host("ok"), SINGLE_DIR, { onlyNeeded: true });
     assert.ok(!lastArgs().includes("--only"));
   });
 
   test("needing-render list and render all", async () => {
-    const h = host("report-single");
+    const h = host("ok");
     assert.deepStrictEqual((await foldersNeedingRender(h)).map((f) => [f.folder, f.state.overall]), [
       [BOOK_DIR, "none"],
       [SINGLE_DIR, "none"],
     ]);
-    process.env["FAKE_RENDER"] = "report-book"; // works for both: single reads path "" only from report-single
     await renderAllNeeded(h);
-    const summary = h.notices.at(-1)!.message;
-    assert.match(summary, /^Render all: 2 of 2 rendered\./);
+    assert.match(h.notices.at(-1)!.message, /^Render all: 2 of 2 rendered\./);
     assert.ok(h.progress.some((p) => p.startsWith("Rendering 2 of 2: cat/lamps")));
+    assert.deepStrictEqual(await foldersNeedingRender(h), []);
   });
 
   test("render all reports failures and goes on", async () => {
@@ -344,14 +349,14 @@ describe("render only what needs it", () => {
   });
 
   test("import notice says when the render is now outdated", async () => {
-    await renderPreview(host("report-single"), SINGLE_DIR);
-    const h = host("report-single", { clipboard: fixture("non-ascii-label.txt"), settings: { commitAfterImport: false } });
+    await renderPreview(host("ok"), SINGLE_DIR);
+    const h = host("ok", { clipboard: fixture("non-ascii-label.txt"), settings: { commitAfterImport: false } });
     await importFromClipboard(h, SINGLE_DIR);
     assert.match(h.notices.at(-1)!.message, /its render is now outdated: outdated; run Render preview/);
   });
 
   test("render after import, when switched on for this computer", async () => {
-    const h = host("report-single", { clipboard: fixture("non-ascii-label.txt"), settings: { render: { afterImport: true } } });
+    const h = host("ok", { clipboard: fixture("non-ascii-label.txt"), settings: { render: { afterImport: true } } });
     const out = await importFromClipboard(h, "cat");
     assert.equal(out.action, "created");
     assert.deepStrictEqual(remoteLog(), ["render Fußgänger-Brücke — 日本語 🚀 1", "add Fußgänger-Brücke — 日本語 🚀", "initial"]);

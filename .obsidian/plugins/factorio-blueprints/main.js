@@ -7917,20 +7917,14 @@ function parseRenderManifest(text) {
     return void 0;
   }
 }
-function writeRenderManifest(m) {
-  const keys = Object.keys(m.entries).sort((a, b) => comparePaths(a, b));
-  const entries = {};
-  for (const k of keys) entries[k] = m.entries[k];
-  return JSON.stringify({ schema: 1, rendered_at: m.rendered_at, entries }, null, 2) + "\n";
-}
 function renderState(value, manifest, images) {
   const present = new Set(images);
   const claimed = /* @__PURE__ */ new Set();
   const entries = renderTargets(value).map((t) => {
     const recorded = manifest?.entries[t.key];
-    const image = [recorded?.file, t.file].find((f) => f !== void 0 && present.has(f));
+    const image = present.has(t.file) ? t.file : void 0;
     if (image !== void 0) claimed.add(image);
-    const state = image === void 0 ? "none" : recorded !== void 0 && recorded.sha256 === t.hash && recorded.file === image ? "current" : "outdated";
+    const state = image === void 0 ? "none" : recorded !== void 0 && recorded.sha256 === t.hash ? "current" : "outdated";
     return { ...t, state, image };
   });
   const orphans = images.filter((f) => !claimed.has(f)).sort();
@@ -7945,12 +7939,6 @@ function renderStateLabel(s) {
   if (s.overall === "current") return "Render: current";
   const stale = s.counts.total - s.counts.current;
   return s.counts.total === 1 ? "Render: outdated" : `Render: ${stale} of ${s.counts.total} outdated`;
-}
-function comparePaths(a, b) {
-  const x2 = a.split("/").map(Number);
-  const y = b.split("/").map(Number);
-  for (let i2 = 0; i2 < Math.min(x2.length, y.length); i2++) if (x2[i2] !== y[i2]) return x2[i2] - y[i2];
-  return x2.length - y.length;
 }
 function arrayLength2(v) {
   return Array.isArray(v) ? v.length : 0;
@@ -8172,25 +8160,23 @@ then render again.`
   }
   const abs = (p) => absolute(host.vaultPath, p);
   const node2 = settings.nodePath.trim() || "node";
-  const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
-  const manifestBefore = await files.exists(manifestPath) ? await files.read(manifestPath) : void 0;
-  let value;
-  try {
-    value = readCanonicalJson(await files.read(joinPath(folder, BLUEPRINT_FILE)));
-  } catch (e) {
-    return reject3(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${e instanceof Error ? e.message : String(e)}`);
-  }
   let only = [];
   if (options.onlyNeeded) {
-    const state = renderState(value, parseRenderManifest(manifestBefore), await listRenderFiles(host, folder));
+    let value;
+    try {
+      value = readCanonicalJson(await files.read(joinPath(folder, BLUEPRINT_FILE)));
+    } catch (e) {
+      return reject3(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
+    const manifest = await files.exists(manifestPath) ? parseRenderManifest(await files.read(manifestPath)) : void 0;
+    const state = renderState(value, manifest, await listRenderFiles(host, folder));
     const needed = state.entries.filter((e) => e.state !== "current").map((e) => e.path);
     if (needed.length === 0 && state.counts.total > 0) {
       ui.notice(`The render of ${folder} is already current.`);
       return { action: "rendered", folder, images: [], problems: [], committed: false };
     }
-    if (needed.length > 0 && needed.length < state.counts.total && !needed.includes("") && await supportsOnly(host, node2, abs(RENDER_SCRIPT))) {
-      only = needed;
-    }
+    if (needed.length < state.counts.total && !needed.includes("")) only = needed;
   }
   const args = [
     abs(RENDER_SCRIPT),
@@ -8232,19 +8218,12 @@ then render again.`
     return fail(host, `Render of ${folder} failed: ${lastErrorLine(result.stderr)}. Nothing was committed.`);
   }
   const report = parseReport(result.stdout);
-  const fromReport = report ? reportedFiles(report, abs(joinPath(folder, "renders"))) : void 0;
-  const present = await listRenderFiles(host, folder);
-  const images = fromReport && fromReport.length > 0 ? [...fromReport].sort() : present;
+  const images = report ? reportedFiles(report) : await listRenderFiles(host, folder);
   const problems = report ? reportedProblems(report) : result.code === 2 ? ["some blueprints got no image (no report)"] : [];
   const summary = `Rendered ${images.length} image${images.length === 1 ? "" : "s"} for ${folder}` + (problems.length > 0 ? ` (${problems.length} problem${problems.length === 1 ? "" : "s"}: ${problems.slice(0, 5).join("; ")}${problems.length > 5 ? "; …" : ""})` : "");
   if (images.length === 0) {
     ui.notice(`${summary}. Nothing to commit.`, "error");
     return { action: "rendered", folder, images, problems, committed: false };
-  }
-  const manifestAfter = await files.exists(manifestPath) ? await files.read(manifestPath) : void 0;
-  if (manifestAfter === void 0 || manifestAfter === manifestBefore) {
-    const written = manifestFromReport(value, parseRenderManifest(manifestBefore), report, fromReport, present, (/* @__PURE__ */ new Date()).toISOString());
-    if (written !== void 0) await files.write(manifestPath, writeRenderManifest(written));
   }
   const block = await refreshGeneratedBlock(host, folder);
   const blockNote = block.status === "skipped" && block.reason !== "no README.md" ? ` Notes not updated: ${block.reason}` : "";
@@ -8290,39 +8269,31 @@ function parseReport(stdout) {
     return void 0;
   }
 }
-function reportedFiles(report, rendersAbs) {
+function reportedFiles(report) {
   const images = Array.isArray(report["images"]) ? report["images"] : [];
-  const out = [];
-  for (const image of images) {
-    if (typeof image !== "object" || image === null) continue;
-    const r = image;
-    const file = [r["output"], r["out"], r["file"]].find((f) => typeof f === "string" && f !== "");
-    if (file === void 0) return void 0;
-    const norm = file.replace(/\\/g, "/");
-    const base = rendersAbs.replace(/\\/g, "/").replace(/\/+$/, "") + "/";
-    out.push(norm.startsWith(base) ? norm.slice(base.length) : norm.replace(/^(?:\.\/)?renders\//, ""));
-  }
-  return out.length > 0 ? out : void 0;
+  return images.map((i2) => typeof i2 === "object" && i2 !== null ? i2["file"] : void 0).filter((f) => typeof f === "string" && f !== "").sort();
 }
 function reportedProblems(report) {
   const out = [];
   const name = (r) => {
     const label = typeof r["label"] === "string" && r["label"] !== "" ? ` "${r["label"]}"` : "";
-    const path = typeof r["path"] === "string" && r["path"] !== "" ? `slot ${r["path"]}` : `blueprint ${String(r["number"] ?? "?")}`;
+    const path = typeof r["path"] === "string" && r["path"] !== "" ? `slot ${r["path"]}` : "the blueprint";
     return path + label;
   };
-  const count2 = (v) => Array.isArray(v) ? v.length : typeof v === "number" ? v : 0;
-  for (const m of Array.isArray(report["without_image"]) ? report["without_image"] : []) {
+  const count2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v) ? Object.values(v).reduce((sum, n) => sum + (typeof n === "number" ? n : 0), 0) : 0;
+  const list = (key) => Array.isArray(report[key]) ? report[key] : [];
+  for (const p of list("problems")) if (typeof p === "string" && p !== "") out.push(p);
+  for (const m of list("without_image")) {
     if (typeof m !== "object" || m === null) continue;
     const r = m;
+    if (r["reason"] === "empty blueprint") continue;
     out.push(`${name(r)}: no image${typeof r["reason"] === "string" ? ` (${r["reason"]})` : ""}`);
   }
-  for (const i2 of Array.isArray(report["images"]) ? report["images"] : []) {
+  for (const i2 of list("images")) {
     if (typeof i2 !== "object" || i2 === null) continue;
     const r = i2;
-    const failed = count2(r["failed"]);
-    const missing = count2(r["missing"]);
-    if (failed + missing > 0) out.push(`${name(r)}: ${failed + missing} entit${failed + missing === 1 ? "y" : "ies"} not built`);
+    const n = count2(r["failed"]) + count2(r["missing"]);
+    if (n > 0) out.push(`${name(r)}: ${n} entit${n === 1 ? "y" : "ies"} not built`);
   }
   return out;
 }
@@ -8341,49 +8312,6 @@ function reject3(host, reason) {
 function fail(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "failed", reason };
-}
-var onlySupport;
-async function supportsOnly(host, node2, script) {
-  if (onlySupport?.script === script) return onlySupport.supported;
-  const out = await host.processes.run(node2, [script, "--help"], { cwd: host.vaultPath });
-  const supported = out.code === 0 && /--only\b/.test(out.stdout + out.stderr);
-  onlySupport = { script, supported };
-  return supported;
-}
-function manifestFromReport(value, previous, report, reportedFiles2, images, now) {
-  const targets = renderTargets(value);
-  const byKey = new Map(targets.map((t) => [t.key, t]));
-  const present = new Set(images);
-  const entries = { ...previous?.entries ?? {} };
-  let changed = false;
-  const reported = report && Array.isArray(report["images"]) ? report["images"] : void 0;
-  if (reported) {
-    reported.forEach((item, i2) => {
-      if (typeof item !== "object" || item === null) return;
-      const r = item;
-      const path = typeof r["path"] === "string" ? r["path"] : void 0;
-      const key = path === void 0 ? void 0 : path === "" ? "0" : path;
-      const target = key === void 0 ? void 0 : byKey.get(key);
-      if (!target) return;
-      const numbered = typeof r["number"] === "number" ? `${r["number"]}.jpg` : void 0;
-      const file = [reportedFiles2?.[i2], target.file, numbered].find((f) => f !== void 0 && present.has(f));
-      if (file === void 0) return;
-      entries[target.key] = {
-        file,
-        sha256: target.hash,
-        ...typeof r["width"] === "number" ? { width: r["width"] } : {},
-        ...typeof r["height"] === "number" ? { height: r["height"] } : {}
-      };
-      changed = true;
-    });
-  } else {
-    for (const t of targets) {
-      if (!present.has(t.file)) continue;
-      entries[t.key] = { file: t.file, sha256: t.hash };
-      changed = true;
-    }
-  }
-  return changed ? { schema: 1, rendered_at: now, entries } : void 0;
 }
 
 // src/commands/render-status.ts

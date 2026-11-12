@@ -1,7 +1,6 @@
 // Whether a blueprint folder's renders match its blueprint.json.
 //
-// The render tool (or, for an older tool, the plugin) writes
-// <folder>/renders/render.json after a run:
+// The render tool writes <folder>/renders/render.json after a run:
 //   { "schema": 1, "rendered_at": "<ISO time>",
 //     "entries": { "<slot path, or "0" for a single blueprint>":
 //                  { "file": "3/1.jpg", "sha256": "<hash>", "width": 0, "height": 0 } } }
@@ -94,18 +93,6 @@ export function parseRenderManifest(text: string | undefined): RenderManifest | 
   }
 }
 
-/**
- * The manifest as written to disk: two-space JSON, trailing newline.
- * Entries are added in slot order (JavaScript still lists integer-like keys
- * such as "10" first, which is just as stable).
- */
-export function writeRenderManifest(m: RenderManifest): string {
-  const keys = Object.keys(m.entries).sort((a, b) => comparePaths(a, b));
-  const entries: Record<string, RenderManifestEntry> = {};
-  for (const k of keys) entries[k] = m.entries[k]!;
-  return JSON.stringify({ schema: 1, rendered_at: m.rendered_at, entries }, null, 2) + "\n";
-}
-
 export type EntryRenderState = "none" | "current" | "outdated";
 
 export interface FolderRenderState {
@@ -133,12 +120,10 @@ export function renderState(
   const claimed = new Set<string>();
   const entries = renderTargets(value).map((t) => {
     const recorded = manifest?.entries[t.key];
-    // The manifest says which file holds the entry (older tools numbered
-    // images 0.jpg, 1.jpg, …); otherwise the naming rule does.
-    const image = [recorded?.file, t.file].find((f): f is string => f !== undefined && present.has(f));
+    const image = present.has(t.file) ? t.file : undefined;
     if (image !== undefined) claimed.add(image);
     const state: EntryRenderState =
-      image === undefined ? "none" : recorded !== undefined && recorded.sha256 === t.hash && recorded.file === image ? "current" : "outdated";
+      image === undefined ? "none" : recorded !== undefined && recorded.sha256 === t.hash ? "current" : "outdated";
     return { ...t, state, image };
   });
   const orphans = images.filter((f) => !claimed.has(f)).sort();
@@ -156,14 +141,6 @@ export function renderStateLabel(s: FolderRenderState): string {
   if (s.overall === "current") return "Render: current";
   const stale = s.counts.total - s.counts.current;
   return s.counts.total === 1 ? "Render: outdated" : `Render: ${stale} of ${s.counts.total} outdated`;
-}
-
-/** Slot paths in numeric order ("2" before "10", "3" before "3/1"). */
-export function comparePaths(a: string, b: string): number {
-  const x = a.split("/").map(Number);
-  const y = b.split("/").map(Number);
-  for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i]! - y[i]!;
-  return x.length - y.length;
 }
 
 function arrayLength(v: unknown): number {

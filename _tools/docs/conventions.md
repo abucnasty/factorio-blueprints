@@ -127,8 +127,8 @@ value under its `blueprint` key) as compact JSON with keys sorted by code
 point and array order kept (`blueprintHash` in the core). An image is
 current when its entry's hash matches the blueprint now, outdated when it
 differs or is not recorded; blueprints with no entities and no tiles get no
-image and do not count. The render tool writes the file; when an older tool
-does not, the plugin writes it from the tool's report.
+image and do not count. The render tool writes the file after every
+successful run (merging on `--only`); the plugin only reads it.
 
 ## Blueprint string codec
 
