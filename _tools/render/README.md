@@ -19,7 +19,7 @@ are never touched. Process control, RCON and screenshots are ported from
 
 ```bash
 node bin/render.js --factorio <executable or install folder> --input <blueprint.json or .txt> --out <dir>
-node bin/render.js --input <file> --list     # which blueprint gets which number; no game needed
+node bin/render.js --input <file> --list     # every entry with its slot path and image file; no game needed
 node bin/render.js --help                    # every option, environment variable and the config file
 ```
 
@@ -27,10 +27,16 @@ node bin/render.js --help                    # every option, environment variabl
 
 ## Behaviour
 
-- **Numbering.** Blueprints are numbered from 0, depth first through nested books, each book in slot order.
-  Planners and books take no number. An empty blueprint keeps its number but gets no image.
-- **Stale images.** After a successful run, numbered images in `<out>` that this run did not produce are deleted.
-  Other files are left alone. Nothing is written to `<out>` if the run fails.
+- **File names.** Each blueprint's image is named by its slot path (the nested-links contract): in a book, slot 3's
+  blueprint is `<out>/3.jpg` and slot 1 of the book in slot 3 is `<out>/3/1.jpg`; a single blueprint is `<out>/0.jpg`.
+  A slot is the entry's `index`, or its array position when it has none. Planners and books get no image; an empty
+  blueprint gets none either. If a malformed book repeats a slot number, the first entry wins and the rest are reported.
+- **Stale images.** After a successful run, render images (slot-number paths ending in `.jpg`) in `<out>` that this
+  run did not produce are deleted, with the slot folders they leave empty. Other files are left alone. Nothing is
+  written to `<out>` if the run fails. `--only 3/1` (repeatable or comma-separated; a book's slot selects everything
+  in it) renders just those entries and leaves the rest of `<out>` alone.
+- **Manifest.** A successful run also writes `<out>/render.json`: per slot path the image file, size and a SHA-256 of
+  the blueprint it shows (`blueprintHash` in `src/manifest.js`), so other tools can tell which images are current.
 - **Ordinary blueprints** are built on a fresh lab-tile surface, with all technologies researched and ore placed under
   mining drills. The floor is the backdrop: `--backdrop a,b` replaces `lab-dark-1` and `lab-dark-2` (default
   `lab-dark-1,black-refined-concrete`).
@@ -42,8 +48,9 @@ node bin/render.js --help                    # every option, environment variabl
     exist on any other surface.
 - **Fallback.** If a blueprint cannot be built one way, the other surface is tried.
 - **Report.** Every attempt is logged with what was built, failed or missing, and why. Each run writes `render.log`
-  and `report.json` (`--json` prints the report) into its work folder. The work folder is kept when something
-  failed. `--diagnose` adds a matrix of placement experiments; it also runs by itself when the game builds nothing.
+  and `report.json` into its work folder (`--json` prints the report: per image its slot path, file, label, size and
+  what failed or was missing; see `RenderReport` in `src/render.js`). The work folder is kept when something failed. `--diagnose` adds a
+  matrix of placement experiments; it also runs by itself when the game builds nothing.
 - **Exit status.** `0`: every blueprint has an image. `2`: some blueprint got none (see the report). `1`: the run
   failed.
 

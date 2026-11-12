@@ -82,3 +82,12 @@ test("default config path per platform", () => {
     assert.equal(defaultConfigPath("win32", { APPDATA: "C:\\Users\\me\\AppData\\Roaming" }, "C:\\Users\\me"),
         path.join("C:\\Users\\me\\AppData\\Roaming", "factorio-blueprints", "render.json"));
 });
+
+test("--only takes slot paths, comma-separated or repeated", async () => {
+    const base = ["--input", "a", "--out", "b", "--factorio", "f"];
+    assert.equal((await parse(base)).only, undefined);
+    assert.deepEqual((await parse([...base, "--only", "3/1, 0", "--only", "2", "--only", "3/1"])).only, ["3/1", "0", "2"]);
+    await assert.rejects(parse([...base, "--only", "3/x"]), /--only takes slot paths/);
+    await assert.rejects(parse([...base, "--only", "/3"]), /--only takes slot paths/);
+    await assert.rejects(parse([...base, "--only", ","]), /--only takes slot paths/);
+});

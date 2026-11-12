@@ -27,14 +27,21 @@ async function main() {
         if (options.json) {
             process.stdout.write(JSON.stringify({
                 format: listed.format,
-                blueprints: listed.blueprints.map(({ number, path, label, empty }) => ({ number, path, label, empty })),
+                entries: listed.entries.map(({ path, kind, label, file, problem }) => ({ path, kind, label, file, problem })),
+                blueprints: listed.blueprints.map(({ path, label, file, empty }) => ({ path, label, file, empty })),
                 skipped: listed.skipped,
+                problems: listed.problems,
             }, null, 2) + "\n");
         } else {
-            for (const entry of listed.blueprints) {
-                process.stdout.write(`${entry.number}.jpg  slot ${entry.path || "-"}  ${entry.label || "(no label)"}${entry.empty ? "  [empty: no image]" : ""}\n`);
+            const empty = new Set(listed.blueprints.filter(entry => entry.empty).map(entry => entry.path));
+            for (const entry of listed.entries) {
+                const indent = "  ".repeat(Math.max(0, entry.slots.length - 1));
+                const where = entry.path === "" ? "(root)" : entry.path;
+                const target = entry.file ? `  -> ${entry.file}${empty.has(entry.path) ? " [empty: no image]" : ""}` : "";
+                const note = entry.problem ? `  [ignored: ${entry.problem}]` : "";
+                process.stdout.write(`${indent}${where}  ${entry.kind}  ${entry.label || "(no label)"}${target}${note}\n`);
             }
-            for (const item of listed.skipped) process.stdout.write(`skipped ${item.kind} at slot ${item.path || "-"}\n`);
+            for (const problem of listed.problems) process.stdout.write(`problem: ${problem}\n`);
         }
         return 0;
     }

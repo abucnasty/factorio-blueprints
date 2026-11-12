@@ -1,8 +1,6 @@
-// Reading the input and listing the blueprints it holds, in the order their images are numbered.
+// Reading the input and listing its entries by slot path, the addressing of the nested-links contract.
 import fs from "node:fs/promises";
 import { decodeBlueprintString, encodeBlueprintString } from "./codec.js";
-
-const PLANNER_KEYS = ["upgrade_planner", "deconstruction_planner"];
 
 /**
  * Read a `blueprint.json` (decoded JSON, the repo's canonical format) or a file holding a raw blueprint string.
@@ -31,44 +29,125 @@ export async function readInput(file) {
     }
 }
 
+/** The kinds of book entries, as named in the nested-links contract */
+const KINDS = [
+    ["blueprint", "blueprint"],
+    ["blueprint_book", "blueprint-book"],
+    ["upgrade_planner", "upgrade-planner"],
+    ["deconstruction_planner", "deconstruction-planner"],
+];
+
 /**
+ * One entry of the input: the root or any slot of any book, at any depth.
+ * @typedef {object} Entry
+ * @property {string} path     slot path, slot numbers from the root book down joined by "/" ("3/1"); "" for the root
+ * @property {number[]} slots  the same as numbers
+ * @property {"blueprint" | "blueprint-book" | "upgrade-planner" | "deconstruction-planner" | "unknown"} kind
+ * @property {string} label    the entry's own label, or ""
+ * @property {string | null} file   for a blueprint, its render file relative to the output folder ("3/1.jpg";
+ *                                   "0.jpg" for a lone blueprint at the root); null for anything else
+ * @property {string | null} problem  why this entry is ignored (a duplicate slot), if it is
+ */
+
+/**
+ * A blueprint to render.
  * @typedef {object} BlueprintEntry
- * @property {number} number   the image number: <out>/<number>.jpg
- * @property {string} path     slot indices from the top-level book down, e.g. "2/0"; "" for a lone blueprint
+ * @property {string} path     slot path ("3/1"); "" for a lone blueprint
+ * @property {string} file     render file relative to the output folder, "/"-separated ("3/1.jpg", or "0.jpg")
+ * @property {string} key      the file without ".jpg" and with "-" for "/", for names in the game ("3-1", "0")
  * @property {string} label    the blueprint's label, or ""
  * @property {any} blueprint   the blueprint object (the value under the "blueprint" key)
  * @property {boolean} empty   no entities and no tiles: nothing to render
  */
 
+/** The render file of a blueprint at a slot path, by the nested-links contract */
+export function renderFileOf(path) {
+    return `${path === "" ? "0" : path}.jpg`;
+}
+
+/** The slot number of a book slot: its `index`, or its position in the array when it has none (contract) */
+function slotNumber(slot, position, problems, where) {
+    if (slot.index === undefined || slot.index === null) return position;
+    if (Number.isInteger(slot.index) && slot.index >= 0) return slot.index;
+    problems.push(`book ${where || "(root)"}: slot index ${JSON.stringify(slot.index)} is not a whole number; using its position ${position}`);
+    return position;
+}
+
 /**
- * List every blueprint in a decoded blueprint string, depth first, each book's slots in ascending `index` order
- * (the order the game shows them in). Only blueprints are numbered; planners are listed as skipped and take no
- * number, books take no number themselves. An empty blueprint keeps its number but gets no image.
+ * List every entry of a decoded blueprint string and the blueprints to render, depth first, each book's slots in
+ * ascending slot number (the order the game shows them in).
+ *
+ * Slot paths follow the nested-links contract: a slot's number is its `index`, or its position in the
+ * `blueprints` array when it has none. A malformed book can give two entries the same slot number; the first in the
+ * array keeps the slot path, the others are listed with a problem and are not rendered (their links and image file
+ * would be the same). Only blueprints get render files; books and planners are listed, and planners are also
+ * reported as skipped. An empty blueprint keeps its slot path but gets no image.
  * @param {any} root
- * @returns {{ blueprints: BlueprintEntry[], skipped: { path: string, kind: string }[] }}
+ * @returns {{ entries: Entry[], blueprints: BlueprintEntry[], skipped: { path: string, kind: string, reason?: string }[],
+ *   problems: string[] }}
  */
 export function listBlueprints(root) {
     if (!root || typeof root !== "object") throw new Error("The blueprint JSON is not an object");
+    /** @type {Entry[]} */
+    const entries = [];
     /** @type {BlueprintEntry[]} */
     const blueprints = [];
     const skipped = [];
-    const visit = (item, path) => {
-        if (item.blueprint) {
+    const problems = [];
+    const visit = (item, slots) => {
+        const path = slots.join("/");
+        const [key, kind] = KINDS.find(([field]) => item[field]) ?? [null, "unknown"];
+        const label = (key && item[key].label) ?? "";
+        const file = kind === "blueprint" ? renderFileOf(path) : null;
+        entries.push({ path, slots, kind, label, file, problem: null });
+        if (kind === "blueprint") {
             const blueprint = item.blueprint;
             const empty = !(blueprint.entities?.length) && !(blueprint.tiles?.length);
-            blueprints.push({ number: blueprints.length, path: path.join("/"), label: blueprint.label ?? "", blueprint, empty });
-        } else if (item.blueprint_book) {
-            const slots = (item.blueprint_book.blueprints ?? [])
-                .map((slot, order) => ({ slot, order }))
-                .sort((a, b) => (a.slot.index ?? a.order) - (b.slot.index ?? b.order) || a.order - b.order);
-            for (const { slot, order } of slots) visit(slot, [...path, slot.index ?? order]);
+            blueprints.push({ path, file, key: file.slice(0, -4).replace(/\//g, "-"), label, blueprint, empty });
+        } else if (kind === "blueprint-book") {
+            const seen = new Set();
+            const book = (item.blueprint_book.blueprints ?? [])
+                .map((slot, position) => ({ slot, position, number: slotNumber(slot, position, problems, path) }))
+                .sort((a, b) => a.number - b.number || a.position - b.position);
+            for (const { slot, number } of book) {
+                if (seen.has(number)) {
+                    const where = [...slots, number].join("/");
+                    const reason = `duplicate slot ${number} in book ${path || "(root)"}: only the first entry with it is used`;
+                    problems.push(`${where}: ${reason}`);
+                    const [, slotKind] = KINDS.find(([field]) => slot[field]) ?? [null, "unknown"];
+                    entries.push({ path: where, slots: [...slots, number], kind: slotKind, label: "", file: null, problem: reason });
+                    skipped.push({ path: where, kind: slotKind, reason });
+                    continue;
+                }
+                seen.add(number);
+                visit(slot, [...slots, number]);
+            }
         } else {
-            const kind = PLANNER_KEYS.find(key => item[key]) ?? "unknown item";
-            skipped.push({ path: path.join("/"), kind });
+            skipped.push({ path, kind });
         }
     };
     visit(root, []);
-    return { blueprints, skipped };
+    return { entries, blueprints, skipped, problems };
+}
+
+/**
+ * The blueprints selected by slot paths (`--only`): each selector picks the entry at that slot path and, for a book,
+ * everything under it. "0" also picks a lone blueprint at the root (its file is 0.jpg).
+ * @param {BlueprintEntry[]} blueprints
+ * @param {string[]} selectors
+ * @returns {BlueprintEntry[]}
+ */
+export function selectBlueprints(blueprints, selectors) {
+    const unmatched = selectors.filter(selector => !blueprints.some(entry => selects(selector, entry)));
+    if (unmatched.length) {
+        throw new Error(`--only ${unmatched.join(", ")}: no blueprint at ${unmatched.length > 1 ? "these slot paths" : "this slot path"} in the input (see --list)`);
+    }
+    return blueprints.filter(entry => selectors.some(selector => selects(selector, entry)));
+}
+
+/** Whether a selector picks an entry: the same slot path, a book above it, or the file stem of a lone blueprint */
+export function selects(selector, entry) {
+    return entry.path === selector || entry.path.startsWith(`${selector}/`) || (entry.path === "" && entry.file === `${selector}.jpg`);
 }
 
 /**

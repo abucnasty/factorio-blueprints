@@ -20,13 +20,16 @@ export function parseBackdrop(value) {
 }
 
 export const USAGE = `Usage:
-  render --input <file> --out <dir> [options]     render every blueprint in <file> to <dir>/0.jpg, 1.jpg, ...
-  render --input <file> --list                    list the blueprints and their image numbers; no game needed
+  render --input <file> --out <dir> [options]     render every blueprint in <file> to <dir>/<slot path>.jpg
+                                                  (a book's slot 3/1 to <dir>/3/1.jpg; a single blueprint to <dir>/0.jpg)
+  render --input <file> --list                    list every entry with its slot path and render file; no game needed
 
 <file> is a blueprint.json (decoded JSON) or a text file holding a blueprint string.
 
 Options:
   --factorio <path>             Factorio executable or install folder        (env FACTORIO_PATH)
+  --only <slot path>[,...]      render only these entries (a book's slot path selects everything in it; repeatable);
+                                other images in <dir> are left alone
   --max-size <px>               longest side of one screenshot, default ${FRAMING_DEFAULTS.maxSize}  (env FACTORIO_RENDER_MAX_SIZE)
   --min-pixels-per-tile <px>    below this, capture a grid and stitch, default ${FRAMING_DEFAULTS.minPixelsPerTile}
   --max-output-size <px>        longest side of a stitched image, default ${FRAMING_DEFAULTS.maxOutputSize}
@@ -72,6 +75,7 @@ const OPTIONS = {
     "show-status-icons": { type: "boolean" },
     "show-window": { type: "boolean" },
     diagnose: { type: "boolean" },
+    only: { type: "string", multiple: true },
     backdrop: { type: "string" },
     timeout: { type: "string" },
     "work-dir": { type: "string" },
@@ -144,10 +148,22 @@ export async function parseCommandLine(argv, context = {}) {
         hideStatusIcons: !showStatusIcons,
         showWindow: Boolean(args["show-window"] ?? config.showWindow ?? false),
         diagnose: Boolean(args.diagnose),
+        only: parseOnly(args.only),
         backdrop: parseBackdrop(pick(args.backdrop, "FACTORIO_RENDER_BACKDROP", "backdrop")),
         timeoutSeconds: number("--timeout", pick(args.timeout, null, "timeout"), { min: 10 }) ?? 300,
         json: Boolean(args.json),
     };
+}
+
+/** Slot paths from repeated or comma-separated --only values */
+export function parseOnly(values) {
+    if (!values?.length) return undefined;
+    const paths = values.flatMap(value => value.split(",")).map(value => value.trim()).filter(Boolean);
+    const bad = paths.filter(value => !/^\d+(\/\d+)*$/.test(value));
+    if (bad.length || !paths.length) {
+        throw new Error(`--only takes slot paths like 3 or 3/1 (comma-separated or repeated), not "${bad.join(", ") || values.join(",")}"`);
+    }
+    return [...new Set(paths)];
 }
 
 /** The --list output */
