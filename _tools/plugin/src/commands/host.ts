@@ -2,6 +2,7 @@
 // (src/obsidian/) implements this for the real app; tests use fakes. Keep
 // command logic behind this interface so it runs without Obsidian.
 
+import type { BookPlan } from "../core/index.ts";
 import type { GitResult } from "../git/commit-and-sync.ts";
 
 /** Vault-relative file access ("/" separators, root is ""). */
@@ -14,6 +15,10 @@ export interface VaultFiles {
   mkdir(path: string): Promise<void>;
   /** Direct children of a folder, as vault paths. */
   list(path: string): Promise<{ files: string[]; folders: string[] }>;
+  /** Move a file; the destination's folder must exist and the destination must not. */
+  rename(from: string, to: string): Promise<void>;
+  /** Delete a file, or a folder with everything in it. */
+  remove(path: string): Promise<void>;
 }
 
 export interface Clipboard {
@@ -87,6 +92,28 @@ export interface UpdateAnswer {
 
 export type NoticeKind = "info" | "error";
 
+export interface TextPrompt {
+  title: string;
+  label: string;
+  description: string;
+  value: string;
+  okText: string;
+  /** Error message for an unusable value, or undefined if fine. */
+  check(value: string): Promise<string | undefined>;
+}
+
+export interface BookReview {
+  /** e.g. 'Split "Production Science Book" into folders'. */
+  title: string;
+  plan: BookPlan;
+}
+
+/**
+ * For each entry with status "choose", by slot path: the existing folder to
+ * update, or null to create a new folder at its newPath.
+ */
+export type BookChoices = Record<string, string | null>;
+
 export interface PickItem {
   label: string;
   detail?: string;
@@ -110,6 +137,10 @@ export interface UI {
   progress(message: string): Progress;
   /** Open the plugin's settings. Optional. */
   openSettings?(): void;
+  /** One text field; resolves undefined if cancelled. */
+  askText(prompt: TextPrompt): Promise<string | undefined>;
+  /** The book import review: Apply resolves the choices, Cancel undefined. */
+  reviewBookImport(review: BookReview): Promise<BookChoices | undefined>;
 }
 
 export interface GitSync {

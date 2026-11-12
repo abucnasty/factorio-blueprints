@@ -9,6 +9,7 @@ import { copyLiveLink } from "./commands/copy-link.ts";
 import { refreshAllGeneratedBlocks } from "./commands/generated-notes.ts";
 import type { Host } from "./commands/host.ts";
 import { importFromClipboard } from "./commands/import-blueprint.ts";
+import { importBookIntoFolders } from "./commands/import-book.ts";
 import { renderPreview } from "./commands/render-preview.ts";
 import { cancelRenderAll, folderRenderState, renderAllNeeded, showFoldersNeedingRender } from "./commands/render-status.ts";
 import { BLUEPRINT_FILE, isScannedPath, joinPath, RENDER_MANIFEST, renderStateLabel, selfAndAncestors } from "./core/index.ts";
@@ -45,6 +46,15 @@ const FOLDER_COMMANDS: FolderCommand[] = [
     menuOnlyInBlueprintFolder: false,
     exclusive: true,
     run: importFromClipboard,
+  },
+  {
+    id: "import-book-into-folders",
+    name: "Import book into folders",
+    menuTitle: "Import book into folders",
+    icon: "folder-tree",
+    menuOnlyInBlueprintFolder: false,
+    exclusive: true,
+    run: importBookIntoFolders,
   },
   {
     id: "copy-blueprint-string",

@@ -92,3 +92,6 @@ export type {
 
 export { applyStatsToNote, blueprintStats, STATS_KEYS } from "./stats.ts";
 export type { BlueprintStats } from "./stats.ts";
+
+export { bookBody, planBookImport, similarity } from "./book-split.ts";
+export type { BookPlan, ExistingFolder, PlanEntry, PlanStatus } from "./book-split.ts";

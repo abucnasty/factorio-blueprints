@@ -6,7 +6,7 @@ import type { Host, NoticeKind, Settings } from "../commands/host.ts";
 import { commitAndSync, lfsAvailable } from "../git/commit-and-sync.ts";
 import { createGitRunner, defaultGitBinary, nodePathExists } from "../git/node-runner.ts";
 import { processRunnerForThisApp } from "../process/flatpak.ts";
-import { CreateBlueprintModal, PickModal, UpdateBlueprintModal } from "./modals.ts";
+import { BookReviewModal, CreateBlueprintModal, PickModal, TextModal, UpdateBlueprintModal } from "./modals.ts";
 import { GIT_BINARY_KEY } from "./settings.ts";
 
 export function createObsidianHost(app: App, settings: Settings, openSettings?: () => void): Host {
@@ -43,6 +43,17 @@ export function createObsidianHost(app: App, settings: Settings, openSettings?: 
         const clean = (x: string) => x.replace(/^\/+/, "");
         return { files: listed.files.map(clean), folders: listed.folders.map(clean) };
       },
+      async rename(from, to) {
+        const file = app.vault.getAbstractFileByPath(p(from));
+        if (file) await app.fileManager.renameFile(file, p(to));
+        else await adapter.rename(p(from), p(to));
+      },
+      async remove(path) {
+        const stat = await adapter.stat(p(path));
+        if (!stat) return;
+        if (stat.type === "folder") await adapter.rmdir(p(path), true);
+        else await adapter.remove(p(path));
+      },
     },
     clipboard: {
       readText: () => navigator.clipboard.readText(),
@@ -54,6 +65,8 @@ export function createObsidianHost(app: App, settings: Settings, openSettings?: 
       },
       askCreate: (prompt) => new CreateBlueprintModal(app, prompt).ask(),
       askUpdate: (prompt) => new UpdateBlueprintModal(app, prompt).ask(),
+      askText: (prompt) => new TextModal(app, prompt).ask(),
+      reviewBookImport: (review) => new BookReviewModal(app, review).ask(),
       pick: (items, placeholder) => new PickModal(app, items, placeholder).ask(),
       progress(message) {
         const notice = new Notice(message, 0);
