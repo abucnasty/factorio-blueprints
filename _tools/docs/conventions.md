@@ -84,20 +84,17 @@ key being absent.
 
 ### Generated block
 
-The plugin keeps one marked block in the notes body, between
-`<!-- blueprint:generated:start -->` and `<!-- blueprint:generated:end -->`,
-each on a line of its own. Everything outside the markers belongs to the
-owner and no tool changes it. A new block goes at the top of the body, right
-after the frontmatter; if the owner moves it, it is refreshed where it is.
+The cover image and contents list at the top of a note are generated; write
+below them. The plugin writes them at the top of the body, one blank line
+after the frontmatter and one blank line before the owner's text, with no
+marker lines:
 
 ```
-<!-- blueprint:generated:start -->
 ![<title>](https://blueprints.abucnasty.dev/<folder path>/cover.jpg)
 
 - [<label>](https://blueprints.abucnasty.dev/<folder path>/0.txt)
 - <label of nested book> ([book](https://blueprints.abucnasty.dev/<folder path>/3.txt))
   - [<label>](https://blueprints.abucnasty.dev/<folder path>/3/1.txt)
-<!-- blueprint:generated:end -->
 ```
 
 - The image line is there only when the folder has a render image.
@@ -107,9 +104,16 @@ after the frontmatter; if the owner moves it, it is refreshed where it is.
   turned into words and Markdown characters escaped; an entry without a
   label shows as `Blueprint (slot 3)`, `Book (slot 3)`, `Upgrade planner
   (slot 3)` or `Deconstruction planner (slot 3)`.
-- A folder with neither has no block. Import, Render preview and "Refresh
-  generated blocks in all notes" write it; `generatedBlockLines` and
-  `applyGeneratedBlock` in the core are the implementation.
+- A folder with neither has no block.
+- The plugin finds its block by shape, only at the top of the body (blank
+  lines skipped): an optional line that is exactly one image whose http(s)
+  URL ends in `/cover.jpg`, then blank lines, then an optional run of list
+  items (any indentation) each ending in a link to an http(s) URL ending in
+  `.txt`, as `- [label](url)` or `- label ([book](url))`. It replaces that,
+  whatever base URL or folder path it was written with, and never changes
+  anything below it. Import, Render preview and "Refresh generated blocks in
+  all notes" write it; `generatedBlockLines` and `applyGeneratedBlock` in the
+  core are the implementation.
 
 ### Render state
 

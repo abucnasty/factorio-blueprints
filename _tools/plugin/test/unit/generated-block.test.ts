@@ -3,14 +3,13 @@ import { describe, test } from "node:test";
 
 import {
   applyGeneratedBlock,
-  BLOCK_END,
-  BLOCK_START,
   bookTree,
   coverUrl,
   decodeBlueprintString,
   displayLabel,
   encodePath,
   escapeInline,
+  findGeneratedBlock,
   findNode,
   flattenTree,
   generatedBlockLines,
@@ -94,7 +93,7 @@ describe("links", () => {
 
   test("segments are percent-encoded", () => {
     assert.equal(encodePath("odd cat/a#b?c/é@x/"), "odd%20cat/a%23b%3Fc/%C3%A9%40x");
-    assert.equal(stringUrl(BASE, "odd cat/(x)"), `${BASE}/odd%20cat/(x).txt`);
+    assert.equal(stringUrl(BASE, "odd cat/(x)"), `${BASE}/odd%20cat/%28x%29.txt`);
   });
 
   test("bad input is refused", () => {
@@ -109,20 +108,18 @@ describe("links", () => {
 describe("block text", () => {
   test("single blueprint: no block without renders, cover only with", () => {
     assert.equal(block(bp("x")), undefined);
-    assert.deepStrictEqual(block(bp("x"), true), [BLOCK_START, `![Mall](${BASE}/${F}/cover.jpg)`, BLOCK_END]);
+    assert.deepStrictEqual(block(bp("x"), true), [`![Mall](${BASE}/${F}/cover.jpg)`]);
     assert.equal(block({ upgrade_planner: { label: "p" } }), undefined);
   });
 
   test("flat book, with and without renders", () => {
     const value = book("B", [{ index: 0, ...bp("A") }, { index: 2, ...bp("C") }]);
-    assert.deepStrictEqual(block(value), [BLOCK_START, `- [A](${u("0")})`, `- [C](${u("2")})`, BLOCK_END]);
+    assert.deepStrictEqual(block(value), [`- [A](${u("0")})`, `- [C](${u("2")})`]);
     assert.deepStrictEqual(block(value, true), [
-      BLOCK_START,
       `![Mall](${BASE}/${F}/cover.jpg)`,
       "",
       `- [A](${u("0")})`,
       `- [C](${u("2")})`,
-      BLOCK_END,
     ]);
     assert.equal(block(book("empty", [])), undefined);
   });
@@ -130,21 +127,17 @@ describe("block text", () => {
   test("nested books and planners", () => {
     const value = decodeBlueprintString(fixture("book-nested.txt")).value;
     assert.deepStrictEqual(block(value), [
-      BLOCK_START,
       `- [Concrete pad](${u("0")})`,
       `- Inner book ([book](${u("1")}))`,
       `  - [Wired lamps](${u("1/0")})`,
       `  - [Trees only](${u("1/1")})`,
       `- [Belts to turbo](${u("2")})`,
-      BLOCK_END,
     ]);
     const deep = book("r", [{ index: 3, ...book("a", [{ index: 1, ...book(undefined, [bp("leaf")]) }]) }]);
     assert.deepStrictEqual(block(deep), [
-      BLOCK_START,
       `- a ([book](${u("3")}))`,
       `  - Book (slot 1) ([book](${u("3/1")}))`,
       `    - [leaf](${u("3/1/0")})`,
-      BLOCK_END,
     ]);
   });
 
@@ -159,8 +152,8 @@ describe("block text", () => {
     ];
     const value = book("B", labels.map((label, index) => ({ index, ...bp(label) })));
     const lines = block(value, true, "<b>Title</b> ]](x)")!;
-    assert.equal(lines[1], `![\\<b\\>Title\\</b\\> \\]\\](x)](${BASE}/${F}/cover.jpg)`);
-    const items = lines.slice(3, -1);
+    assert.equal(lines[0], `![\\<b\\>Title\\</b\\> \\]\\](x)](${BASE}/${F}/cover.jpg)`);
+    const items = lines.slice(2);
     assert.equal(items.length, labels.length);
     for (const [i, line] of items.entries()) {
       assert.ok(line.startsWith("- ["), line);
@@ -172,15 +165,23 @@ describe("block text", () => {
     assert.equal(items[2], `- [1\\. not ordered](${u("2")})`);
     assert.equal(items[4], `- [Iron Plate Red Mall](${u("4")})`);
     assert.equal(escapeInline("-->"), "\\--\\>");
+    // The plugin recognises its own block again, however odd the labels.
+    const body = `\n${lines.join("\n")}\n\nOwner.\n`;
+    assert.deepStrictEqual(findGeneratedBlock(body), { start: 1, end: body.length - "\nOwner.\n".length });
+    const nested = block(book("r", [{ index: 0, ...book("a ] (b) [book](x)", [bp("[c]")]) }]), true, "T")!;
+    const nestedBody = `${nested.join("\n")}\nOwner.\n`;
+    assert.equal(findGeneratedBlock(nestedBody)!.end, nestedBody.length - "Owner.\n".length);
   });
 });
 
 describe("applying the block", () => {
-  const lines = [BLOCK_START, `- [A](${u("0")})`, BLOCK_END];
+  const lines = [`![Mall](${BASE}/${F}/cover.jpg)`, "", `- [A](${u("0")})`, `- Inner ([book](${u("1")}))`, `  - [B](${u("1/0")})`];
   const blockText = lines.join("\n");
   const FM = '---\ntitle: Mall\nauthors: []\nversion: "1"\nposted: 2026-11-12\n---\n';
+  const OLD_START = "<!-- blueprint:generated:start -->";
+  const OLD_END = "<!-- blueprint:generated:end -->";
 
-  test("empty body", () => {
+  test("empty body: insert, idempotent, remove", () => {
     const r = applyGeneratedBlock(FM, lines);
     assert.equal(r.status, "inserted");
     assert.equal(r.text, `${FM}\n${blockText}\n`);
@@ -188,31 +189,70 @@ describe("applying the block", () => {
     assert.deepStrictEqual(applyGeneratedBlock(r.text, undefined), { status: "removed", text: FM });
   });
 
-  test("hand-written body is kept byte for byte, with or without a leading blank line", () => {
+  test("hand-written body is kept, one blank line between", () => {
     for (const body of ["\nMy notes.\n\n- a list\n", "Straight after the frontmatter.\n", "\n\n\nspaced\n"]) {
       const r = applyGeneratedBlock(FM + body, lines);
       assert.equal(r.status, "inserted");
-      assert.ok(r.text.startsWith(`${FM}\n${blockText}\n`));
-      assert.ok(r.text.endsWith(body));
+      assert.equal(r.text, `${FM}\n${blockText}\n\n${body.replace(/^\n+/, "")}`);
       assert.equal(applyGeneratedBlock(r.text, lines).status, "unchanged");
-      const removed = applyGeneratedBlock(r.text, undefined).text;
-      assert.ok(removed === FM + body || removed === FM + "\n" + body, JSON.stringify(removed));
+      assert.equal(applyGeneratedBlock(r.text, undefined).text, `${FM}\n${body.replace(/^\n+/, "")}`);
     }
   });
 
-  test("an existing block is replaced in place, wherever the owner moved it", () => {
-    const note = `${FM}\nIntro I wrote.\n\n${BLOCK_START}\nold stuff\n${BLOCK_END}\n\nOutro.\n`;
-    const r = applyGeneratedBlock(note, lines);
+  test("an existing block is replaced; the text below stays", () => {
+    const old = [`![Old](${BASE}/${F}/cover.jpg)`, "", `- [Gone](${u("7")})`].join("\n");
+    const r = applyGeneratedBlock(`${FM}\n${old}\n\nOutro.\n\nMore.\n`, lines);
     assert.equal(r.status, "replaced");
-    assert.equal(r.text, `${FM}\nIntro I wrote.\n\n${blockText}\n\nOutro.\n`);
+    assert.equal(r.text, `${FM}\n${blockText}\n\nOutro.\n\nMore.\n`);
+    const smaller = applyGeneratedBlock(r.text, [`- [A](${u("0")})`]);
+    assert.equal(smaller.text, `${FM}\n- [A](${u("0")})\n\nOutro.\n\nMore.\n`);
+  });
+
+  test("recognised: cover only, list only, both, nested books", () => {
+    const body = (b: string) => `\n${b}\n\nOwner text.\n`;
+    const cases = [
+      `![T](${BASE}/${F}/cover.jpg)`,
+      `- [A](${u("0")})\n- [B](${u("1")})`,
+      blockText,
+      `- Outer ([book](${u("3")}))\n  - Inner \\(x\\) ([book](${u("3/1")}))\n    - [Leaf \\[1\\]](${u("3/1/0")})`,
+    ];
+    for (const b of cases) {
+      const found = findGeneratedBlock(body(b));
+      assert.ok(found, b);
+      assert.equal(body(b).slice(found.start, found.end), b + "\n");
+      assert.equal(applyGeneratedBlock(FM + body(b), [`- [N](${u("0")})`]).text, `${FM}\n- [N](${u("0")})\n\nOwner text.\n`);
+    }
+  });
+
+  test("a block written with another base URL and folder path is still found", () => {
+    const old = `![X](http://old.example/other/place/cover.jpg)\n\n- [A](http://old.example/other/place/0.txt)`;
+    const r = applyGeneratedBlock(`${FM}\n${old}\n\nMine.\n`, lines);
+    assert.equal(r.text, `${FM}\n${blockText}\n\nMine.\n`);
+  });
+
+  test("the owner's own image at the top is not the cover", () => {
+    for (const img of ["![me](https://example.com/photo.jpg)", "![a](cover.jpg)", "![a](https://x.example/cover.jpg) and text"]) {
+      const note = `${FM}\n${img}\n\nText.\n`;
+      assert.equal(findGeneratedBlock(note.slice(FM.length)), undefined, img);
+      assert.equal(applyGeneratedBlock(note, lines).text, `${FM}\n${blockText}\n\n${img}\n\nText.\n`);
+    }
+  });
+
+  test("the owner's list right after the generated list is kept", () => {
+    const note = `${FM}\n${blockText}\n- my own item\n- [a link](https://example.com/page)\n`;
+    const r = applyGeneratedBlock(note, lines);
+    assert.equal(r.text, `${FM}\n${blockText}\n\n- my own item\n- [a link](https://example.com/page)\n`);
     assert.equal(applyGeneratedBlock(r.text, lines).status, "unchanged");
-    const removed = applyGeneratedBlock(note, undefined);
-    assert.equal(removed.status, "removed");
-    assert.equal(removed.text, `${FM}\nIntro I wrote.\n\n\nOutro.\n`);
+  });
+
+  test("the owner's paragraph directly under the list gets a blank line", () => {
+    const r = applyGeneratedBlock(`${FM}\n${blockText}\nRight under.\n`, lines);
+    assert.equal(r.text, `${FM}\n${blockText}\n\nRight under.\n`);
   });
 
   test("nothing to add and no block: unchanged", () => {
     assert.deepStrictEqual(applyGeneratedBlock(FM + "x\n", undefined), { status: "unchanged", text: FM + "x\n" });
+    assert.deepStrictEqual(applyGeneratedBlock(FM + "\n\nx\n", undefined), { status: "unchanged", text: FM + "\n\nx\n" });
   });
 
   test("CRLF notes get CRLF blocks", () => {
@@ -227,15 +267,30 @@ describe("applying the block", () => {
   test("a note without frontmatter gets the block at the very top", () => {
     const r = applyGeneratedBlock("Notes.\n", lines);
     assert.equal(r.text, `${blockText}\n\nNotes.\n`);
-    assert.equal(applyGeneratedBlock(r.text, undefined).text, "\nNotes.\n");
+    assert.equal(applyGeneratedBlock(r.text, lines).status, "unchanged");
+    assert.equal(applyGeneratedBlock(r.text, undefined).text, "Notes.\n");
+  });
+
+  test("migration: a marked block at the top becomes the marker-free block", () => {
+    const note = `${FM}\n${OLD_START}\n![Old](${BASE}/${F}/cover.jpg)\n\n- [Old](${u("0")})\n${OLD_END}\n\nMine.\n`;
+    const r = applyGeneratedBlock(note, lines);
+    assert.equal(r.status, "replaced");
+    assert.equal(r.text, `${FM}\n${blockText}\n\nMine.\n`);
+    assert.equal(applyGeneratedBlock(note, undefined).text, `${FM}\nMine.\n`);
+  });
+
+  test("migration: a marked block lower in the body moves to the top", () => {
+    const note = `${FM}\nIntro I wrote.\n\n${OLD_START}\nold stuff\n${OLD_END}\n\nOutro.\n`;
+    const r = applyGeneratedBlock(note, lines);
+    assert.equal(r.text, `${FM}\n${blockText}\n\nIntro I wrote.\n\nOutro.\n`);
   });
 
   test("broken markers leave the note alone", () => {
     for (const body of [
-      `${BLOCK_START}\nno end\n`,
-      `${BLOCK_END}\n${BLOCK_START}\n`,
-      `${BLOCK_START}\n${BLOCK_END}\n${BLOCK_START}\n${BLOCK_END}\n`,
-      `text ${BLOCK_START}\n${BLOCK_END}\n`,
+      `${OLD_START}\nno end\n`,
+      `${OLD_END}\n${OLD_START}\n`,
+      `${OLD_START}\n${OLD_END}\n${OLD_START}\n${OLD_END}\n`,
+      `text ${OLD_START}\n${OLD_END}\n`,
     ]) {
       const r = applyGeneratedBlock(FM + body, lines);
       assert.equal(r.status, "invalid", body);
