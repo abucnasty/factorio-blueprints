@@ -7,5 +7,9 @@ factoriobin: https://factoriobin.com/post/d26fun/12
 deprecated: true
 ---
 
+<!-- blueprint:generated:start -->
+![Automation Science (240/s)](https://blueprints.abucnasty.dev/megabasing/common-quality-science/automation-science-240/cover.jpg)
+<!-- blueprint:generated:end -->
+
 480 molten iron / s
 480 molten copper / s
