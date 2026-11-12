@@ -1,6 +1,7 @@
 ---
 title: Automation Science (480/s)
-authors: [abucnasty]
+authors:
+  - abucnasty
 version: "4"
 posted: 2025-08-23
 video: https://youtu.be/yVhEDCcWE7s
