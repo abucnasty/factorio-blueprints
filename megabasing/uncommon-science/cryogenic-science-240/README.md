@@ -12,6 +12,8 @@ blueprints: 2
 factorio_version: "2.0.76"
 ---
 
+![Cryogenic Science (240/s)](https://blueprints.abucnasty.dev/megabasing/uncommon-science/cryogenic-science-240/cover.jpg)
+
 - [Lead (Clocks)](./0-lead-clocks/README.md) ([string](https://blueprints.abucnasty.dev/megabasing/uncommon-science/cryogenic-science-240/0.txt))
 - [Follower](./1-follower/README.md) ([string](https://blueprints.abucnasty.dev/megabasing/uncommon-science/cryogenic-science-240/1.txt))
 
