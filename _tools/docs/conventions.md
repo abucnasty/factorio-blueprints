@@ -156,7 +156,9 @@ point and array order kept (`blueprintHash` in the core). An image is
 current when its entry's hash matches the blueprint now, outdated when it
 differs or is not recorded; blueprints with no entities and no tiles get no
 image and do not count. The render tool writes the file after every
-successful run (merging on `--only`); the plugin only reads it.
+successful run (merging on `--only`); the plugin only reads it. The catalog
+copies an entry's `width` and `height` to that image's `renders[]` item in
+`index.json`, and leaves them out when the file does not record the image.
 
 ## Blueprint string codec
 
