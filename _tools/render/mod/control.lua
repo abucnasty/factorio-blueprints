@@ -6,6 +6,8 @@
 --   build(job_json)    build the string sent so far; job = {surface = "<name>", strategy = "ordinary"|"platform",
 --                      backdrop = {"<tile>", "<tile>"} (optional: replaces lab-dark-1 and lab-dark-2)};
 --                      returns a JSON report. The string is kept, so another strategy can be tried after it.
+--   diagnose(prefix)   run the experiment matrix of build.diagnose on scratch surfaces named <prefix>-*; JSON
+--                      {lines = [...], experiments = [...]}
 --   prepare(surface)   just before a screenshot: remove asteroids from a platform surface
 --   delete(name)       remove the surface or platform build made under that name
 -- Every call returns a string for rcon.print. The launcher takes the screenshots itself with game.take_screenshot.
@@ -63,6 +65,15 @@ remote.add_interface(INTERFACE, {
         local ok, report = pcall(build.run, table.concat(parts()), job.surface, job.strategy, job.backdrop)
         if not ok then
             report = { error = tostring(report), strategy = job.strategy }
+        end
+        return helpers.table_to_json(report)
+    end,
+    ---@param prefix string
+    ---@return string
+    diagnose = function(prefix)
+        local ok, report = pcall(build.diagnose, table.concat(parts()), prefix)
+        if not ok then
+            report = { error = tostring(report) }
         end
         return helpers.table_to_json(report)
     end,
