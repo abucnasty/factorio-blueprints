@@ -24,6 +24,8 @@ still lives in
 _tools/docs/                design docs and setup guides
 _tools/templates/           note templates
 _tools/plugin/              blueprint plugin source and the shared core library
+_tools/ci/                  catalog validation, index builder and publisher
+_tools/link-worker/         Cloudflare Worker serving blueprints.abucnasty.dev links
 <category>/.../<slug>/      one folder per blueprint (none yet)
   README.md                 notes, with metadata in the frontmatter
   blueprint.json            the decoded blueprint
