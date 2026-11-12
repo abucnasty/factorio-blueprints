@@ -12,6 +12,8 @@ export interface VaultFiles {
   write(path: string, text: string): Promise<void>;
   /** Create a folder and any missing parents. */
   mkdir(path: string): Promise<void>;
+  /** Direct children of a folder, as vault paths. */
+  list(path: string): Promise<{ files: string[]; folders: string[] }>;
 }
 
 export interface Clipboard {
@@ -26,6 +28,21 @@ export interface Settings {
   commitAfterImport: boolean;
   /** Vault path of the notes template for new blueprints. */
   templatePath: string;
+  /** Link Worker base URL, e.g. https://blueprints.abucnasty.dev */
+  linkBase: string;
+  /** Render settings for this computer. */
+  render: RenderSettings;
+}
+
+export interface RenderSettings {
+  /** Factorio executable or install folder; empty if not set. */
+  factorioPath: string;
+  /** Node.js binary that runs the render tool. */
+  nodePath: string;
+  /** Extra arguments for the render tool, e.g. ["--show-window"]. */
+  extraArgs: string[];
+  /** Render previews right after each import. */
+  afterImport: boolean;
 }
 
 export interface CreatePrompt {
@@ -70,6 +87,17 @@ export interface UpdateAnswer {
 
 export type NoticeKind = "info" | "error";
 
+export interface PickItem {
+  label: string;
+  detail?: string;
+}
+
+/** A message that stays up while something long runs. */
+export interface Progress {
+  update(message: string): void;
+  close(): void;
+}
+
 export interface UI {
   notice(message: string, kind?: NoticeKind): void;
   /** Resolves undefined if the user cancels. */
@@ -77,11 +105,36 @@ export interface UI {
   askUpdate(prompt: UpdatePrompt): Promise<UpdateAnswer | undefined>;
   /** Open a note after creating it. Optional. */
   openNote?(path: string): Promise<void>;
+  /** Let the user choose one item; resolves its index, or undefined if dismissed. */
+  pick(items: PickItem[], placeholder: string): Promise<number | undefined>;
+  progress(message: string): Progress;
+  /** Open the plugin's settings. Optional. */
+  openSettings?(): void;
 }
 
 export interface GitSync {
   /** Stage, commit, pull and push one vault folder. Never throws. */
   commitAndSync(folder: string, message: string): Promise<GitResult>;
+  /** True if git-lfs is installed, so images are stored through LFS. */
+  lfsAvailable(): Promise<boolean>;
+}
+
+export interface ProcessResult {
+  /** Exit code; null when ended by a signal. -1 if the program could not start. */
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  /** Why it could not start, when code is -1. */
+  error?: string;
+}
+
+export interface ProcessRunner {
+  /** Run a program with an argument array (no shell). */
+  run(
+    program: string,
+    args: string[],
+    options: { cwd: string; signal?: AbortSignal; onStderrLine?: (line: string) => void },
+  ): Promise<ProcessResult>;
 }
 
 export interface Host {
@@ -93,4 +146,8 @@ export interface Host {
   git: GitSync | undefined;
   /** Today's local date as YYYY-MM-DD. */
   today(): string;
+  /** Absolute path of the vault folder; undefined where there is none. */
+  vaultPath: string | undefined;
+  /** Absent where programs cannot be run. */
+  processes: ProcessRunner | undefined;
 }
