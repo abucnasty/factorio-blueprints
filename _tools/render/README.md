@@ -23,6 +23,9 @@ node bin/render.js --input <file> --list     # every entry with its slot path an
 node bin/render.js --help                    # every option, environment variable and the config file
 ```
 
+`--enable-mods a,b` runs with just those mods (for example planet backgrounds) and the mods they require, taken
+from `--mods <dir>` or else the game's own mods folder; that folder's `mod-list.json` is then ignored.
+
 `npm test` runs the tests without the game; `npm run check:lua` parses the mod.
 
 ## Behaviour

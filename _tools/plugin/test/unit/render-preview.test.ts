@@ -171,6 +171,19 @@ describe("render preview", () => {
     assert.equal((await folderRenderState(h, SINGLE_DIR)).overall, "current");
   });
 
+  test("render mods: --enable-mods, with --mods when a folder is set", async () => {
+    await renderPreview(host("ok", { settings: { render: { enableMods: ["space-backgrounds", "lib"] } } }), SINGLE_DIR);
+    let args = lastArgs();
+    assert.deepStrictEqual(args.slice(args.indexOf("--enable-mods"), args.indexOf("--enable-mods") + 2), ["--enable-mods", "space-backgrounds,lib"]);
+    assert.ok(!args.includes("--mods"));
+    await renderPreview(host("ok", { settings: { render: { enableMods: ["a"], modsFolder: " /my/mods " } } }), SINGLE_DIR);
+    args = lastArgs();
+    assert.deepStrictEqual(args.slice(args.indexOf("--enable-mods"), args.indexOf("--enable-mods") + 4), ["--enable-mods", "a", "--mods", "/my/mods"]);
+    // A folder alone changes nothing.
+    await renderPreview(host("ok", { settings: { render: { modsFolder: "/my/mods" } } }), SINGLE_DIR);
+    assert.ok(!lastArgs().includes("--mods") && !lastArgs().includes("--enable-mods"));
+  });
+
   test("book: nested files, version in the commit message", async () => {
     const h = host("ok");
     const out = await renderPreview(h, `${BOOK_DIR}/renders`);

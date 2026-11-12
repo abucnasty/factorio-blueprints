@@ -11,8 +11,10 @@ import dgram from "node:dgram";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import zlib from "node:zlib";
 import { RconClient } from "./rcon.js";
 import { waitForPng } from "./image.js";
 
@@ -156,14 +158,106 @@ async function modNameOf(dir, entry) {
     return null;
 }
 
+/** The names of the mods an info.json requires: not optional (?), hidden optional ((?)), incompatible (!) or
+ * load-order-only (~) ones */
+export function requiredDependencies(info) {
+    return (Array.isArray(info?.dependencies) ? info.dependencies : [])
+        .map(dependency => String(dependency).trim())
+        .filter(dependency => !/^(\?|\(\?\)|!|~)/.test(dependency))
+        .map(dependency => dependency.split(/\s*(?:<=|>=|<|>|=)/)[0].trim())
+        .filter(Boolean);
+}
+
+/** The info.json of a mod zip (name_1.2.3.zip holding <folder>/info.json), read from its central directory */
+async function zipInfoJson(file) {
+    const handle = await fsp.open(file, "r");
+    try {
+        const read = async (position, length) => {
+            const buffer = Buffer.alloc(length);
+            const { bytesRead } = await handle.read(buffer, 0, length, position);
+            return buffer.subarray(0, bytesRead);
+        };
+        const { size } = await handle.stat();
+        const tailStart = Math.max(0, size - 65557);
+        const tail = await read(tailStart, size - tailStart);
+        const end = tail.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+        if (end < 0) throw new Error("not a zip file");
+        const count = tail.readUInt16LE(end + 10);
+        const directory = await read(tail.readUInt32LE(end + 16), tail.readUInt32LE(end + 12));
+        for (let at = 0, i = 0; i < count && directory.readUInt32LE(at) === 0x02014b50; i++) {
+            const nameLength = directory.readUInt16LE(at + 28);
+            const name = directory.toString("utf8", at + 46, at + 46 + nameLength);
+            if (/^[^/]+\/info\.json$/.test(name)) {
+                const method = directory.readUInt16LE(at + 10);
+                const local = await read(directory.readUInt32LE(at + 42), 30);
+                const start = directory.readUInt32LE(at + 42) + 30 + local.readUInt16LE(26) + local.readUInt16LE(28);
+                const data = await read(start, directory.readUInt32LE(at + 20));
+                if (method !== 0 && method !== 8) throw new Error(`info.json uses unsupported compression ${method}`);
+                return JSON.parse((method === 8 ? zlib.inflateRawSync(data) : data).toString("utf8"));
+            }
+            at += 46 + nameLength + directory.readUInt16LE(at + 30) + directory.readUInt16LE(at + 32);
+        }
+        throw new Error("no info.json in it");
+    } finally {
+        await handle.close();
+    }
+}
+
+/**
+ * Copy the named mods from `dir` into `modsDir`, with the dependencies they require (recursively). Mods already
+ * present (the game's own) are skipped. A mod that is not in `dir` is an error.
+ * @returns {Promise<string[]>} the names of the copied mods
+ */
+async function copyNamedMods(dir, modsDir, names, present) {
+    /** @type {Map<string, import("node:fs").Dirent[]>} */
+    const found = new Map();
+    for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
+        const name = await modNameOf(dir, entry);
+        if (name) found.set(name, [...(found.get(name) ?? []), entry]);
+    }
+    const copied = [];
+    const queue = names.map(name => [name, null]);
+    while (queue.length) {
+        const [name, neededBy] = queue.shift();
+        if (name === MOD_NAME || present.has(name) || copied.includes(name)) continue;
+        const entries = found.get(name);
+        if (!entries) throw new Error(`Mod "${name}"${neededBy ? ` (required by "${neededBy}")` : ""} is not in ${dir}`);
+        copied.push(name);
+        for (const entry of entries) {
+            const source = path.join(dir, entry.name);
+            let info;
+            try {
+                info = entry.isFile() ? await zipInfoJson(source) : JSON.parse(await fsp.readFile(path.join(source, "info.json"), "utf8"));
+            } catch (error) {
+                throw new Error(`Cannot read the info.json of ${source}: ${error.message}`);
+            }
+            for (const dependency of requiredDependencies(info)) queue.push([dependency, name]);
+            await fsp.cp(source, path.join(modsDir, entry.name), { recursive: true });
+        }
+    }
+    return copied;
+}
+
+/** The game's own mods folder: <install>/mods when config-path.cfg keeps its data beside the install, else the
+ * system one */
+export async function gameModsDir(executable, platform = process.platform, env = process.env, home = os.homedir()) {
+    const install = path.dirname(factorioDataDir(executable));
+    const config = await fsp.readFile(path.join(install, "config-path.cfg"), "utf8").catch(() => "");
+    if (/^\s*use-system-read-write-data-directories\s*=\s*false\s*$/m.test(config)) return path.join(install, "mods");
+    if (platform === "win32") return path.join(env.APPDATA ?? path.join(home, "AppData", "Roaming"), "Factorio", "mods");
+    if (platform === "darwin") return path.join(home, "Library", "Application Support", "factorio", "mods");
+    return path.join(home, ".factorio", "mods");
+}
+
 /**
  * The mods to run with, written into `modsDir`: the game's own mods (from its data folder, as the proven harness
  * does: base, and space-age, quality, elevated-rails, recycler where installed), this tool's mod, and the mods of
  * `extraModsDir` when given. If `extraModsDir` holds a mod-list.json, only the mods enabled there are used (game
  * mods included) and its mod-settings.dat is copied too, so a player's own mods folder can be pointed at as it is.
- * Nothing is ever written to `extraModsDir`.
+ * With `enableMods`, exactly those mods and the dependencies they require are taken from `extraModsDir` (default:
+ * the game's own mods folder) and its mod-list.json is not used. Nothing is ever written to `extraModsDir`.
  */
-export async function prepareMods({ executable, modsDir, extraModsDir, hideStatusIcons }) {
+export async function prepareMods({ executable, modsDir, extraModsDir, enableMods, hideStatusIcons }) {
     await fsp.rm(modsDir, { recursive: true, force: true });
     await fsp.mkdir(modsDir, { recursive: true });
     const dataDir = factorioDataDir(executable);
@@ -181,23 +275,33 @@ export async function prepareMods({ executable, modsDir, extraModsDir, hideStatu
         `-- written by the render launcher for this run\nreturn {\n    hide_status_icons = ${hideStatusIcons ? "true" : "false"},\n}\n`);
 
     const extras = [];
+    if (enableMods?.length && !extraModsDir) {
+        const dir = await gameModsDir(executable);
+        const stat = await fsp.stat(dir).catch(() => null);
+        if (!stat?.isDirectory()) throw new Error(`The game's mods folder was not found at ${dir}: pass --mods <folder>`);
+        extraModsDir = dir;
+    }
     if (extraModsDir) {
         const stat = await fsp.stat(extraModsDir).catch(() => null);
         if (!stat?.isDirectory()) throw new Error(`--mods ${extraModsDir} is not a folder`);
-        let list = null;
-        try {
-            list = JSON.parse(await fsp.readFile(path.join(extraModsDir, "mod-list.json"), "utf8"));
-        } catch (error) {
-            if (error.code !== "ENOENT") throw new Error(`Cannot read ${path.join(extraModsDir, "mod-list.json")}: ${error.message}`);
-        }
-        const wanted = list ? new Map((list.mods ?? []).map(mod => [mod.name, mod.enabled !== false])) : null;
-        if (wanted) for (const name of enabled.keys()) if (name !== "base" && wanted.has(name)) enabled.set(name, wanted.get(name));
-        for (const entry of await fsp.readdir(extraModsDir, { withFileTypes: true })) {
-            const name = await modNameOf(extraModsDir, entry);
-            if (!name || name === MOD_NAME || enabled.has(name)) continue;
-            if (wanted && !wanted.get(name)) continue;
-            await fsp.cp(path.join(extraModsDir, entry.name), path.join(modsDir, entry.name), { recursive: true });
-            if (!extras.includes(name)) extras.push(name);
+        if (enableMods?.length) {
+            extras.push(...await copyNamedMods(extraModsDir, modsDir, enableMods, enabled));
+        } else {
+            let list = null;
+            try {
+                list = JSON.parse(await fsp.readFile(path.join(extraModsDir, "mod-list.json"), "utf8"));
+            } catch (error) {
+                if (error.code !== "ENOENT") throw new Error(`Cannot read ${path.join(extraModsDir, "mod-list.json")}: ${error.message}`);
+            }
+            const wanted = list ? new Map((list.mods ?? []).map(mod => [mod.name, mod.enabled !== false])) : null;
+            if (wanted) for (const name of enabled.keys()) if (name !== "base" && wanted.has(name)) enabled.set(name, wanted.get(name));
+            for (const entry of await fsp.readdir(extraModsDir, { withFileTypes: true })) {
+                const name = await modNameOf(extraModsDir, entry);
+                if (!name || name === MOD_NAME || enabled.has(name)) continue;
+                if (wanted && !wanted.get(name)) continue;
+                await fsp.cp(path.join(extraModsDir, entry.name), path.join(modsDir, entry.name), { recursive: true });
+                if (!extras.includes(name)) extras.push(name);
+            }
         }
         if (await exists(path.join(extraModsDir, "mod-settings.dat"))) {
             await fsp.copyFile(path.join(extraModsDir, "mod-settings.dat"), path.join(modsDir, "mod-settings.dat"));
@@ -240,12 +344,12 @@ const SERVER_SETTINGS = {
     non_blocking_saving: false,
 };
 
-export async function prepareWorkDir({ workDir, executable, extraModsDir, save, hideStatusIcons }) {
+export async function prepareWorkDir({ workDir, executable, extraModsDir, enableMods, save, hideStatusIcons }) {
     const dataDir = factorioDataDir(executable);
     const server = path.join(workDir, "server");
     const client = path.join(workDir, "client");
     for (const dir of [server, client]) await fsp.mkdir(dir, { recursive: true });
-    const mods = await prepareMods({ executable, modsDir: path.join(server, "mods"), extraModsDir, hideStatusIcons });
+    const mods = await prepareMods({ executable, modsDir: path.join(server, "mods"), extraModsDir, enableMods, hideStatusIcons });
     await fsp.cp(path.join(server, "mods"), path.join(client, "mods"), { recursive: true });
     await fsp.writeFile(path.join(server, "config.ini"), configIni(dataDir, server));
     await fsp.writeFile(path.join(client, "config.ini"), configIni(dataDir, client));
@@ -293,7 +397,7 @@ export class Session {
     }
 
     /**
-     * @param {{ executable: string, workDir: string, extraModsDir?: string, save?: string, hideStatusIcons: boolean, showWindow?: boolean,
+     * @param {{ executable: string, workDir: string, extraModsDir?: string, enableMods?: string[], save?: string, hideStatusIcons: boolean, showWindow?: boolean,
      *   timeoutSeconds: number, log: (message: string) => void }} options
      */
     static async start(options) {

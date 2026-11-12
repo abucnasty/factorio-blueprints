@@ -55,6 +55,13 @@ test("arguments beat environment, environment beats the config file", async () =
     assert.deepEqual([fromArgs.factorio, fromArgs.framing.maxSize, fromArgs.mods, fromArgs.keepWork], ["/arg", 512, "/arg/mods", true]);
 });
 
+test("--enable-mods: mod names from the argument or environment", async () => {
+    const base = ["--input", "a", "--out", "b", "--factorio", "f"];
+    assert.equal((await parse(base)).enableMods, undefined);
+    assert.deepEqual((await parse([...base, "--enable-mods", "a, b,,a"])).enableMods, ["a", "b"]);
+    assert.deepEqual((await parse(base, { env: { FACTORIO_RENDER_ENABLE_MODS: "x" } })).enableMods, ["x"]);
+});
+
 test("clear errors for missing or bad arguments", async () => {
     await assert.rejects(parse(["--out", "x"], { env: { FACTORIO_PATH: "f" } }), /--input is required/);
     await assert.rejects(parse(["--input", "x"], { env: { FACTORIO_PATH: "f" } }), /--out is required/);
