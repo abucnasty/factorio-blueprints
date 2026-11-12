@@ -8,6 +8,7 @@ import test from "node:test";
 import sharp from "sharp";
 import { encodeBlueprintString } from "../src/codec.js";
 import { FRAMING_DEFAULTS } from "../src/framing.js";
+import { blueprintHash } from "../src/manifest.js";
 import { render } from "../src/render.js";
 import { alive, fakeInstall, fakePids, row, sampleBook, tempDir } from "./helpers.js";
 
@@ -66,7 +67,18 @@ test("a book renders one image per blueprint at its slot path, and the game is c
     assert.deepEqual(report.without_image.find(item => item.path === "6").missing, { "fake-unplaceable-thing": 2 });
     assert.deepEqual(report.skipped.map(item => item.kind), ["upgrade-planner", "deconstruction-planner"]);
     assert.deepEqual((await fs.readdir(env.out, { recursive: true })).sort(),
-        ["0.jpg", "2", "2/0.jpg", "2/1.jpg", "2/notes.md", "3.jpg", "cover.jpg", "extra", "extra/0.jpg", "notes.txt"]);
+        ["0.jpg", "2", "2/0.jpg", "2/1.jpg", "2/notes.md", "3.jpg", "cover.jpg", "extra", "extra/0.jpg", "notes.txt", "render.json"]);
+    // the manifest lists exactly the images produced, keyed by slot path, with the blueprint's hash
+    const manifest = JSON.parse(await fs.readFile(path.join(env.out, "render.json"), "utf8"));
+    assert.equal(report.manifest, path.join(env.out, "render.json"));
+    assert.equal(manifest.schema, 1);
+    assert.ok(new Date(manifest.rendered_at).toISOString() === manifest.rendered_at);
+    assert.deepEqual(Object.keys(manifest.entries).sort(), ["0", "2/0", "2/1", "3"]);
+    // written with keys in code-point order, so the file diffs cleanly
+    const raw = await fs.readFile(path.join(env.out, "render.json"), "utf8");
+    assert.deepEqual([...raw.matchAll(/^    "([^"]+)": \{$/gm)].map(match => match[1]), ["0", "2/0", "2/1", "3"]);
+    assert.deepEqual(manifest.entries["2/1"], { file: "2/1.jpg", height: report.images[2].height, sha256: blueprintHash(row("C", 3)), width: report.images[2].width });
+    assert.equal(report.images[2].sha256, blueprintHash(row("C", 3)));
     // stale render images are gone, nested ones too, and the slot folders they leave empty
     assert.deepEqual(report.removed, ["5.jpg", "7/1.jpg", "7/2/0.jpg", "9.jpg"]);
     assert.ok(messages.includes(`Removed stale ${path.join(env.out, "7", "1.jpg")}`));
@@ -186,12 +198,52 @@ test("a failed run writes its log and report into the work directory", async t =
     assert.match(JSON.parse(await fs.readFile(path.join(env.work, "report.json"), "utf8")).error, /game window closed/);
 });
 
+test("the render manifest: empty blueprints absent, --only drops removed images, a failed run leaves it alone", async t => {
+    const env = await setup(t);
+    const input = path.join(env.dir, "blueprint.json");
+    const book = { blueprint_book: { blueprints: [
+        { index: 0, blueprint: row("A", 1) }, { index: 1, blueprint: row("B", 1) }, { index: 2, blueprint: { item: "blueprint", label: "empty" } },
+    ] } };
+    await fs.writeFile(input, JSON.stringify(book));
+    await render({ ...options(env), input }, () => {});
+    const manifestFile = path.join(env.out, "render.json");
+    const first = JSON.parse(await fs.readFile(manifestFile, "utf8"));
+    assert.deepEqual(Object.keys(first.entries), ["0", "1"]);
+    const text = await fs.readFile(manifestFile, "utf8");
+    assert.ok(text.endsWith("}\n") && !text.includes("\r"));
+    assert.deepEqual([...text.matchAll(/^  "(\w+)":/gm)].map(match => match[1]), ["entries", "rendered_at", "schema"]);
+
+    // slot 1 becomes unplaceable: an --only run removes its image and its manifest entry, and keeps slot 0's
+    book.blueprint_book.blueprints[1].blueprint = row("B", 1, 0, "fake-unplaceable-thing");
+    await fs.writeFile(input, JSON.stringify(book));
+    const onlyRun = await render({ ...options(env), input, only: ["1"], workDir: path.join(env.dir, "work-2") }, () => {});
+    assert.deepEqual(onlyRun.removed, ["1.jpg"]);
+    const second = JSON.parse(await fs.readFile(manifestFile, "utf8"));
+    assert.deepEqual(second.entries, { 0: first.entries[0] });
+
+    // --only for slot 0 again with a changed blueprint updates its hash
+    book.blueprint_book.blueprints[0].blueprint = row("A changed", 1);
+    await fs.writeFile(input, JSON.stringify(book));
+    await render({ ...options(env), input, only: ["0"], workDir: path.join(env.dir, "work-3") }, () => {});
+    assert.equal(JSON.parse(await fs.readFile(manifestFile, "utf8")).entries[0].sha256, blueprintHash(row("A changed", 1)));
+
+    // a failed run touches neither the images nor the manifest
+    const before = await fs.readFile(manifestFile, "utf8");
+    process.env.FAKE_FACTORIO_MODE = "client-crash";
+    t.after(() => { delete process.env.FAKE_FACTORIO_MODE; });
+    await assert.rejects(render({ ...options(env), input, workDir: path.join(env.dir, "work-4") }, () => {}), /game window closed/);
+    assert.equal(await fs.readFile(manifestFile, "utf8"), before);
+    assert.deepEqual((await fs.readdir(env.out)).sort(), ["0.jpg", "render.json"]);
+});
+
 test("without --work-dir, a temporary work directory is used and removed after success", async t => {
     const env = await setup(t);
     const input = path.join(env.dir, "bp.txt");
     await fs.writeFile(input, encodeBlueprintString({ blueprint: row("x", 2) }));
     const report = await render({ ...options(env), input, workDir: undefined }, () => {});
-    assert.deepEqual(await fs.readdir(env.out), ["0.jpg"]);
+    assert.deepEqual((await fs.readdir(env.out)).sort(), ["0.jpg", "render.json"]);
+    // a single blueprint's manifest key is "0"
+    assert.deepEqual(Object.keys(JSON.parse(await fs.readFile(path.join(env.out, "render.json"), "utf8")).entries), ["0"]);
     await assert.rejects(fs.access(report.work_dir));
 });
 
@@ -320,6 +372,10 @@ test("the command line: exit codes, --json report, --list", async t => {
     assert.deepEqual(onlyReport.only, ["2/1", "4", "2"]);
     assert.deepEqual(onlyReport.images.map(image => image.file), ["2/0.jpg", "2/1.jpg"]);
     assert.deepEqual(onlyReport.removed, ["2/9.jpg"]);
+    // the manifest keeps the entries outside the selection and updates the ones rendered
+    const merged = JSON.parse(await fs.readFile(path.join(env.out, "render.json"), "utf8"));
+    assert.deepEqual(Object.keys(merged.entries).sort(), ["0", "2/0", "2/1", "3"]);
+    assert.equal(merged.entries["2/1"].sha256, onlyReport.images[1].sha256);
     assert.equal((await fs.stat(path.join(env.out, "0.jpg"))).mtimeMs, before.mtimeMs);
     assert.deepEqual((await fs.readdir(env.out, { recursive: true })).filter(file => file.endsWith(".jpg")).sort(), ["0.jpg", "2/0.jpg", "2/1.jpg", "3.jpg"]);
     const unknown = await run(["--input", input, "--out", env.out, "--config", config, "--only", "8"]);
