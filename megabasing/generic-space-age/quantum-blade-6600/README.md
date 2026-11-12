@@ -9,6 +9,8 @@ tiles: 9824
 factorio_version: "2.1.11.1"
 ---
 
+![Quantum Blade 6600/min](https://blueprints.abucnasty.dev/megabasing/generic-space-age/quantum-blade-6600/cover.jpg)
+
 Main Notes:
 
 - Stack Size 16 output alternating between sides
