@@ -10,6 +10,8 @@ blueprints: 29
 factorio_version: "2.0.76"
 ---
 
+![Ore Voiding Miners](https://blueprints.abucnasty.dev/megabasing/uncommon-science/ore-voiding-miners/cover.jpg)
+
 - Mining Prod 631 ([book](https://blueprints.abucnasty.dev/megabasing/uncommon-science/ore-voiding-miners/0.txt))
   - [240/s](https://blueprints.abucnasty.dev/megabasing/uncommon-science/ore-voiding-miners/0/0.txt)
   - [480/s](https://blueprints.abucnasty.dev/megabasing/uncommon-science/ore-voiding-miners/0/1.txt)
