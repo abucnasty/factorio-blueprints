@@ -238,6 +238,30 @@ test("book nodes: slot paths with and without index, nested books, planners, ren
   assert.ok(out.has(stringKey("cat/book", sha)));
 });
 
+test("non-image files under renders/ are ignored; a shared slot goes to the first entry", () => {
+  const r = repo();
+  r.write("cat/book/blueprint.json", book("B", [{ index: 0, blueprint: bpBody("first") }, { index: 0, blueprint: bpBody("second") }]));
+  r.write("cat/book/README.md", notes("title: B\nauthors: []"));
+  const old = r.commit("two entries in slot 0");
+  r.write("cat/book/blueprint.json", book("B", [{ index: 0, blueprint: bpBody("first") }]));
+  r.write("cat/book/renders/0.jpg", pointer(OID));
+  r.write("cat/book/renders/render.json", '{"0": "current"}\n');
+  r.write("cat/book/renders/notes.txt", "anything\n");
+  r.commit("fix the book, add a render and its manifest");
+
+  const catalog = buildCatalog(r.dir);
+  assert.deepEqual(catalog.problems, []);
+  const e = catalog.index.blueprints[0]!;
+  assert.deepEqual(e.renders.map((x) => x.file), ["0.jpg"]);
+  assert.equal(e.cover, "0.jpg");
+
+  const out = new Map<string, string>();
+  const { warnings } = produceStrings(r.dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
+  const label = (decodeBlueprintString(out.get(entryKey("cat/book", old, "0"))!).value as any).blueprint.label;
+  assert.equal(label, "first");
+  assert.match(warnings.join(), /second entry in slot 0/);
+});
+
 test("an entry that a later version removes keeps its string for the older version only", () => {
   const r = repo();
   r.write("cat/book/blueprint.json", book("B", [{ index: 0, blueprint: bpBody("keep") }, { index: 1, blueprint: bpBody("gone") }]));

@@ -67,7 +67,9 @@ export function entryKey(path: string, sha: string, slotPath: string): string {
   return `strings/${path}/${sha}/${slotPath}.txt`;
 }
 
-/** A render file: "<slot path>.<ext>", e.g. "0.jpg" or "3/1.png". */
+/** Files under renders/ that are images (the extensions .gitattributes stores in LFS). */
+const RENDER_IMAGE = /\.(jpg|jpeg|png|webp)$/;
+/** A render image's name: "<slot path>.<ext>", e.g. "0.jpg" or "3/1.png". */
 const RENDER_FILE = /^((?:0|[1-9][0-9]*)(?:\/(?:0|[1-9][0-9]*))*)\.(jpg|jpeg|png|webp)$/;
 const LFS_POINTER = /^version https:\/\/git-lfs\.github\.com\/spec\/v1\noid sha256:([0-9a-f]{64})\nsize ([0-9]+)\n$/;
 
@@ -163,10 +165,12 @@ export function buildCatalog(repo: string, opts: { commit?: string; now?: Date }
     .sort();
   const folderSet = new Set(folders);
 
-  // Render files belong to the blueprint folder that holds their renders/ directory.
+  // Render images belong to the blueprint folder that holds their renders/
+  // directory. Only the image types the LFS patterns track are renders;
+  // anything else there (the render tool's render.json) is ignored.
   const renderFiles = new Map<string, { file: string; blob: string }[]>();
   for (const [path, blob] of files) {
-    if (!isScannedPath(path)) continue;
+    if (!isScannedPath(path) || !RENDER_IMAGE.test(path)) continue;
     const segs = path.split("/");
     for (let i = segs.length - 2; i >= 1; i--) {
       const folder = segs.slice(0, i).join("/");
@@ -262,7 +266,7 @@ export function buildCatalog(repo: string, opts: { commit?: string; now?: Date }
       const path = `${folder}/renders/${file}`;
       const name = RENDER_FILE.exec(file);
       if (!name) {
-        problem(path, "renders/ may only hold <slot path>.jpg, .jpeg, .png or .webp, such as 0.jpg or 3/1.jpg");
+        problem(path, "render images must be named <slot path>.jpg, .jpeg, .png or .webp, such as 0.jpg or 3/1.jpg");
         continue;
       }
       const pointer = LFS_POINTER.exec(content.get(blob)!.toString("latin1"));
@@ -368,8 +372,12 @@ const ITEM_KEYS = ["blueprint", "blueprint_book", "upgrade_planner", "deconstruc
 /**
  * The entries of a blueprint book value, by slot ascending, nested like the
  * book (none for anything else). An entry's slot is its `index`, or its
- * position in `blueprints` without one. A second entry in a slot is left
- * out and its slot path listed in `duplicates`.
+ * position in `blueprints` without one. When several entries share a slot,
+ * the first in the array keeps it and the later ones are left out (no
+ * string, no node, no render), the rule the render tool follows too; their
+ * slot paths are listed in `duplicates`. The current version of a folder
+ * with duplicates fails validation; older versions are published with the
+ * first entry winning.
  */
 export function bookEntries(value: unknown): { entries: BookEntry[]; duplicates: string[] } {
   const duplicates: string[] = [];
