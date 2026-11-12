@@ -113,7 +113,7 @@ test("history dates are author dates, in git log order", () => {
   assert.deepEqual(
     a!.history.map((h) => [h.sha, h.date]),
     [
-      [newer, "2023-01-01T00:00:00+00:00"],
+      [newer, "2023-01-01T00:00:00Z"],
       [old, "2024-03-10T12:00:00+01:00"],
     ],
   );

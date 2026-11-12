@@ -123,7 +123,8 @@ export class Git {
       .slice(1)
       .map((rec) => {
         const [sha, date, subject] = rec.replace(/\n+$/, "").split("\x1f");
-        return { sha: sha!, date: date!, subject: subject ?? "" };
+        // git prints a UTC offset as "+00:00" or "Z" depending on its version; keep one form
+        return { sha: sha!, date: date!.replace(/\+00:00$/, "Z"), subject: subject ?? "" };
       });
   }
 }
