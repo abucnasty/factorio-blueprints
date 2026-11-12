@@ -1,0 +1,18 @@
+{
+  "blueprint_book": {
+    "active_index": 0,
+    "description": "Descriptions of how to use these blueprints are included in each of the two blueprints in this book. One is the lead with the clocks, the other is the follower that relies on the clocks of the leader.\n-designed by abucnasty",
+    "icons": [
+      {
+        "index": 1,
+        "signal": {
+          "name": "cryogenic-science-pack",
+          "quality": "uncommon"
+        }
+      }
+    ],
+    "item": "blueprint-book",
+    "label": "Cryo Science V3 (240/s)",
+    "version": 562949958402048
+  }
+}
