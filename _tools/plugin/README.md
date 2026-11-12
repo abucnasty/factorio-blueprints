@@ -12,8 +12,19 @@ notes beside them, and back. The built plugin is committed in
 - **Copy blueprint string**: encodes a folder's `blueprint.json` to the
   clipboard, ready for Import string in the game.
 
-Settings: default authors, commit after import, the template path, and (per
-computer) the git binary.
+- **Copy live link**: the folder's link on the link service; for a book, a
+  picker offers the whole book or any entry.
+- **Render preview** (also: click the `Render: …` status bar item): runs
+  `_tools/render` for the folder, writes `renders/` and `renders/render.json`,
+  refreshes the notes' generated block, commits and pushes. **Show
+  blueprints needing a render** and **Render all that need it** work across
+  the vault; **Cancel render preview** stops a run.
+- **Refresh generated blocks in all notes**: writes the link list and cover
+  block into every note, without committing.
+
+Settings: default authors, commit after import and render, the template
+path and the link service address (shared); per computer: the git binary,
+Factorio path, Node path, extra render arguments and render after import.
 
 ## Build and test
 
