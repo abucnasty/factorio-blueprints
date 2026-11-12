@@ -22,11 +22,13 @@ import {
   joinPath,
   NOTES_FILE,
   parentFolder,
+  parseRenderManifest,
   parseSlotFolder,
   plainLabel,
   readCanonicalJson,
   readFrontmatter,
   readNotesMeta,
+  RENDER_MANIFEST,
   selfAndAncestors,
   slotFolders,
   slugify,
@@ -194,7 +196,8 @@ export async function buildCatalog(repo: string, opts: { commit?: string; now?: 
 
   // Render images belong to the blueprint folder that holds their renders/
   // directory. Only the image types the LFS patterns track are renders;
-  // anything else there (the render tool's render.json) is ignored.
+  // the render tool's render.json only lends them their pixel size, and
+  // anything else there is ignored.
   const renderFiles = new Map<string, { file: string; blob: string }[]>();
   /** Folders with a renders/ directory. */
   const renderDirs = new Set<string>();
@@ -221,6 +224,8 @@ export async function buildCatalog(repo: string, opts: { commit?: string; now?: 
       if (id) wanted.push(id);
     }
     for (const r of renderFiles.get(f) ?? []) wanted.push(r.blob);
+    const manifest = files.get(`${f}/renders/${RENDER_MANIFEST}`);
+    if (manifest && renderFiles.has(f)) wanted.push(manifest);
   }
   const content = git.readBlobs(wanted);
   const text = (path: string) => {
@@ -371,6 +376,7 @@ export async function buildCatalog(repo: string, opts: { commit?: string; now?: 
       ? [...folderFor].filter(([, f]) => blueprintFolders.has(f)).map(([slotPath, f]) => [f, slotPath])
       : [[folder, undefined]];
     for (const [owner, slotPath] of sources) {
+      const sizes = renderSizes(renderFiles.has(owner) ? text(`${owner}/renders/${RENDER_MANIFEST}`) : undefined);
       for (const { file, blob } of renderFiles.get(owner) ?? []) {
         const path = `${owner}/renders/${file}`;
         const name = RENDER_FILE.exec(file);
@@ -396,7 +402,7 @@ export async function buildCatalog(repo: string, opts: { commit?: string; now?: 
           problem(path, `there is more than one render for slot ${slot}`);
           continue;
         }
-        renders.push({ file: `${slot}.${name[2]}`, oid: pointer[1]!, size: Number(pointer[2]) });
+        renders.push({ file: `${slot}.${name[2]}`, oid: pointer[1]!, size: Number(pointer[2]), ...sizes.get(file) });
       }
     }
     renders.sort((a, b) => compareSlotPaths(slotOf(a.file), slotOf(b.file)));
@@ -518,11 +524,16 @@ export function carryOverStale(catalog: Catalog, published: LiveIndex | undefine
   const carried = (published?.blueprints ?? [])
     .filter((e) => invalid.has(e.path))
     // A schema 1 entry's renders also carry a number "n"; the file is what links use.
-    .map((e): CatalogEntry => ({ ...e, renders: e.renders.map(({ file, oid, size }) => ({ file, oid, size })), stale: true }));
+    .map((e): CatalogEntry => ({ ...e, renders: e.renders.map(liveRender), stale: true }));
   const list = catalog.index.blueprints;
   list.push(...carried);
   list.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return carried.map((e) => e.path);
+}
+
+/** A live render as this schema has it: without schema 1's "n", with a pixel size only when it has both numbers. */
+function liveRender({ file, oid, size, width, height }: CatalogRender): CatalogRender {
+  return { file, oid, size, ...(width !== undefined && height !== undefined ? { width, height } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -605,6 +616,28 @@ function firstRender(nodes: CatalogNode[]): string | undefined {
     if (found !== undefined) return found;
   }
   return undefined;
+}
+
+/**
+ * Pixel sizes from a renders/render.json, by image file name under that
+ * renders/: only entries naming one file with positive integer width and
+ * height. A missing or unreadable manifest gives none; it is not a problem.
+ */
+function renderSizes(manifestText: string | undefined): Map<string, { width: number; height: number }> {
+  const out = new Map<string, { width: number; height: number }>();
+  const ambiguous = new Set<string>();
+  for (const { file, width, height } of Object.values(parseRenderManifest(manifestText)?.entries ?? {})) {
+    if (!isPixels(width) || !isPixels(height)) continue;
+    const seen = out.get(file);
+    if (seen && (seen.width !== width || seen.height !== height)) ambiguous.add(file);
+    out.set(file, { width, height });
+  }
+  for (const f of ambiguous) out.delete(f);
+  return out;
+}
+
+function isPixels(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v > 0;
 }
 
 function slotOf(renderFile: string): string {

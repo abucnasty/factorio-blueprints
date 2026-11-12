@@ -123,4 +123,7 @@ export interface CatalogRender {
   /** Git LFS object id (SHA-256 hex); the object is at <oid[0:2]>/<oid[2:4]>/<oid> in factorio-blueprints-lfs. */
   oid: string;
   size: number;
+  /** Pixel size, from the render tool's renders/render.json; absent when it does not record this image. */
+  width?: number;
+  height?: number;
 }

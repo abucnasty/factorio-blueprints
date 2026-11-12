@@ -15,7 +15,7 @@ import {
   plainLabel,
   writeCanonicalJson,
 } from "../../plugin/src/core/index.ts";
-import { buildCatalog, entryKey, type LiveIndex, produceStrings, selectStrings, stringKey } from "../build-catalog.ts";
+import { buildCatalog, carryOverStale, entryKey, type LiveIndex, produceStrings, selectStrings, stringKey } from "../build-catalog.ts";
 
 process.env["GIT_CONFIG_GLOBAL"] = "/dev/null";
 process.env["GIT_CONFIG_NOSYSTEM"] = "1";
@@ -462,6 +462,78 @@ test("expanding a book keeps its path, history, root string and entry strings", 
   const next = await buildCatalog(r.dir);
   assert.deepEqual(next.index.blueprints[0]!.history.map((h) => h.sha), [c3, c2, c1]);
   assert.deepEqual(selectStrings(next.index, catalog.index).map((j) => j.sha), [c3]);
+});
+
+const manifest = (entries: Record<string, object>) =>
+  JSON.stringify({ schema: 1, rendered_at: "2026-01-01T00:00:00Z", entries: Object.fromEntries(Object.entries(entries).map(([k, e]) => [k, { sha256: "0".repeat(64), ...e }])) });
+
+test("render pixel sizes come from render.json, matched by file; without a usable entry they are left out", async () => {
+  const r = repo();
+  r.write("cat/single/blueprint.json", bp("S"));
+  r.write("cat/single/README.md", notes("title: S\nauthors: []"));
+  r.write("cat/single/renders/0.jpg", pointer("1".repeat(64)));
+  r.write("cat/single/renders/render.json", manifest({ "0": { file: "0.jpg", width: 260, height: 288 } }));
+
+  r.write("cat/book/blueprint.json", book("B", [{ blueprint: bpBody("a") }, { blueprint: bpBody("b") }, { blueprint_book: { item: "blueprint-book", blueprints: [{ blueprint: bpBody("c") }, { blueprint: bpBody("d") }] } }, { blueprint: bpBody("e") }]));
+  r.write("cat/book/README.md", notes("title: B\nauthors: []"));
+  for (const f of ["0.jpg", "1.jpg", "2/0.jpg", "2/1.png", "3.jpg"]) r.write(`cat/book/renders/${f}`, pointer("2".repeat(64)));
+  r.write(
+    "cat/book/renders/render.json",
+    manifest({
+      "0": { file: "0.jpg", width: 1920, height: 1080 },
+      "1": { file: "1.jpg", width: 0, height: 1080 }, // not a size
+      "2/0": { file: "2/0.jpg", width: 300, height: 600 },
+      "2/1": { file: "2/1.jpg", width: 300, height: 600 }, // describes another file than 2/1.png
+      "3": { file: "3.jpg", width: 10.5, height: 20 }, // not integers
+      "4": { file: "4.jpg", width: 100, height: 100 }, // no such image
+    }),
+  );
+
+  writeExpanded(r, "cat/expanded", nestedBook());
+  r.write("cat/expanded/README.md", notes("title: E\nauthors: []"));
+  r.write("cat/expanded/0-stone/renders/0.jpg", pointer("3".repeat(64)));
+  r.write("cat/expanded/0-stone/renders/render.json", manifest({ "0": { file: "0.jpg", width: 100, height: 50 } }));
+  r.write("cat/expanded/1-inner/0-bricks/renders/0.jpg", pointer("4".repeat(64))); // no manifest
+  r.write("cat/expanded/1-inner/3-iron/renders/0.jpg", pointer("5".repeat(64)));
+  r.write("cat/expanded/1-inner/3-iron/renders/render.json", manifest({ "0": { file: "0.jpg", width: 640, height: 480 } }));
+
+  r.write("cat/broken/blueprint.json", bp("X"));
+  r.write("cat/broken/README.md", notes("title: X\nauthors: []"));
+  r.write("cat/broken/renders/0.jpg", pointer("6".repeat(64)));
+  r.write("cat/broken/renders/render.json", "not json\n");
+  r.write("cat/other/blueprint.json", bp("Y"));
+  r.write("cat/other/README.md", notes("title: Y\nauthors: []"));
+  r.write("cat/other/renders/0.jpg", pointer("7".repeat(64)));
+  r.write("cat/other/renders/render.json", JSON.stringify({ schema: 2, entries: { "0": { file: "0.jpg", sha256: "", width: 1, height: 1 } } }));
+  r.commit("renders with manifests");
+
+  const catalog = await buildCatalog(r.dir);
+  assert.deepEqual(catalog.problems, [], "a manifest never makes a blueprint invalid");
+  const sizes = (path: string) =>
+    catalog.index.blueprints.find((e) => e.path === path)!.renders.map(({ file, width, height }) => [file, width, height]);
+  assert.deepEqual(sizes("cat/single"), [["0.jpg", 260, 288]]);
+  assert.deepEqual(sizes("cat/book"), [
+    ["0.jpg", 1920, 1080],
+    ["1.jpg", undefined, undefined],
+    ["2/0.jpg", 300, 600],
+    ["2/1.png", undefined, undefined],
+    ["3.jpg", undefined, undefined],
+  ]);
+  assert.deepEqual(sizes("cat/expanded"), [
+    ["0.jpg", 100, 50],
+    ["1/0.jpg", undefined, undefined],
+    ["1/3.jpg", 640, 480],
+  ]);
+  assert.deepEqual(sizes("cat/broken"), [["0.jpg", undefined, undefined]]);
+  assert.deepEqual(sizes("cat/other"), [["0.jpg", undefined, undefined]]);
+  const book1 = catalog.index.blueprints.find((e) => e.path === "cat/book")!.renders[1]!;
+  assert.deepEqual(Object.keys(book1), ["file", "oid", "size"], "no width or height keys at all");
+
+  // A stale entry carried over from the live index keeps its sizes.
+  const live = { ...catalog.index, blueprints: catalog.index.blueprints.filter((e) => e.path === "cat/single") };
+  const next = { ...catalog, index: { ...catalog.index, blueprints: [] as typeof catalog.index.blueprints }, invalid: ["cat/single"] };
+  carryOverStale(next, live);
+  assert.deepEqual(next.index.blueprints[0]!.renders, [{ file: "0.jpg", oid: "1".repeat(64), size: 1234, width: 260, height: 288 }]);
 });
 
 test("expanded book rules: slot folders, both files, nesting, notes and renders", async () => {
