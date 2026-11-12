@@ -20,6 +20,14 @@ test("slugs", () => {
   assert.equal(slugify("[virtual-signal=signal-A][color=red]Red[/color] mall"), "signal-a-red-mall");
 });
 
+test("% is the word percent", () => {
+  assert.equal(slugify("Expansion with %"), "expansion-with-percent");
+  assert.equal(slugify("Resource (RYG) %"), "resource-ryg-percent");
+  assert.equal(slugify("Any% Patch Sizes"), "any-percent-patch-sizes");
+  assert.equal(slugify("100% Stone Patch Size"), "100-percent-stone-patch-size");
+  assert.equal(slugify("%"), "percent");
+});
+
 test("plain labels for titles", () => {
   assert.equal(plainLabel("[item=military-science-pack,quality=uncommon] (240/s) V3"), "Military Science Pack (240/s) V3");
   assert.equal(plainLabel("[item=production-science-pack]960/s"), "Production Science Pack 960/s");
