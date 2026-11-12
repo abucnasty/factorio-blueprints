@@ -8,6 +8,8 @@ blueprints: 32
 factorio_version: "2.0.72"
 ---
 
+![Car Orientations](https://blueprints.abucnasty.dev/general/cars-tanks/car-orientations/cover.jpg)
+
 - [N](https://blueprints.abucnasty.dev/general/cars-tanks/car-orientations/0.txt)
 - [NbE](https://blueprints.abucnasty.dev/general/cars-tanks/car-orientations/1.txt)
 - [NNE](https://blueprints.abucnasty.dev/general/cars-tanks/car-orientations/2.txt)
