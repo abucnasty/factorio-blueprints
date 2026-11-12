@@ -41,6 +41,10 @@ export interface RenderSettings {
   nodePath: string;
   /** Extra arguments for the render tool, e.g. ["--show-window"]. */
   extraArgs: string[];
+  /** Mods to enable for renders (--enable-mods); empty for none. */
+  enableMods: string[];
+  /** Folder those mods come from (--mods); empty for the game's own mods folder. */
+  modsFolder: string;
   /** Render previews right after each import. */
   afterImport: boolean;
 }
