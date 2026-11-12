@@ -6,6 +6,7 @@ import { blueprintStringOf, listBlueprints, readInput, selectBlueprints, selects
 import { Session, resolveFactorioExecutable } from "./factorio.js";
 import { planCapture } from "./framing.js";
 import { convertToJpeg, stitchToJpeg } from "./image.js";
+import { blueprintHash, manifestKey, nextManifest, readManifest, writeManifest } from "./manifest.js";
 
 /** Ticks the game runs after a build before its screenshot, so the client has caught up and drawn it */
 export const SETTLE_TICKS = 120;
@@ -114,6 +115,7 @@ export async function publishImages(out, images, inScope = () => true) {
  * @property {{ path: string, kind: string, reason?: string }[]} skipped  planners and ignored duplicate slots
  * @property {string[]} problems       problems with the input itself (duplicate or invalid slot numbers)
  * @property {string[]} removed        stale render files removed from `out`, relative to it
+ * @property {string | null} manifest  the render manifest written (<out>/render.json), absolute; null if none
  * @property {string | null} work_dir
  * @property {string} [window]         how the game client was shown
  * @property {object} [setup]          research report from the game
@@ -123,6 +125,7 @@ export async function publishImages(out, images, inScope = () => true) {
  * @property {string} path             slot path ("3/1"; "" for a lone blueprint)
  * @property {string} file             render file relative to `out`, "/"-separated ("3/1.jpg", "0.jpg")
  * @property {string} label
+ * @property {string} sha256           blueprintHash of the blueprint the image shows (as in the manifest)
  * @property {number} width
  * @property {number} height
  * @property {number} bytes
@@ -266,7 +269,8 @@ async function capture(session, entry, workDir, options, log, { attempt, attempt
         return {
             file: jpeg,
             image: {
-                ...about, strategy: attempt.strategy, width: written.width, height: written.height, bytes: written.bytes,
+                ...about, sha256: blueprintHash(entry.blueprint), strategy: attempt.strategy,
+                width: written.width, height: written.height, bytes: written.bytes,
                 pixels_per_tile: plan.pixelsPerTile, screenshots: shots.length, built: attempt.built, tiles: attempt.tiles,
                 failed: attempt.failed, missing: attempt.missing, problems: attempt.problems, import_errors: attempt.import_errors,
                 attempts,
@@ -306,7 +310,7 @@ export async function render(options, print) {
     /** @type {RenderReport} */
     const report = {
         schema: REPORT_SCHEMA, input: path.resolve(options.input), format, out: path.resolve(options.out), only,
-        images: [], without_image: [], skipped: listed.skipped, problems: listed.problems, removed: [], work_dir: null,
+        images: [], without_image: [], skipped: listed.skipped, problems: listed.problems, removed: [], manifest: null, work_dir: null,
     };
     const pending = [];
     for (const entry of blueprints) {
@@ -365,6 +369,11 @@ export async function render(options, print) {
     report.images.sort(byBookOrder);
     report.without_image.sort(byBookOrder);
     report.removed = await publishImages(options.out, images, inScope);
+    // the manifest says which images are current; it is not a render image and cleanup never touches it
+    const { manifest: previous, problem: manifestProblem } = only ? await readManifest(options.out) : { manifest: null, problem: null };
+    if (manifestProblem) log(`Render manifest: ${manifestProblem}`);
+    const produced = report.images.map(image => ({ key: manifestKey(image.path), file: image.file, sha256: image.sha256, width: image.width, height: image.height }));
+    report.manifest = await writeManifest(options.out, nextManifest(previous, produced, report.removed, Boolean(only)));
     for (const image of report.images) log(`Wrote ${path.join(options.out, ...image.file.split("/"))} (${image.width}×${image.height})`);
     for (const file of report.removed) log(`Removed stale ${path.join(options.out, ...file.split("/"))}`);
     for (const missing of report.without_image) log(`No image for blueprint ${nameOf(missing)}: ${missing.reason}`);
