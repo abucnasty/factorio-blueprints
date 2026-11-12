@@ -10,11 +10,13 @@ vault: blueprints are pasted in and copied out as normal blueprint strings.
 
 The catalog is imported: 28 blueprints, each with its version history.
 Every blueprint has a live link that returns its string, for the latest
-version or any earlier one:
+version or any earlier one. Each entry of a book has its own link, by its
+slot in the book:
 
 ```
 https://blueprints.abucnasty.dev/<folder path>.txt
 https://blueprints.abucnasty.dev/<folder path>@<commit>.txt
+https://blueprints.abucnasty.dev/<folder path>/<slot>/<slot>.txt
 https://blueprints.abucnasty.dev/index.json
 ```
 
@@ -37,7 +39,7 @@ _tools/lfs-worker/          Git LFS server for render images
 <category>/.../<slug>/      one folder per blueprint
   README.md                 notes, with metadata in the frontmatter
   blueprint.json            the decoded blueprint
-  renders/<n>.jpg           preview images (Git LFS)
+  renders/<slot path>.jpg   preview images (Git LFS): 0.jpg, or 3/1.jpg in a book
 ```
 
 - [Setup](_tools/docs/setup.md): set up a computer to edit and sync the vault.
