@@ -9,6 +9,6 @@ tiles: 19091
 factorio_version: "2.0.76"
 ---
 
-![The Iron Maden (20k/min promethium)](https://blueprints.abucnasty.dev/megabasing/common-quality-science/the-iron-maden-20k-min-promethium/cover.jpg)
+![The Iron Maden (20k/min promethium)](https://blueprints.abucnasty.dev/megabasing/promethium/the-iron-maden-20k-min-promethium/cover.jpg)
 
 - designed by abucnasty
