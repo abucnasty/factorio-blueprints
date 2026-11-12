@@ -3,6 +3,7 @@
 
 import {
   BLUEPRINT_FILE,
+  BOOK_FILE,
   joinPath,
   NOTES_FILE,
   parseRenderManifest,
@@ -12,18 +13,43 @@ import {
   renderStateLabel,
 } from "../core/index.ts";
 import type { FolderRenderState } from "../core/index.ts";
+import { leaves, readTree } from "./expanded.ts";
 import { findBlueprintFolders, listRenderFiles } from "./generated-notes.ts";
 import type { Host } from "./host.ts";
 import { cancelRender, isRendering, renderPreview } from "./render-preview.ts";
 
-/** Render state of one blueprint folder. Throws if blueprint.json is unreadable. */
+/**
+ * Render state of one blueprint folder, or of an expanded book as the sum of
+ * its leaves (entries keyed by slot path under the book). Throws if a file
+ * is unreadable.
+ */
 export async function folderRenderState(host: Host, folder: string): Promise<FolderRenderState> {
+  if (await host.files.exists(joinPath(folder, BOOK_FILE))) return bookRenderState(host, folder);
   const value = readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE)));
   const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
   const manifest = (await host.files.exists(manifestPath))
     ? parseRenderManifest(await host.files.read(manifestPath))
     : undefined;
   return renderState(value, manifest, await listRenderFiles(host, folder));
+}
+
+async function bookRenderState(host: Host, folder: string): Promise<FolderRenderState> {
+  const entries: FolderRenderState["entries"] = [];
+  const orphans: string[] = [];
+  for (const leaf of leaves(await readTree(host, folder, []))) {
+    const prefix = leaf.slots.join("/");
+    const own = await folderRenderState(host, leaf.folder);
+    for (const e of own.entries) {
+      // A leaf's own entry "0" (path "") is the book's slot path; an unexpanded book in a leaf nests below it.
+      const path = e.path === "" ? prefix : `${prefix}/${e.path}`;
+      entries.push({ ...e, key: path, path, file: `${path}.jpg` });
+    }
+    orphans.push(...own.orphans.map((o) => `${leaf.folder.slice(folder.length + 1)}/renders/${o}`));
+  }
+  const count = (st: string) => entries.filter((e) => e.state === st).length;
+  const counts = { total: entries.length, current: count("current"), outdated: count("outdated"), none: count("none"), orphans: orphans.length };
+  const overall = counts.total === 0 || counts.none === counts.total ? "none" : counts.current === counts.total ? "current" : "outdated";
+  return { entries, orphans, overall, counts };
 }
 
 export interface FolderNeedingRender {

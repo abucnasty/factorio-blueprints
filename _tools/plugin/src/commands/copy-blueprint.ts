@@ -3,6 +3,7 @@
 
 import {
   BLUEPRINT_FILE,
+  BOOK_FILE,
   describeBlueprint,
   encodeBlueprintString,
   findBlueprintFolder,
@@ -10,6 +11,7 @@ import {
   readCanonicalJson,
   summarizeBlueprint,
 } from "../core/index.ts";
+import { folderValue, locate } from "./expanded.ts";
 import type { Host } from "./host.ts";
 
 export type CopyOutcome =
@@ -17,17 +19,17 @@ export type CopyOutcome =
   | { action: "rejected"; reason: string };
 
 export async function copyBlueprintString(host: Host, contextFolder: string): Promise<CopyOutcome> {
-  const folder = await findBlueprintFolder(contextFolder, (f) =>
-    host.files.exists(joinPath(f, BLUEPRINT_FILE)),
-  );
-  if (folder === undefined) {
-    return reject(host, "This is not inside a blueprint folder (a folder with a blueprint.json).");
+  const loc = await locate(host, contextFolder);
+  if (loc === undefined) {
+    return reject(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
   }
-  const path = joinPath(folder, BLUEPRINT_FILE);
+  const folder = loc.folder;
+  const path = joinPath(folder, loc.kind === "book" ? BOOK_FILE : BLUEPRINT_FILE);
   let summary: string;
   let encoded: string;
   try {
-    const value = readCanonicalJson(await host.files.read(path));
+    // An expanded book (root or nested) is copied assembled, as one string.
+    const value = await folderValue(host, loc);
     summary = summarizeBlueprint(describeBlueprint(value));
     encoded = encodeBlueprintString(value);
   } catch (e) {

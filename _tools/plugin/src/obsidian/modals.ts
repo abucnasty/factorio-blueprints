@@ -3,7 +3,7 @@
 
 import { App, Modal, Setting, SuggestModal } from "obsidian";
 
-import type { CreateAnswer, CreatePrompt, PickItem, UpdateAnswer, UpdatePrompt } from "../commands/host.ts";
+import type { ConfirmPrompt, CreateAnswer, CreatePrompt, PickItem, UpdateAnswer, UpdatePrompt } from "../commands/host.ts";
 import { slugify } from "../core/index.ts";
 
 abstract class AnswerModal<T> extends Modal {
@@ -197,5 +197,33 @@ export class PickModal extends SuggestModal<number> {
     super.onClose();
     // onChooseSuggestion runs around close; settle after both.
     setTimeout(() => this.resolve?.(this.chosen), 0);
+  }
+}
+
+/** OK or Cancel after a summary of what will change. */
+export class ConfirmModal extends AnswerModal<true> {
+  private readonly prompt: ConfirmPrompt;
+
+  constructor(app: App, prompt: ConfirmPrompt) {
+    super(app);
+    this.prompt = prompt;
+  }
+
+  onOpen(): void {
+    this.titleEl.setText(this.prompt.title);
+    const box = this.contentEl.createDiv();
+    box.style.maxHeight = "60vh";
+    box.style.overflowY = "auto";
+    let list: HTMLElement | undefined;
+    for (const line of this.prompt.lines) {
+      if (line.startsWith("- ")) {
+        list ??= box.createEl("ul");
+        list.createEl("li", { text: line.slice(2) });
+      } else {
+        list = undefined;
+        box.createEl("p", { text: line });
+      }
+    }
+    this.buttons(this.prompt.okText, () => this.finish(true));
   }
 }

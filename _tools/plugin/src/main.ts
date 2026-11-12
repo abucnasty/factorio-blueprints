@@ -9,9 +9,10 @@ import { copyLiveLink } from "./commands/copy-link.ts";
 import { refreshAllGeneratedBlocks } from "./commands/generated-notes.ts";
 import type { Host } from "./commands/host.ts";
 import { importFromClipboard } from "./commands/import-blueprint.ts";
+import { expandBookIntoFolders } from "./commands/expand-book.ts";
 import { renderPreview } from "./commands/render-preview.ts";
 import { cancelRenderAll, folderRenderState, renderAllNeeded, showFoldersNeedingRender } from "./commands/render-status.ts";
-import { BLUEPRINT_FILE, isScannedPath, joinPath, RENDER_MANIFEST, renderStateLabel, selfAndAncestors } from "./core/index.ts";
+import { BLUEPRINT_FILE, BOOK_FILE, isScannedPath, joinPath, RENDER_MANIFEST, renderStateLabel, selfAndAncestors } from "./core/index.ts";
 import { createObsidianHost } from "./obsidian/host.ts";
 import { BlueprintSettingTab, DEFAULT_SETTINGS, loadRenderSettings, parseAuthors } from "./obsidian/settings.ts";
 import type { StoredSettings } from "./obsidian/settings.ts";
@@ -45,6 +46,15 @@ const FOLDER_COMMANDS: FolderCommand[] = [
     menuOnlyInBlueprintFolder: false,
     exclusive: true,
     run: importFromClipboard,
+  },
+  {
+    id: "expand-book-into-folders",
+    name: "Expand book into folders",
+    menuTitle: "Expand book into folders",
+    icon: "folder-tree",
+    menuOnlyInBlueprintFolder: true,
+    exclusive: true,
+    run: expandBookIntoFolders,
   },
   {
     id: "copy-blueprint-string",
@@ -267,7 +277,9 @@ export default class FactorioBlueprintsPlugin extends Plugin {
         await stat(joinPath(rendersDir, RENDER_MANIFEST)),
         (await host.files.exists(rendersDir)) ? JSON.stringify(await adapter.list(rendersDir)) : "",
       ].join("|");
-      let cached = this.statusCache.get(folder);
+      // An expanded book sums its leaves: not cached (its files are spread over the tree).
+      const isBook = await host.files.exists(joinPath(folder, BOOK_FILE));
+      let cached = isBook ? undefined : this.statusCache.get(folder);
       if (cached?.key !== key) {
         cached = { key, label: renderStateLabel(await folderRenderState(host, folder)) };
         this.statusCache.set(folder, cached);
@@ -282,7 +294,10 @@ export default class FactorioBlueprintsPlugin extends Plugin {
 
   private blueprintFolderOf(folder: string): string | undefined {
     return selfAndAncestors(folder).find(
-      (f) => f !== "" && isScannedPath(f) && this.app.vault.getAbstractFileByPath(joinPath(f, BLUEPRINT_FILE)) instanceof TFile,
+      (f) =>
+        f !== "" &&
+        isScannedPath(f) &&
+        [BLUEPRINT_FILE, BOOK_FILE].some((name) => this.app.vault.getAbstractFileByPath(joinPath(f, name)) instanceof TFile),
     );
   }
 

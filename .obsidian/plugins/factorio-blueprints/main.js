@@ -1000,8 +1000,8 @@ function describeBlueprint(value) {
   };
   count(kind, body, counts, true);
   const result = { kind, counts };
-  const label = nonEmptyString(body["label"]);
-  if (label !== void 0) result.label = label;
+  const label2 = nonEmptyString(body["label"]);
+  if (label2 !== void 0) result.label = label2;
   const description = nonEmptyString(body["description"]);
   if (description !== void 0) result.description = description;
   const version = body["version"];
@@ -1018,7 +1018,7 @@ function decodeFactorioVersion(packed) {
 }
 function summarizeBlueprint(d) {
   const name = KIND_NAMES[d.kind];
-  const label = d.label !== void 0 ? ` "${d.label}"` : "";
+  const label2 = d.label !== void 0 ? ` "${d.label}"` : "";
   const bits2 = [];
   const c = d.counts;
   if (d.kind === "blueprint-book") {
@@ -1032,7 +1032,7 @@ function summarizeBlueprint(d) {
     bits2.push(plural(c.entities, "entity", "entities"));
     if (c.tiles > 0) bits2.push(plural(c.tiles, "tile"));
   }
-  return `${name}${label}` + (bits2.length > 0 ? ` (${bits2.join(", ")})` : "");
+  return `${name}${label2}` + (bits2.length > 0 ? ` (${bits2.join(", ")})` : "");
 }
 function plural(n, one, many = one + "s") {
   return `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
@@ -1093,8 +1093,8 @@ var DROPPED_TAGS = /* @__PURE__ */ new Set([
   "space-platform"
 ]);
 var TAG = /\[([a-z-]+)=([^\]]*)\]|\[[/.][a-z-]+\]/g;
-function plainLabel(label) {
-  const text = label.replace(TAG, (whole, type, value) => {
+function plainLabel(label2) {
+  const text = label2.replace(TAG, (whole, type, value) => {
     if (type === void 0 || value === void 0 || DROPPED_TAGS.has(type)) return " ";
     const name = (value.split(",")[0] ?? "").split(/[/.]/).pop() ?? "";
     return name === "" ? " " : ` ${humanize(name)} `;
@@ -7570,12 +7570,6 @@ function selfAndAncestors(folder) {
     f = parentFolder(f);
   }
 }
-async function findBlueprintFolder(folder, hasBlueprintFile) {
-  for (const f of selfAndAncestors(folder)) {
-    if (f !== "" && isScannedPath(f) && await hasBlueprintFile(f)) return f;
-  }
-  return void 0;
-}
 
 // src/core/book-tree.ts
 var KIND_KEYS2 = [
@@ -7611,13 +7605,13 @@ function node(value, slots) {
   for (const [key, kind] of KIND_KEYS2) {
     const body = value[key];
     if (!isObject2(body)) continue;
-    const label = typeof body["label"] === "string" ? plainLabel(body["label"]) : "";
+    const label2 = typeof body["label"] === "string" ? plainLabel(body["label"]) : "";
     const result = {
       slot: slots.length === 0 ? void 0 : slots[slots.length - 1],
       slots,
       path: slots.join("/"),
       kind,
-      label,
+      label: label2,
       children: []
     };
     const entries = body["blueprints"];
@@ -7639,6 +7633,126 @@ function isObject2(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+// src/core/expanded-book.ts
+var BOOK_FILE = "book.json";
+var MAX_NAME = 60;
+function slotFolderName(slot, label2) {
+  const slug = slugify(label2 ?? "").slice(0, MAX_NAME).replace(/-+$/, "");
+  return slug === "" ? String(slot) : `${slot}-${slug}`;
+}
+function parseSlotFolder(name) {
+  const m = /^(0|[1-9][0-9]*)(?:-.+)?$/.exec(name);
+  if (!m) return void 0;
+  const slot = Number(m[1]);
+  return Number.isSafeInteger(slot) ? slot : void 0;
+}
+function expandBook(value) {
+  const body = isObject3(value) ? value["blueprint_book"] : void 0;
+  if (!isObject3(body)) throw new Error("Not a blueprint book: the value has no blueprint_book object.");
+  const dropped = [];
+  const { book, entries } = expandBody(body, [], dropped);
+  return { book, entries, dropped };
+}
+function expandBody(body, slots, dropped) {
+  const { blueprints, ...rest } = body;
+  const bySlot = /* @__PURE__ */ new Map();
+  (Array.isArray(blueprints) ? blueprints : []).forEach((item, position) => {
+    const index = isObject3(item) ? item["index"] : void 0;
+    const slot = typeof index === "number" && Number.isInteger(index) && index >= 0 ? index : position;
+    const path = [...slots, slot].join("/");
+    const found = kindOf(item);
+    if (!found) throw new Error(`Book entry ${path} is not a blueprint, book or planner.`);
+    const [key, kind, entryBody] = found;
+    const label2 = typeof entryBody["label"] === "string" ? plainLabel(entryBody["label"]) : "";
+    if (bySlot.has(slot)) {
+      dropped.push({ path, label: label2 });
+      return;
+    }
+    const entry = { slot, folder: slotFolderName(slot, label2), kind, label: label2 };
+    if (kind === "blueprint-book") {
+      const nested = expandBody(entryBody, [...slots, slot], dropped);
+      entry.book = nested.book;
+      entry.entries = nested.entries;
+    } else {
+      entry.value = { [key]: entryBody };
+    }
+    bySlot.set(slot, entry);
+  });
+  const entries = [...bySlot.values()].sort((a, b) => a.slot - b.slot);
+  return { book: { blueprint_book: rest }, entries };
+}
+async function assembleBook(folder, reader) {
+  const bookPath = joinPath(folder, BOOK_FILE);
+  const bookText = await reader.read(bookPath);
+  if (bookText === void 0) throw new Error(`${folder} has no ${BOOK_FILE}.`);
+  if (await reader.read(joinPath(folder, BLUEPRINT_FILE)) !== void 0) {
+    throw new Error(`${folder} has both ${BOOK_FILE} and ${BLUEPRINT_FILE}; keep only one.`);
+  }
+  const book = parse2(bookPath, bookText);
+  const body = isObject3(book) ? book["blueprint_book"] : void 0;
+  if (!isObject3(body)) throw new Error(`${bookPath} has no blueprint_book object.`);
+  const items = [];
+  for (const child of await slotFolders(folder, reader)) {
+    const leafPath = joinPath(child.path, BLUEPRINT_FILE);
+    const leafText = await reader.read(leafPath);
+    if (leafText === void 0) {
+      if (await reader.read(joinPath(child.path, BOOK_FILE)) === void 0) {
+        throw new Error(
+          `${child.path} is named like a slot folder but has neither ${BLUEPRINT_FILE} nor ${BOOK_FILE}; add one or rename the folder.`
+        );
+      }
+      const nested = await assembleBook(child.path, reader);
+      items.push(sortedKeys2({ index: child.slot, blueprint_book: nested.blueprint_book }));
+      continue;
+    }
+    if (await reader.read(joinPath(child.path, BOOK_FILE)) !== void 0) {
+      throw new Error(`${child.path} has both ${BOOK_FILE} and ${BLUEPRINT_FILE}; keep only one.`);
+    }
+    const found = kindOf(parse2(leafPath, leafText));
+    if (!found) throw new Error(`${leafPath} is not a blueprint, book or planner.`);
+    const [key, , entryBody] = found;
+    items.push(sortedKeys2({ index: child.slot, [key]: entryBody }));
+  }
+  return { blueprint_book: sortedKeys2({ ...body, blueprints: items }) };
+}
+async function slotFolders(folder, reader) {
+  const out = [];
+  for (const name of await reader.folders(folder)) {
+    const slot = parseSlotFolder(name);
+    if (slot !== void 0) out.push({ slot, name, path: joinPath(folder, name) });
+  }
+  out.sort((a, b) => a.slot - b.slot || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (let i2 = 1; i2 < out.length; i2++) {
+    if (out[i2].slot === out[i2 - 1].slot) {
+      throw new Error(
+        `${folder} has two folders for slot ${out[i2].slot} (${out[i2 - 1].name}, ${out[i2].name}); renumber or merge one.`
+      );
+    }
+  }
+  return out;
+}
+function parse2(path, text) {
+  try {
+    return readCanonicalJson(text);
+  } catch (e) {
+    throw new Error(`${path} is not valid JSON: ${e.message}`);
+  }
+}
+function kindOf(value) {
+  if (!isObject3(value)) return void 0;
+  for (const [key, kind] of KIND_KEYS2) {
+    const body = value[key];
+    if (isObject3(body)) return [key, kind, body];
+  }
+  return void 0;
+}
+function sortedKeys2(obj) {
+  return Object.fromEntries(Object.entries(obj).sort(([a], [b]) => compareCodePoints(a, b)));
+}
+function isObject3(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
 // src/core/links.ts
 var DEFAULT_LINK_BASE = "https://blueprints.abucnasty.dev";
 function stringUrl(base, folder, slots = [], sha) {
@@ -7648,6 +7762,9 @@ function stringUrl(base, folder, slots = [], sha) {
 }
 function coverUrl(base, folder) {
   return `${folderUrl(base, folder)}/cover.jpg`;
+}
+function renderUrl(base, folder, file) {
+  return `${folderUrl(base, folder)}/renders/${encodePath(file)}`;
 }
 function folderUrl(base, folder) {
   const path = encodePath(folder);
@@ -7676,17 +7793,36 @@ function generatedBlockLines(input) {
     if (inner.length > 0) inner.push("");
     const visit3 = (n, depth) => {
       const indent = "  ".repeat(depth);
-      const label = escapeInline(displayLabel(n));
+      const label2 = escapeInline(displayLabel(n));
       const url = stringUrl(input.base, input.folder, n.slots);
-      inner.push(n.kind === "blueprint-book" ? `${indent}- ${label} ([book](${url}))` : `${indent}- [${label}](${url})`);
+      inner.push(n.kind === "blueprint-book" ? `${indent}- ${label2} ([book](${url}))` : `${indent}- [${label2}](${url})`);
       for (const c of n.children) visit3(c, depth + 1);
     };
     for (const c of input.tree.children) visit3(c, 0);
   }
   return inner.length === 0 ? void 0 : inner;
 }
-var COVER_LINE = /^!\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\/cover\.jpg\)[ \t]*$/;
-var LIST_ITEM = /^[ \t]*- (?:\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\.txt\)|.*\(\[book\]\(https?:\/\/[^\s()]+\.txt\)\))[ \t]*$/;
+function expandedBlockLines(input) {
+  const inner = [];
+  if (input.cover !== void 0) inner.push(`![${escapeInline(input.title)}](${input.cover})`);
+  if (input.nodes.length > 0) {
+    if (inner.length > 0) inner.push("");
+    const visit3 = (n, depth) => {
+      const note = "./" + [...n.relativeFolder.split("/").filter((x2) => x2 !== ""), "README.md"].map(encodeLinkSegment).join("/");
+      const kind = n.kind === "blueprint-book" ? "book" : "string";
+      const url = stringUrl(input.base, input.root, n.slots);
+      inner.push(`${"  ".repeat(depth)}- [${escapeInline(n.title)}](${note}) ([${kind}](${url}))`);
+      for (const c of n.children) visit3(c, depth + 1);
+    };
+    for (const n of input.nodes) visit3(n, 0);
+  }
+  return inner.length === 0 ? void 0 : inner;
+}
+function encodeLinkSegment(segment) {
+  return encodeURIComponent(segment).replace(/\(/g, "%28").replace(/\)/g, "%29");
+}
+var COVER_LINE = /^!\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\/(?:cover|renders\/\d+(?:\/\d+)*)\.jpg\)[ \t]*$/;
+var LIST_ITEM = /^[ \t]*- (?:\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\.txt\)|.*\(\[(?:book|string)\]\(https?:\/\/[^\s()]+\.txt\)\))[ \t]*$/;
 function lines(body) {
   const out = [];
   for (let start = 0; start < body.length; ) {
@@ -7890,9 +8026,9 @@ function blueprintHash(blueprint) {
 function renderTargets(value) {
   const out = [];
   const visit3 = (node2, slots) => {
-    if (!isObject3(node2)) return;
+    if (!isObject4(node2)) return;
     const bp = node2["blueprint"];
-    if (isObject3(bp)) {
+    if (isObject4(bp)) {
       if (arrayLength2(bp["entities"]) + arrayLength2(bp["tiles"]) === 0) return;
       const path = slots.join("/");
       const key = path === "" ? "0" : path;
@@ -7900,9 +8036,9 @@ function renderTargets(value) {
       return;
     }
     const book = node2["blueprint_book"];
-    if (!isObject3(book) || !Array.isArray(book["blueprints"])) return;
+    if (!isObject4(book) || !Array.isArray(book["blueprints"])) return;
     const children = book["blueprints"].map((entry, position) => {
-      const index = isObject3(entry) ? entry["index"] : void 0;
+      const index = isObject4(entry) ? entry["index"] : void 0;
       return { entry, slot: typeof index === "number" && Number.isInteger(index) && index >= 0 ? index : position };
     });
     children.sort((a, b) => a.slot - b.slot);
@@ -7915,10 +8051,10 @@ function parseRenderManifest(text) {
   if (text === void 0) return void 0;
   try {
     const v = JSON.parse(text);
-    if (!isObject3(v) || v["schema"] !== 1 || !isObject3(v["entries"])) return void 0;
+    if (!isObject4(v) || v["schema"] !== 1 || !isObject4(v["entries"])) return void 0;
     const entries = {};
     for (const [k, e] of Object.entries(v["entries"])) {
-      if (isObject3(e) && typeof e["file"] === "string" && typeof e["sha256"] === "string") {
+      if (isObject4(e) && typeof e["file"] === "string" && typeof e["sha256"] === "string") {
         entries[k] = e;
       }
     }
@@ -7953,7 +8089,7 @@ function renderStateLabel(s) {
 function arrayLength2(v) {
   return Array.isArray(v) ? v.length : 0;
 }
-function isObject3(v) {
+function isObject4(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
@@ -7981,20 +8117,116 @@ function applyStatsToNote(note, stats) {
   return Object.keys(updates).length === 0 ? note : updateFrontmatter(note, updates);
 }
 
+// src/commands/expanded.ts
+async function locate(host, contextFolder) {
+  for (const f of selfAndAncestors(contextFolder)) {
+    if (f === "" || !isScannedPath(f)) continue;
+    const kind = await host.files.exists(joinPath(f, BOOK_FILE)) ? "book" : await host.files.exists(joinPath(f, BLUEPRINT_FILE)) ? "blueprint" : void 0;
+    if (!kind) continue;
+    const slots = [];
+    let cur = f;
+    for (; ; ) {
+      const parent = parentFolder(cur);
+      const slot = parseSlotFolder(baseName(cur));
+      if (parent === "" || slot === void 0 || !await host.files.exists(joinPath(parent, BOOK_FILE))) break;
+      slots.unshift(slot);
+      cur = parent;
+    }
+    return { folder: f, kind, root: cur, slots };
+  }
+  return void 0;
+}
+function vaultReader(host) {
+  return {
+    folders: async (folder) => (await host.files.list(folder)).folders.map(baseName),
+    read: async (path) => await host.files.exists(path) ? host.files.read(path) : void 0
+  };
+}
+async function folderValue(host, loc) {
+  return loc.kind === "book" ? assembleBook(loc.folder, vaultReader(host)) : readCanonicalJson(await host.files.read(joinPath(loc.folder, BLUEPRINT_FILE)));
+}
+async function readTree(host, bookFolder, prefix) {
+  const out = [];
+  for (const { slot, path } of await slotFolders(bookFolder, vaultReader(host))) {
+    const slots = [...prefix, slot];
+    const isBook = await host.files.exists(joinPath(path, BOOK_FILE));
+    const value = readCanonicalJson(await host.files.read(joinPath(path, isBook ? BOOK_FILE : BLUEPRINT_FILE)));
+    const node2 = bookTree(value);
+    if (!node2) throw new Error(`${path} does not hold a blueprint, book or planner.`);
+    const children = isBook ? await readTree(host, path, slots) : [];
+    out.push({
+      slot,
+      slots,
+      folder: path,
+      kind: node2.kind,
+      label: node2.label,
+      title: displayLabel({ ...node2, slot }),
+      file: isBook ? "book" : "blueprint",
+      value,
+      hasRender: !isBook && await hasImage(host, path),
+      children
+    });
+  }
+  return out;
+}
+function leaves(nodes) {
+  return nodes.flatMap((n) => n.file === "book" ? leaves(n.children) : [n]);
+}
+async function hasImage(host, folder) {
+  const renders = joinPath(folder, "renders");
+  if (!await host.files.exists(renders)) return false;
+  return (await host.files.list(renders)).files.some((f) => /\/0\.(?:jpe?g|png|webp)$/i.test(f));
+}
+async function renameSlotFolder(host, folder, slot, label2) {
+  const want = joinPath(parentFolder(folder), slotFolderName(slot, label2));
+  if (want === folder || await host.files.exists(want)) return folder;
+  await host.files.rename(folder, want);
+  return want;
+}
+async function renameSlotFolders(host, bookFolder) {
+  let renamed = 0;
+  for (const { slot, path } of await slotFolders(bookFolder, vaultReader(host))) {
+    const isBook = await host.files.exists(joinPath(path, BOOK_FILE));
+    const node2 = bookTree(readCanonicalJson(await host.files.read(joinPath(path, isBook ? BOOK_FILE : BLUEPRINT_FILE))));
+    const now = await renameSlotFolder(host, path, slot, node2?.label ?? "");
+    if (now !== path) renamed++;
+    if (isBook) renamed += await renameSlotFolders(host, now);
+  }
+  return renamed;
+}
+async function bookNoteFolders(host, bookFolder) {
+  const out = [bookFolder];
+  const walk = (nodes) => {
+    for (const n of nodes) {
+      out.push(n.folder);
+      walk(n.children);
+    }
+  };
+  walk(await readTree(host, bookFolder, []));
+  return out;
+}
+async function locateBySlots(host, root, slots) {
+  let folder = root;
+  for (const slot of slots) {
+    const child = (await slotFolders(folder, vaultReader(host))).find((c) => c.slot === slot);
+    if (!child) return void 0;
+    folder = child.path;
+  }
+  return folder;
+}
+
 // src/commands/copy-blueprint.ts
 async function copyBlueprintString(host, contextFolder) {
-  const folder = await findBlueprintFolder(
-    contextFolder,
-    (f) => host.files.exists(joinPath(f, BLUEPRINT_FILE))
-  );
-  if (folder === void 0) {
-    return reject(host, "This is not inside a blueprint folder (a folder with a blueprint.json).");
+  const loc = await locate(host, contextFolder);
+  if (loc === void 0) {
+    return reject(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
   }
-  const path = joinPath(folder, BLUEPRINT_FILE);
+  const folder = loc.folder;
+  const path = joinPath(folder, loc.kind === "book" ? BOOK_FILE : BLUEPRINT_FILE);
   let summary;
   let encoded;
   try {
-    const value = readCanonicalJson(await host.files.read(path));
+    const value = await folderValue(host, loc);
     summary = summarizeBlueprint(describeBlueprint(value));
     encoded = encodeBlueprintString(value);
   } catch (e) {
@@ -8015,11 +8247,12 @@ function reject(host, reason) {
 
 // src/commands/copy-link.ts
 async function copyLiveLink(host, contextFolder) {
-  const folder = await findBlueprintFolder(contextFolder, (f) => host.files.exists(joinPath(f, BLUEPRINT_FILE)));
-  if (folder === void 0) return reject2(host, "This is not inside a blueprint folder (a folder with a blueprint.json).");
+  const loc = await locate(host, contextFolder);
+  if (loc === void 0) return reject2(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
+  const folder = loc.folder;
   let tree;
   try {
-    tree = bookTree(readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE))));
+    tree = bookTree(await folderValue(host, loc));
   } catch (e) {
     return reject2(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -8031,7 +8264,7 @@ async function copyLiveLink(host, contextFolder) {
     if (index === void 0) return { action: "cancelled" };
     node2 = nodes[index];
   }
-  const url = stringUrl(host.settings.linkBase, folder, node2.slots);
+  const url = stringUrl(host.settings.linkBase, loc.root, [...loc.slots, ...node2.slots]);
   try {
     await host.clipboard.writeText(url);
   } catch (e) {
@@ -8074,8 +8307,7 @@ async function noteWithBlock(host, folder, note, value) {
   } catch {
     title = baseName(folder);
   }
-  const hasRenders = (await listRenderFiles(host, folder)).length > 0;
-  const lines2 = generatedBlockLines({ base: host.settings.linkBase, folder, title, tree, hasRenders });
+  const lines2 = await blockLinesFor(host, folder, title, tree);
   const block = applyGeneratedBlock(note, lines2);
   if (block.status === "invalid") return block;
   let text;
@@ -8087,12 +8319,38 @@ async function noteWithBlock(host, folder, note, value) {
   if (text === note) return { status: "unchanged", text: note };
   return { status: block.status === "unchanged" ? "replaced" : block.status, text };
 }
+async function blockLinesFor(host, folder, title, tree) {
+  const base = host.settings.linkBase;
+  const loc = await locate(host, folder);
+  if (!loc || loc.folder !== folder || loc.kind === "blueprint" && loc.slots.length === 0) {
+    const hasRenders = (await listRenderFiles(host, folder)).length > 0;
+    return generatedBlockLines({ base, folder, title, tree, hasRenders });
+  }
+  const slotPath = (slots) => slots.join("/");
+  if (loc.kind === "blueprint") {
+    const hasRender = (await listRenderFiles(host, folder)).some((f) => /^0\./.test(f));
+    const cover2 = hasRender ? renderUrl(base, loc.root, `${slotPath(loc.slots)}.jpg`) : void 0;
+    return expandedBlockLines({ base, root: loc.root, title, cover: cover2, nodes: [] });
+  }
+  const nodes = await readTree(host, folder, loc.slots);
+  const first = leaves(nodes).find((l) => l.hasRender);
+  const cover = first === void 0 ? void 0 : loc.slots.length === 0 ? coverUrl(base, loc.root) : renderUrl(base, loc.root, `${slotPath(first.slots)}.jpg`);
+  const toBlock = (n) => ({
+    slots: n.slots,
+    kind: n.kind,
+    title: n.title,
+    relativeFolder: n.folder.slice(folder.length + 1),
+    children: n.children.map(toBlock)
+  });
+  return expandedBlockLines({ base, root: loc.root, title, cover, nodes: nodes.map(toBlock) });
+}
 async function refreshGeneratedBlock(host, folder) {
   const notesPath = joinPath(folder, NOTES_FILE);
   try {
     if (!await host.files.exists(notesPath)) return { status: "skipped", folder, reason: "no README.md" };
     const note = await host.files.read(notesPath);
-    const value = readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE)));
+    const isBook = await host.files.exists(joinPath(folder, BOOK_FILE));
+    const value = await folderValue(host, { folder, kind: isBook ? "book" : "blueprint" });
     const update = await noteWithBlock(host, folder, note, value);
     if (update.status === "invalid") return { status: "skipped", folder, reason: update.reason };
     if (update.status === "unchanged") return { status: "unchanged", folder };
@@ -8102,31 +8360,47 @@ async function refreshGeneratedBlock(host, folder) {
     return { status: "skipped", folder, reason: e instanceof Error ? e.message : String(e) };
   }
 }
-async function findBlueprintFolders(host, from = "") {
+async function findBlueprintFolders(host, from = "", opts = {}) {
   const out = [];
-  const walk = async (dir) => {
+  const walk = async (dir, inBook) => {
     const { files, folders } = await host.files.list(dir);
     if (dir !== "" && files.includes(joinPath(dir, BLUEPRINT_FILE))) {
-      out.push(dir);
+      if (!inBook || opts.slotFolders) out.push(dir);
       return;
     }
-    for (const d of folders) if (!/^[_.]/.test(baseName(d))) await walk(d);
+    const isBook = dir !== "" && files.includes(joinPath(dir, BOOK_FILE));
+    if (isBook && (!inBook || opts.slotFolders)) out.push(dir);
+    for (const d of folders) if (!/^[_.]/.test(baseName(d))) await walk(d, inBook || isBook);
   };
-  await walk(from);
+  await walk(from, false);
   return out.sort();
 }
 async function refreshAllGeneratedBlocks(host) {
   const results = [];
-  for (const folder of await findBlueprintFolders(host)) results.push(await refreshGeneratedBlock(host, folder));
+  let renamed = 0;
+  for (const folder of await findBlueprintFolders(host)) {
+    if (await host.files.exists(joinPath(folder, BOOK_FILE))) {
+      try {
+        renamed += await renameSlotFolders(host, folder);
+      } catch (e) {
+        results.push({ status: "skipped", folder, reason: e instanceof Error ? e.message : String(e) });
+      }
+    }
+  }
+  for (const folder of await findBlueprintFolders(host, "", { slotFolders: true })) results.push(await refreshGeneratedBlock(host, folder));
   const changed = results.filter((r) => r.status === "changed").length;
   const unchanged = results.filter((r) => r.status === "unchanged").length;
   const skipped = results.filter((r) => r.status === "skipped");
   const lines2 = [
-    `Generated content: ${changed} note${changed === 1 ? "" : "s"} changed, ${unchanged} already current` + (skipped.length > 0 ? `, ${skipped.length} skipped` : "") + ". Not committed; the Git plugin's sync will pick the changes up.",
+    `Generated content: ${changed} note${changed === 1 ? "" : "s"} changed, ${unchanged} already current` + (skipped.length > 0 ? `, ${skipped.length} skipped` : "") + (renamed > 0 ? `, ${renamed} slot folder${renamed === 1 ? "" : "s"} renamed after ${renamed === 1 ? "its label" : "their labels"}` : "") + ". Not committed; the Git plugin's sync will pick the changes up.",
     ...skipped.map((s) => `Skipped ${s.folder}: ${s.reason}`)
   ];
   host.ui.notice(lines2.join("\n"), skipped.length > 0 ? "error" : "info");
   return results;
+}
+async function refreshExpandedBook(host, root) {
+  await renameSlotFolders(host, root);
+  for (const folder of await bookNoteFolders(host, root)) await refreshGeneratedBlock(host, folder);
 }
 
 // src/commands/git-notice.ts
@@ -8149,238 +8423,373 @@ function reportGit(host, done, git, extra = "", warn2 = extra !== "") {
   }
 }
 
-// src/commands/render-preview.ts
-var RENDER_SCRIPT = "_tools/render/bin/render.js";
-var RENDER_MODULES = "_tools/render/node_modules";
-var active;
-function isRendering() {
-  return active !== void 0;
+// src/commands/expand-book.ts
+var UNLABELED2 = {
+  blueprint: "Blueprint",
+  "blueprint-book": "Book",
+  "upgrade-planner": "Upgrade planner",
+  "deconstruction-planner": "Deconstruction planner"
+};
+var entryTitle = (e) => e.label !== "" ? e.label : `${UNLABELED2[e.kind]} (slot ${e.slot})`;
+async function writeEntryFolder(host, parent, entry, notes, template) {
+  const folder = joinPath(parent, entry.folder);
+  await host.files.mkdir(folder);
+  if (entry.kind === "blueprint-book") await host.files.write(joinPath(folder, BOOK_FILE), writeCanonicalJson(entry.book));
+  else await host.files.write(joinPath(folder, BLUEPRINT_FILE), writeCanonicalJson(entry.value));
+  await host.files.write(
+    joinPath(folder, NOTES_FILE),
+    fillNotesTemplate(template, { title: entryTitle(entry), posted: notes.posted, authors: notes.authors })
+  );
+  let made = 1;
+  for (const child of entry.entries ?? []) made += await writeEntryFolder(host, folder, child, notes, template);
+  return made;
 }
-function cancelRender() {
-  if (!active) return false;
-  active.abort();
-  return true;
-}
-async function renderPreview(host, contextFolder, options = {}) {
-  if (active) {
-    host.ui.notice("A render is already running; wait for it or cancel it first.", "error");
-    return { action: "busy" };
-  }
-  const controller = new AbortController();
-  active = controller;
+async function expandBookIntoFolders(host, contextFolder) {
+  const loc = await locate(host, contextFolder);
+  if (!loc) return reject3(host, "Run this in a blueprint folder whose blueprint.json is a book.");
+  if (loc.kind === "book") return reject3(host, `${loc.folder} is already an expanded book.`);
+  const folder = loc.folder;
+  let value;
+  let kind;
   try {
-    return await run(host, contextFolder, controller.signal, options);
-  } finally {
-    active = void 0;
+    value = readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE)));
+    kind = describeBlueprint(value).kind;
+  } catch (e) {
+    return reject3(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${errorText2(e)}`);
   }
-}
-async function run(host, contextFolder, signal, options) {
-  const { files, ui } = host;
-  const folder = await findBlueprintFolder(contextFolder, (f) => files.exists(joinPath(f, BLUEPRINT_FILE)));
-  if (folder === void 0) return reject3(host, "This is not inside a blueprint folder (a folder with a blueprint.json).");
-  if (host.processes === void 0 || host.vaultPath === void 0) {
-    return reject3(host, "Rendering needs the desktop app with the vault on this computer's disk.");
+  if (kind !== "blueprint-book") {
+    return reject3(host, `${folder} holds a ${KIND_NAMES[kind]}, not a book: there is nothing to expand.`);
   }
-  const settings = host.settings.render;
-  if (settings.factorioPath.trim() === "") {
-    ui.notice(
-      "Set the Factorio path for this computer (Settings, Factorio Blueprints, Factorio path), then render again.",
-      "error"
-    );
-    ui.openSettings?.();
-    return { action: "needs-settings" };
-  }
-  if (!await files.exists(RENDER_SCRIPT)) {
-    return reject3(host, `The render tool is missing (${RENDER_SCRIPT}). Pull the latest vault and try again.`);
-  }
-  if (!await files.exists(RENDER_MODULES)) {
-    return reject3(
-      host,
-      `The render tool's dependencies are not installed. In a terminal, run:
-cd "${absolute(host.vaultPath, "_tools/render")}" && npm ci
-then render again.`
-    );
-  }
-  const abs = (p) => absolute(host.vaultPath, p);
-  const node2 = settings.nodePath.trim() || "node";
-  let only = [];
-  if (options.onlyNeeded) {
-    let value;
-    try {
-      value = readCanonicalJson(await files.read(joinPath(folder, BLUEPRINT_FILE)));
-    } catch (e) {
-      return reject3(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${e instanceof Error ? e.message : String(e)}`);
-    }
-    const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
-    const manifest = await files.exists(manifestPath) ? parseRenderManifest(await files.read(manifestPath)) : void 0;
-    const state = renderState(value, manifest, await listRenderFiles(host, folder));
-    const needed = state.entries.filter((e) => e.state !== "current").map((e) => e.path);
-    if (needed.length === 0 && state.counts.total > 0) {
-      ui.notice(`The render of ${folder} is already current.`);
-      return { action: "rendered", folder, images: [], problems: [], committed: false };
-    }
-    if (needed.length < state.counts.total && !needed.includes("")) only = needed;
-  }
-  const args = [
-    abs(RENDER_SCRIPT),
-    "--factorio",
-    settings.factorioPath.trim(),
-    "--input",
-    abs(joinPath(folder, BLUEPRINT_FILE)),
-    "--out",
-    abs(joinPath(folder, "renders")),
-    "--json",
-    ...only.length > 0 ? ["--only", only.join(",")] : [],
-    ...settings.enableMods.length > 0 ? ["--enable-mods", settings.enableMods.join(",")] : [],
-    ...settings.enableMods.length > 0 && settings.modsFolder.trim() !== "" ? ["--mods", settings.modsFolder.trim()] : [],
-    ...settings.extraArgs
-  ];
-  const progress = ui.progress(`Rendering ${folder}: starting Factorio…`);
-  let result;
+  let expanded;
   try {
-    result = await host.processes.run(node2, args, {
-      cwd: host.vaultPath,
-      signal,
-      onStderrLine: (line) => {
-        const text = line.trim();
-        if (text !== "") progress.update(`Rendering ${folder}: ${text.length > 120 ? text.slice(0, 117) + "…" : text}`);
-      }
-    });
-  } finally {
-    progress.close();
+    expanded = expandBook(value);
+  } catch (e) {
+    return reject3(host, `${folder}/${BLUEPRINT_FILE}: ${errorText2(e)}`);
   }
-  if (signal.aborted) {
-    ui.notice(`Render of ${folder} cancelled. Nothing was committed.`);
-    return { action: "cancelled" };
-  }
-  const sandbox = result.sandbox;
-  if (sandbox?.failure === "no-permission") {
-    return fail(
-      host,
-      `Obsidian runs as a Flatpak, so the render has to start outside its sandbox, which it is not allowed to do yet. In a terminal, run:
-flatpak override --user --talk-name=org.freedesktop.Flatpak ${sandbox.appId}
-then quit and reopen Obsidian and render again.`
-    );
-  }
-  if (sandbox?.failure === "launcher-missing") {
-    return fail(
-      host,
-      "Obsidian runs as a Flatpak, but flatpak-spawn, which starts the render outside its sandbox, is not available in it, so the render cannot run."
-    );
-  }
-  if (result.code === -1 || sandbox?.failure === "command-not-found") {
-    const why = result.code === -1 ? result.error ?? "unknown error" : lastErrorLine(result.stderr);
-    return fail(
-      host,
-      `Could not start Node.js (${node2}): ${why}. Set "Node path" in the plugin settings.` + (sandbox ? " Obsidian runs as a Flatpak, so it must be the full path to node on the computer itself (what `which node` prints in a terminal)." : "")
-    );
-  }
-  if (result.code !== 0 && result.code !== 2) {
-    return fail(host, `Render of ${folder} failed: ${lastErrorLine(result.stderr)}. Nothing was committed.`);
-  }
-  const report = parseReport(result.stdout);
-  const images = report ? reportedFiles(report) : await listRenderFiles(host, folder);
-  const problems = report ? reportedProblems(report) : result.code === 2 ? ["some blueprints got no image (no report)"] : [];
-  const summary = `Rendered ${images.length} image${images.length === 1 ? "" : "s"} for ${folder}` + (problems.length > 0 ? ` (${problems.length} problem${problems.length === 1 ? "" : "s"}: ${problems.slice(0, 5).join("; ")}${problems.length > 5 ? "; …" : ""})` : "");
-  if (images.length === 0) {
-    ui.notice(`${summary}. Nothing to commit.`, "error");
-    return { action: "rendered", folder, images, problems, committed: false };
-  }
-  const block = await refreshGeneratedBlock(host, folder);
-  const blockNote = block.status === "skipped" && block.reason !== "no README.md" ? ` Notes not updated: ${block.reason}` : "";
-  if (!host.settings.commitAfterImport || host.git === void 0) {
-    ui.notice(`${summary}.${blockNote}`, problems.length > 0 ? "error" : "info");
-    return { action: "rendered", folder, images, problems, committed: false };
-  }
-  if (!await host.git.lfsAvailable()) {
-    ui.notice(
-      `${summary}, but git-lfs is not installed on this computer, so the images were not committed (they must not go into plain git). Run _tools/setup/setup-machine.sh, then commit with the Git plugin.${blockNote}`,
-      "error"
-    );
-    return { action: "rendered", folder, images, problems, committed: false };
-  }
-  const git = await host.git.commitAndSync(folder, await commitMessage(host, folder));
-  reportGit(host, summary, git, blockNote, blockNote !== "" || problems.length > 0);
-  return {
-    action: "rendered",
-    folder,
-    images,
-    problems,
-    committed: git.status === "pushed" || git.status === "failed" && git.committed
-  };
-}
-async function commitMessage(host, folder) {
+  const { book, entries, dropped } = expanded;
+  const notePath = joinPath(folder, NOTES_FILE);
   let title = folder.slice(folder.lastIndexOf("/") + 1);
-  let version;
+  let notes = { authors: host.settings.authors, posted: host.today() };
   try {
-    const meta = readNotesMeta(await host.files.read(joinPath(folder, NOTES_FILE)));
-    title = meta.title ?? title;
-    version = meta.version;
+    if (await host.files.exists(notePath)) {
+      const meta = readNotesMeta(await host.files.read(notePath));
+      title = meta.title ?? title;
+      notes = { authors: meta.authors, posted: meta.posted ?? host.today() };
+    }
   } catch {
   }
-  return `render ${title}${version !== void 0 ? ` ${version}` : ""}`.replace(/\s+/g, " ").trim();
-}
-function parseReport(stdout) {
-  const text = stdout.trim();
-  if (text === "") return void 0;
-  try {
-    const value = JSON.parse(text);
-    return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function reportedFiles(report) {
-  const images = Array.isArray(report["images"]) ? report["images"] : [];
-  return images.map((i2) => typeof i2 === "object" && i2 !== null ? i2["file"] : void 0).filter((f) => typeof f === "string" && f !== "").sort();
-}
-function reportedProblems(report) {
-  const out = [];
-  const name = (r) => {
-    const label = typeof r["label"] === "string" && r["label"] !== "" ? ` "${r["label"]}"` : "";
-    const path = typeof r["path"] === "string" && r["path"] !== "" ? `slot ${r["path"]}` : "the blueprint";
-    return path + label;
+  const rendersDir = joinPath(folder, "renders");
+  const manifestPath = joinPath(rendersDir, RENDER_MANIFEST);
+  const manifest = await host.files.exists(manifestPath) ? parseRenderManifest(await host.files.read(manifestPath)) : void 0;
+  const moves = [];
+  let leafCount = 0;
+  let bookCount = 0;
+  const plan = async (list, parent, prefix) => {
+    for (const e of list) {
+      const slots = [...prefix, e.slot];
+      const path = joinPath(parent, e.folder);
+      if (e.kind === "blueprint-book") {
+        bookCount++;
+        await plan(e.entries ?? [], path, slots);
+        continue;
+      }
+      leafCount++;
+      const key = slots.join("/");
+      const recorded = manifest?.entries[key];
+      const file = recorded?.file ?? `${key}.jpg`;
+      if (await host.files.exists(joinPath(rendersDir, file))) {
+        moves.push({ from: joinPath(rendersDir, file), leaf: path, name: `0${/\.[^./]+$/.exec(file)?.[0] ?? ".jpg"}`, recorded });
+      }
+    }
   };
-  const count2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v) ? Object.values(v).reduce((sum, n) => sum + (typeof n === "number" ? n : 0), 0) : 0;
-  const list = (key) => Array.isArray(report[key]) ? report[key] : [];
-  for (const p of list("problems")) if (typeof p === "string" && p !== "") out.push(p);
-  for (const m of list("without_image")) {
-    if (typeof m !== "object" || m === null) continue;
-    const r = m;
-    if (r["reason"] === "empty blueprint") continue;
-    out.push(`${name(r)}: no image${typeof r["reason"] === "string" ? ` (${r["reason"]})` : ""}`);
+  await plan(entries, folder, []);
+  const ok = await host.ui.confirm({
+    title: `Expand "${title}" into folders`,
+    lines: [
+      `${folder}/blueprint.json becomes book.json, and every entry gets its own folder with a note: ${leafCount} blueprint folder${leafCount === 1 ? "" : "s"}` + (bookCount > 0 ? ` and ${bookCount} nested book${bookCount === 1 ? "" : "s"}` : "") + ".",
+      ...moves.length > 0 ? [`${moves.length} render image${moves.length === 1 ? "" : "s"} move into their folders.`] : [],
+      ...dropped.length > 0 ? ["Left out, because an earlier entry has the same slot:", ...dropped.map((d) => `- slot ${d.path}: ${d.label || "(no label)"}`)] : []
+    ],
+    okText: "Expand"
+  });
+  if (!ok) return { action: "cancelled" };
+  let made = 0;
+  try {
+    const template = await readTemplate(host);
+    await host.files.write(joinPath(folder, BOOK_FILE), writeCanonicalJson(book));
+    await host.files.remove(joinPath(folder, BLUEPRINT_FILE));
+    for (const e of entries) made += await writeEntryFolder(host, folder, e, notes, template);
+    for (const m of moves) {
+      await host.files.mkdir(joinPath(m.leaf, "renders"));
+      await host.files.rename(m.from, joinPath(m.leaf, "renders", m.name));
+      if (m.recorded) {
+        const leafManifest = {
+          schema: 1,
+          rendered_at: manifest.rendered_at,
+          entries: { "0": { ...m.recorded, file: m.name } }
+        };
+        await host.files.write(joinPath(m.leaf, "renders", RENDER_MANIFEST), JSON.stringify(leafManifest, null, 2) + "\n");
+      }
+    }
+    if (await host.files.exists(rendersDir)) await host.files.remove(rendersDir);
+    await refreshExpandedBook(host, loc.root);
+  } catch (e) {
+    return reject3(host, `Stopped while expanding ${folder}: ${errorText2(e)}. Nothing was committed; check the folder before trying again.`);
   }
-  for (const i2 of list("images")) {
-    if (typeof i2 !== "object" || i2 === null) continue;
-    const r = i2;
-    const n = count2(r["failed"]) + count2(r["missing"]);
-    if (n > 0) out.push(`${name(r)}: ${n} entit${n === 1 ? "y" : "ies"} not built`);
+  const summary = `Expanded ${folder}: ${made} folder${made === 1 ? "" : "s"}` + (moves.length > 0 ? `, ${moves.length} render${moves.length === 1 ? "" : "s"} moved` : "") + (dropped.length > 0 ? `, ${dropped.length} duplicate-slot entr${dropped.length === 1 ? "y" : "ies"} left out` : "");
+  const result = { action: "expanded", folder, folders: made, renders: moves.length };
+  if (!host.settings.commitAfterImport || host.git === void 0) {
+    host.ui.notice(`${summary}.`);
+    return result;
   }
-  return out;
-}
-function lastErrorLine(stderr) {
-  const lines2 = stderr.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "");
-  const line = [...lines2].reverse().find((l) => /^render: /.test(l)) ?? lines2.at(-1) ?? "no output";
-  return line.length > 300 ? line.slice(0, 297) + "…" : line;
-}
-function absolute(vaultPath, path) {
-  return `${vaultPath.replace(/[\\/]+$/, "")}/${path}`;
+  if (moves.length > 0 && !await host.git.lfsAvailable()) {
+    host.ui.notice(
+      `${summary}, but git-lfs is not installed on this computer, so nothing was committed (the images must not go into plain git). Run _tools/setup/setup-machine.sh, then commit with the Git plugin.`,
+      "error"
+    );
+    return result;
+  }
+  reportGit(host, summary, await host.git.commitAndSync(loc.root, `expand ${title} into folders`));
+  return result;
 }
 function reject3(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "rejected", reason };
 }
-function fail(host, reason) {
+function errorText2(e) {
+  return e instanceof Error ? e.message : String(e);
+}
+
+// src/commands/expanded-import.ts
+var same = (a, b) => writeCompactSortedJson(a) === writeCompactSortedJson(b);
+var label = (e) => entryTitle({ ...e, folder: "" });
+async function updateExpandedBook(host, loc, value) {
+  const folder = loc.folder;
+  let expanded;
+  let current;
+  let currentBook;
+  try {
+    expanded = expandBook(value);
+    current = await readTree(host, folder, []);
+    currentBook = JSON.parse(await host.files.read(joinPath(folder, BOOK_FILE)));
+  } catch (e) {
+    return reject4(host, errorText3(e));
+  }
+  const now = /* @__PURE__ */ new Map();
+  const walkNow = (nodes) => nodes.forEach((n) => (now.set(n.slots.join("/"), n), walkNow(n.children)));
+  walkNow(current);
+  const next = [];
+  const walkNext = (entries, prefix) => entries.forEach((e) => {
+    const slots = [...prefix, e.slot];
+    next.push({ path: slots.join("/"), slots, entry: e });
+    walkNext(e.entries ?? [], slots);
+  });
+  walkNext(expanded.entries, []);
+  const isBook = (e) => e.kind === "blueprint-book";
+  const content = (e) => isBook(e) ? e.book : e.value;
+  const unchanged = /* @__PURE__ */ new Set();
+  const changed = /* @__PURE__ */ new Set();
+  const created = /* @__PURE__ */ new Set();
+  const moveFrom = /* @__PURE__ */ new Map();
+  const sources = /* @__PURE__ */ new Set();
+  for (const n of next) {
+    const c = now.get(n.path);
+    if (c && c.file === "book" === isBook(n.entry) && same(c.value, content(n.entry))) unchanged.add(n.path);
+  }
+  for (const n of next) {
+    if (unchanged.has(n.path) || isBook(n.entry)) continue;
+    for (const [q, c] of now) {
+      if (c.file === "blueprint" && q !== n.path && !unchanged.has(q) && !sources.has(q) && same(c.value, n.entry.value)) {
+        moveFrom.set(n.path, q);
+        sources.add(q);
+        break;
+      }
+    }
+  }
+  const removed = /* @__PURE__ */ new Set();
+  for (const n of next) {
+    if (unchanged.has(n.path) || moveFrom.has(n.path)) continue;
+    const c = now.get(n.path);
+    if (c && !sources.has(n.path) && c.file === "book" === isBook(n.entry)) changed.add(n.path);
+    else {
+      created.add(n.path);
+      if (c && !sources.has(n.path)) removed.add(n.path);
+    }
+  }
+  for (const [target] of moveFrom) if (now.has(target) && !sources.has(target)) removed.add(target);
+  const nextPaths = new Set(next.map((n) => n.path));
+  for (const q of now.keys()) if (!nextPaths.has(q) && !sources.has(q)) removed.add(q);
+  const removedTop = [...removed].filter((p) => ![...removed].some((r) => r !== p && p.startsWith(r + "/")));
+  const bookChanged = !same(currentBook, expanded.book);
+  const noteFrom = /* @__PURE__ */ new Map();
+  for (const p of created) {
+    const n = byPathOf(next, p);
+    if (!n || !isBook(n.entry)) continue;
+    const q = [...removed].find(
+      (r) => now.get(r).file === "book" && ![...noteFrom.values()].includes(r) && same(now.get(r).value, n.entry.book)
+    );
+    if (q !== void 0) noteFrom.set(p, q);
+  }
+  const keptFrom = new Set(noteFrom.values());
+  if (changed.size + created.size + moveFrom.size + removedTop.length === 0 && !bookChanged) {
+    host.ui.notice(`${folder} already holds this book; nothing to change.`);
+    return { action: "unchanged", folder };
+  }
+  const title = await noteTitle(host, folder);
+  const byPath = new Map(next.map((n) => [n.path, n]));
+  const line = (p) => `- slot ${p}: ${label(byPath.get(p)?.entry ?? toEntry(now.get(p)))}`;
+  const counts = {
+    unchanged: unchanged.size,
+    changed: changed.size,
+    moved: moveFrom.size + noteFrom.size,
+    new: created.size - noteFrom.size,
+    removed: removedTop.filter((p) => !keptFrom.has(p)).length
+  };
+  const ok = await host.ui.confirm({
+    title: `Update "${title}" from the clipboard`,
+    lines: [
+      `${counts.changed} changed, ${counts.moved} moved, ${counts.new} new, ${counts.removed} removed, ${counts.unchanged} unchanged` + (bookChanged ? "; the book's own settings changed too" : "") + ".",
+      ...changed.size > 0 ? ["Changed:", ...[...changed].map(line)] : [],
+      ...counts.moved > 0 ? [
+        "Moved (with their notes and renders):",
+        ...[...moveFrom].map(([t, s]) => `- slot ${s} → ${t}: ${label(byPath.get(t).entry)}`),
+        ...[...noteFrom].map(([t, s]) => `- slot ${s} → ${t}: ${label(byPath.get(t).entry)} (book; its note moves, its entries are matched one by one)`)
+      ] : [],
+      ...counts.new > 0 ? ["New:", ...[...created].filter((p) => !noteFrom.has(p)).map(line)] : [],
+      ...counts.removed > 0 ? ["Removed, with their notes and renders:", ...removedTop.filter((p) => !keptFrom.has(p)).map((p) => `- slot ${p}: ${now.get(p).title}`)] : [],
+      ...expanded.dropped.length > 0 ? ["Left out, because an earlier entry has the same slot:", ...expanded.dropped.map((d) => `- slot ${d.path}: ${d.label || "(no label)"}`)] : []
+    ],
+    okText: "Update"
+  });
+  if (!ok) return { action: "cancelled", folder };
+  try {
+    const template = await readTemplate(host);
+    const notes = await noteDefaults(host, folder);
+    const keptNotes = /* @__PURE__ */ new Map();
+    for (const [p, q] of noteFrom) {
+      const path = joinPath(now.get(q).folder, NOTES_FILE);
+      if (await host.files.exists(path)) keptNotes.set(p, await host.files.read(path));
+    }
+    const staging = joinPath(folder, ".moving");
+    if (moveFrom.size > 0) await host.files.mkdir(staging);
+    const staged = /* @__PURE__ */ new Map();
+    let i2 = 0;
+    for (const [target, source] of moveFrom) {
+      const to = joinPath(staging, String(i2++));
+      await host.files.rename(now.get(source).folder, to);
+      staged.set(target, to);
+    }
+    for (const p of removedTop) if (await host.files.exists(now.get(p).folder)) await host.files.remove(now.get(p).folder);
+    if (bookChanged) await host.files.write(joinPath(folder, BOOK_FILE), writeCanonicalJson(expanded.book));
+    const folderOf2 = /* @__PURE__ */ new Map([["", folder]]);
+    for (const n of next) {
+      const parent = folderOf2.get(n.slots.slice(0, -1).join("/"));
+      const existing = now.get(n.path);
+      let at;
+      if (unchanged.has(n.path) || changed.has(n.path)) {
+        at = existing.folder;
+        if (changed.has(n.path)) {
+          const file = isBook(n.entry) ? BOOK_FILE : BLUEPRINT_FILE;
+          await host.files.write(joinPath(at, file), writeCanonicalJson(content(n.entry)));
+        }
+      } else if (moveFrom.has(n.path)) {
+        at = joinPath(parent, slotFolderName(n.entry.slot, n.entry.label));
+        await host.files.rename(staged.get(n.path), at);
+      } else {
+        at = joinPath(parent, n.entry.folder);
+        await writeEntryFolder(host, parent, { ...n.entry, entries: [] }, notes, template);
+        const kept = keptNotes.get(n.path);
+        if (kept !== void 0) await host.files.write(joinPath(at, NOTES_FILE), kept);
+      }
+      folderOf2.set(n.path, at);
+    }
+    if (moveFrom.size > 0) await host.files.remove(staging);
+    await refreshExpandedBook(host, loc.root);
+  } catch (e) {
+    return reject4(host, `Stopped while updating ${folder}: ${errorText3(e)}. Nothing was committed; check the folder before trying again.`);
+  }
+  const summary = `Updated ${folder}: ${counts.changed} changed, ${counts.moved} moved, ${counts.new} new, ${counts.removed} removed`;
+  if (!host.settings.commitAfterImport || host.git === void 0) host.ui.notice(`${summary}.`);
+  else reportGit(host, summary, await host.git.commitAndSync(loc.root, `update ${title}`));
+  return { action: "updated", folder, counts };
+}
+async function addEntryToBook(host, loc, value) {
+  const folder = loc.folder;
+  let slot;
+  let entry;
+  try {
+    const current = await readTree(host, folder, []);
+    slot = current.length === 0 ? 0 : Math.max(...current.map((c) => c.slot)) + 1;
+    const d = describeBlueprint(value);
+    const l = plainLabel(d.label ?? "");
+    entry = { slot, folder: slotFolderName(slot, l), kind: d.kind, label: l, value };
+  } catch (e) {
+    return reject4(host, errorText3(e));
+  }
+  const title = await noteTitle(host, folder);
+  try {
+    await writeEntryFolder(host, folder, entry, await noteDefaults(host, folder), await readTemplate(host));
+    await refreshExpandedBook(host, loc.root);
+  } catch (e) {
+    return reject4(host, `Could not add the entry to ${folder}: ${errorText3(e)}`);
+  }
+  const summary = `Added "${entryTitle(entry)}" to ${folder} as slot ${slot}`;
+  if (!host.settings.commitAfterImport || host.git === void 0) host.ui.notice(`${summary}.`);
+  else reportGit(host, summary, await host.git.commitAndSync(loc.root, `add ${entryTitle(entry)} to ${title}`));
+  return { action: "added", folder, slot };
+}
+function byPathOf(items, path) {
+  return items.find((i2) => i2.path === path);
+}
+function toEntry(n) {
+  return { slot: n.slot, folder: "", kind: n.kind, label: n.label };
+}
+async function noteTitle(host, folder) {
+  try {
+    return readNotesMeta(await host.files.read(joinPath(folder, NOTES_FILE))).title ?? folder.slice(folder.lastIndexOf("/") + 1);
+  } catch {
+    return folder.slice(folder.lastIndexOf("/") + 1);
+  }
+}
+async function noteDefaults(host, folder) {
+  try {
+    return { authors: readNotesMeta(await host.files.read(joinPath(folder, NOTES_FILE))).authors, posted: host.today() };
+  } catch {
+    return { authors: host.settings.authors, posted: host.today() };
+  }
+}
+function reject4(host, reason) {
   host.ui.notice(reason, "error");
-  return { action: "failed", reason };
+  return { action: "rejected", reason };
+}
+function errorText3(e) {
+  return e instanceof Error ? e.message : String(e);
 }
 
 // src/commands/render-status.ts
 async function folderRenderState(host, folder) {
+  if (await host.files.exists(joinPath(folder, BOOK_FILE))) return bookRenderState(host, folder);
   const value = readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE)));
   const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
   const manifest = await host.files.exists(manifestPath) ? parseRenderManifest(await host.files.read(manifestPath)) : void 0;
   return renderState(value, manifest, await listRenderFiles(host, folder));
+}
+async function bookRenderState(host, folder) {
+  const entries = [];
+  const orphans = [];
+  for (const leaf of leaves(await readTree(host, folder, []))) {
+    const prefix = leaf.slots.join("/");
+    const own = await folderRenderState(host, leaf.folder);
+    for (const e of own.entries) {
+      const path = e.path === "" ? prefix : `${prefix}/${e.path}`;
+      entries.push({ ...e, key: path, path, file: `${path}.jpg` });
+    }
+    orphans.push(...own.orphans.map((o) => `${leaf.folder.slice(folder.length + 1)}/renders/${o}`));
+  }
+  const count2 = (st) => entries.filter((e) => e.state === st).length;
+  const counts = { total: entries.length, current: count2("current"), outdated: count2("outdated"), none: count2("none"), orphans: orphans.length };
+  const overall = counts.total === 0 || counts.none === counts.total ? "none" : counts.current === counts.total ? "current" : "outdated";
+  return { entries, orphans, overall, counts };
 }
 async function foldersNeedingRender(host) {
   const out = [];
@@ -8477,13 +8886,353 @@ async function renderAll(host, folders) {
   return result;
 }
 
+// src/commands/render-preview.ts
+var RENDER_SCRIPT = "_tools/render/bin/render.js";
+var RENDER_MODULES = "_tools/render/node_modules";
+var RENDER_SCRATCH = ".factorio-render";
+var active;
+function isRendering() {
+  return active !== void 0;
+}
+function cancelRender() {
+  if (!active) return false;
+  active.abort();
+  return true;
+}
+async function renderPreview(host, contextFolder, options = {}) {
+  if (active) {
+    host.ui.notice("A render is already running; wait for it or cancel it first.", "error");
+    return { action: "busy" };
+  }
+  const controller = new AbortController();
+  active = controller;
+  try {
+    return await run(host, contextFolder, controller.signal, options);
+  } finally {
+    active = void 0;
+  }
+}
+async function run(host, contextFolder, signal, options) {
+  const { files, ui } = host;
+  const loc = await locate(host, contextFolder);
+  if (loc === void 0) return reject5(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
+  const folder = loc.folder;
+  if (host.processes === void 0 || host.vaultPath === void 0) {
+    return reject5(host, "Rendering needs the desktop app with the vault on this computer's disk.");
+  }
+  const settings = host.settings.render;
+  if (settings.factorioPath.trim() === "") {
+    ui.notice(
+      "Set the Factorio path for this computer (Settings, Factorio Blueprints, Factorio path), then render again.",
+      "error"
+    );
+    ui.openSettings?.();
+    return { action: "needs-settings" };
+  }
+  if (!await files.exists(RENDER_SCRIPT)) {
+    return reject5(host, `The render tool is missing (${RENDER_SCRIPT}). Pull the latest vault and try again.`);
+  }
+  if (!await files.exists(RENDER_MODULES)) {
+    return reject5(
+      host,
+      `The render tool's dependencies are not installed. In a terminal, run:
+cd "${absolute(host.vaultPath, "_tools/render")}" && npm ci
+then render again.`
+    );
+  }
+  const abs = (p) => absolute(host.vaultPath, p);
+  const node2 = settings.nodePath.trim() || "node";
+  if (loc.kind === "book") return renderExpandedBook(host, loc, signal, node2);
+  let only = [];
+  if (options.onlyNeeded) {
+    let value;
+    try {
+      value = readCanonicalJson(await files.read(joinPath(folder, BLUEPRINT_FILE)));
+    } catch (e) {
+      return reject5(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
+    const manifest = await files.exists(manifestPath) ? parseRenderManifest(await files.read(manifestPath)) : void 0;
+    const state = renderState(value, manifest, await listRenderFiles(host, folder));
+    const needed = state.entries.filter((e) => e.state !== "current").map((e) => e.path);
+    if (needed.length === 0 && state.counts.total > 0) {
+      ui.notice(`The render of ${folder} is already current.`);
+      return { action: "rendered", folder, images: [], problems: [], committed: false };
+    }
+    if (needed.length < state.counts.total && !needed.includes("")) only = needed;
+  }
+  const args = [
+    abs(RENDER_SCRIPT),
+    "--factorio",
+    settings.factorioPath.trim(),
+    "--input",
+    abs(joinPath(folder, BLUEPRINT_FILE)),
+    "--out",
+    abs(joinPath(folder, "renders")),
+    "--json",
+    ...only.length > 0 ? ["--only", only.join(",")] : [],
+    ...settings.enableMods.length > 0 ? ["--enable-mods", settings.enableMods.join(",")] : [],
+    ...settings.enableMods.length > 0 && settings.modsFolder.trim() !== "" ? ["--mods", settings.modsFolder.trim()] : [],
+    ...settings.extraArgs
+  ];
+  const result = await runTool(host, node2, args, folder, signal);
+  if ("action" in result) return result;
+  const report = parseReport(result.stdout);
+  const images = report ? reportedFiles(report) : await listRenderFiles(host, folder);
+  const problems = report ? reportedProblems(report) : result.code === 2 ? ["some blueprints got no image (no report)"] : [];
+  const summary = `Rendered ${images.length} image${images.length === 1 ? "" : "s"} for ${folder}` + (problems.length > 0 ? ` (${problems.length} problem${problems.length === 1 ? "" : "s"}: ${problems.slice(0, 5).join("; ")}${problems.length > 5 ? "; …" : ""})` : "");
+  if (images.length === 0) {
+    ui.notice(`${summary}. Nothing to commit.`, "error");
+    return { action: "rendered", folder, images, problems, committed: false };
+  }
+  const block = await refreshGeneratedBlock(host, folder);
+  const blockNote = block.status === "skipped" && block.reason !== "no README.md" ? ` Notes not updated: ${block.reason}` : "";
+  let commitFolder = folder;
+  if (loc.slots.length > 0) {
+    await refreshExpandedBook(host, loc.root);
+    commitFolder = loc.root;
+  }
+  if (!host.settings.commitAfterImport || host.git === void 0) {
+    ui.notice(`${summary}.${blockNote}`, problems.length > 0 ? "error" : "info");
+    return { action: "rendered", folder, images, problems, committed: false };
+  }
+  if (!await host.git.lfsAvailable()) {
+    ui.notice(
+      `${summary}, but git-lfs is not installed on this computer, so the images were not committed (they must not go into plain git). Run _tools/setup/setup-machine.sh, then commit with the Git plugin.${blockNote}`,
+      "error"
+    );
+    return { action: "rendered", folder, images, problems, committed: false };
+  }
+  const git = await host.git.commitAndSync(commitFolder, await commitMessage(host, folder));
+  reportGit(host, summary, git, blockNote, blockNote !== "" || problems.length > 0);
+  return {
+    action: "rendered",
+    folder,
+    images,
+    problems,
+    committed: git.status === "pushed" || git.status === "failed" && git.committed
+  };
+}
+async function runTool(host, node2, args, folder, signal) {
+  const { ui } = host;
+  const progress = ui.progress(`Rendering ${folder}: starting Factorio…`);
+  let result;
+  try {
+    result = await host.processes.run(node2, args, {
+      cwd: host.vaultPath,
+      signal,
+      onStderrLine: (line) => {
+        const text = line.trim();
+        if (text !== "") progress.update(`Rendering ${folder}: ${text.length > 120 ? text.slice(0, 117) + "…" : text}`);
+      }
+    });
+  } finally {
+    progress.close();
+  }
+  if (signal.aborted) {
+    ui.notice(`Render of ${folder} cancelled. Nothing was committed.`);
+    return { action: "cancelled" };
+  }
+  const sandbox = result.sandbox;
+  if (sandbox?.failure === "no-permission") {
+    return fail(
+      host,
+      `Obsidian runs as a Flatpak, so the render has to start outside its sandbox, which it is not allowed to do yet. In a terminal, run:
+flatpak override --user --talk-name=org.freedesktop.Flatpak ${sandbox.appId}
+then quit and reopen Obsidian and render again.`
+    );
+  }
+  if (sandbox?.failure === "launcher-missing") {
+    return fail(
+      host,
+      "Obsidian runs as a Flatpak, but flatpak-spawn, which starts the render outside its sandbox, is not available in it, so the render cannot run."
+    );
+  }
+  if (result.code === -1 || sandbox?.failure === "command-not-found") {
+    const why = result.code === -1 ? result.error ?? "unknown error" : lastErrorLine(result.stderr);
+    return fail(
+      host,
+      `Could not start Node.js (${node2}): ${why}. Set "Node path" in the plugin settings.` + (sandbox ? " Obsidian runs as a Flatpak, so it must be the full path to node on the computer itself (what `which node` prints in a terminal)." : "")
+    );
+  }
+  if (result.code !== 0 && result.code !== 2) {
+    return fail(host, `Render of ${folder} failed: ${lastErrorLine(result.stderr)}. Nothing was committed.`);
+  }
+  return result;
+}
+async function commitMessage(host, folder) {
+  let title = folder.slice(folder.lastIndexOf("/") + 1);
+  let version;
+  try {
+    const meta = readNotesMeta(await host.files.read(joinPath(folder, NOTES_FILE)));
+    title = meta.title ?? title;
+    version = meta.version;
+  } catch {
+  }
+  return `render ${title}${version !== void 0 ? ` ${version}` : ""}`.replace(/\s+/g, " ").trim();
+}
+function parseReport(stdout) {
+  const text = stdout.trim();
+  if (text === "") return void 0;
+  try {
+    const value = JSON.parse(text);
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function reportedFiles(report) {
+  const images = Array.isArray(report["images"]) ? report["images"] : [];
+  return images.map((i2) => typeof i2 === "object" && i2 !== null ? i2["file"] : void 0).filter((f) => typeof f === "string" && f !== "").sort();
+}
+function reportedProblems(report) {
+  const out = [];
+  const name = (r) => {
+    const label2 = typeof r["label"] === "string" && r["label"] !== "" ? ` "${r["label"]}"` : "";
+    const path = typeof r["path"] === "string" && r["path"] !== "" ? `slot ${r["path"]}` : "the blueprint";
+    return path + label2;
+  };
+  const count2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v) ? Object.values(v).reduce((sum, n) => sum + (typeof n === "number" ? n : 0), 0) : 0;
+  const list = (key) => Array.isArray(report[key]) ? report[key] : [];
+  for (const p of list("problems")) if (typeof p === "string" && p !== "") out.push(p);
+  for (const m of list("without_image")) {
+    if (typeof m !== "object" || m === null) continue;
+    const r = m;
+    if (r["reason"] === "empty blueprint") continue;
+    out.push(`${name(r)}: no image${typeof r["reason"] === "string" ? ` (${r["reason"]})` : ""}`);
+  }
+  for (const i2 of list("images")) {
+    if (typeof i2 !== "object" || i2 === null) continue;
+    const r = i2;
+    const n = count2(r["failed"]) + count2(r["missing"]);
+    if (n > 0) out.push(`${name(r)}: ${n} entit${n === 1 ? "y" : "ies"} not built`);
+  }
+  return out;
+}
+function lastErrorLine(stderr) {
+  const lines2 = stderr.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== "");
+  const line = [...lines2].reverse().find((l) => /^render: /.test(l)) ?? lines2.at(-1) ?? "no output";
+  return line.length > 300 ? line.slice(0, 297) + "…" : line;
+}
+function absolute(vaultPath, path) {
+  return `${vaultPath.replace(/[\\/]+$/, "")}/${path}`;
+}
+function reject5(host, reason) {
+  host.ui.notice(reason, "error");
+  return { action: "rejected", reason };
+}
+function fail(host, reason) {
+  host.ui.notice(reason, "error");
+  return { action: "failed", reason };
+}
+async function renderExpandedBook(host, loc, signal, node2) {
+  const { files, ui } = host;
+  const folder = loc.folder;
+  let value;
+  let tree;
+  let state;
+  try {
+    value = await folderValue(host, loc);
+    tree = await readTree(host, folder, []);
+    state = await folderRenderState(host, folder);
+  } catch (e) {
+    return reject5(host, `Could not read the book at ${folder}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  const needed = state.entries.filter((e) => e.state !== "current").map((e) => e.path);
+  if (needed.length === 0) {
+    ui.notice(state.counts.total === 0 ? `${folder} has no blueprint to render.` : `The render of ${folder} is already current.`);
+    return { action: "rendered", folder, images: [], problems: [], committed: false };
+  }
+  const only = needed.length < state.counts.total ? needed : [];
+  const scratch = joinPath(RENDER_SCRATCH, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const abs = (p) => absolute(host.vaultPath, p);
+  try {
+    await files.mkdir(joinPath(scratch, "out"));
+    await files.write(joinPath(scratch, BLUEPRINT_FILE), writeCanonicalJson(value));
+    const settings = host.settings.render;
+    const args = [
+      abs(RENDER_SCRIPT),
+      "--factorio",
+      settings.factorioPath.trim(),
+      "--input",
+      abs(joinPath(scratch, BLUEPRINT_FILE)),
+      "--out",
+      abs(joinPath(scratch, "out")),
+      "--json",
+      ...only.length > 0 ? ["--only", only.join(",")] : [],
+      ...settings.enableMods.length > 0 ? ["--enable-mods", settings.enableMods.join(",")] : [],
+      ...settings.enableMods.length > 0 && settings.modsFolder.trim() !== "" ? ["--mods", settings.modsFolder.trim()] : [],
+      ...settings.extraArgs
+    ];
+    const result = await runTool(host, node2, args, folder, signal);
+    if ("action" in result) return result;
+    const report = parseReport(result.stdout);
+    if (!report) return fail(host, `Render of ${folder} gave no report; nothing was moved or committed.`);
+    const problems = reportedProblems(report);
+    const leafList = leaves(tree);
+    const moved = [];
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    for (const item of Array.isArray(report["images"]) ? report["images"] : []) {
+      if (typeof item !== "object" || item === null) continue;
+      const r = item;
+      if (typeof r["path"] !== "string" || typeof r["file"] !== "string") continue;
+      const path = r["path"];
+      const leaf = leafList.find((l) => path === l.slots.join("/") || path.startsWith(l.slots.join("/") + "/"));
+      if (!leaf) continue;
+      const inner = path === leaf.slots.join("/") ? "0" : path.slice(leaf.slots.join("/").length + 1);
+      const name = `${inner}.jpg`;
+      const target = joinPath(leaf.folder, "renders", name);
+      await files.mkdir(joinPath(target, ".."));
+      if (await files.exists(target)) await files.remove(target);
+      await files.rename(joinPath(scratch, "out", r["file"]), target);
+      const manifestPath = joinPath(leaf.folder, "renders", RENDER_MANIFEST);
+      const manifest = (await files.exists(manifestPath) ? parseRenderManifest(await files.read(manifestPath)) : void 0) ?? {
+        schema: 1,
+        rendered_at: now,
+        entries: {}
+      };
+      manifest.rendered_at = now;
+      manifest.entries[inner] = {
+        file: name,
+        sha256: String(r["sha256"] ?? ""),
+        ...typeof r["width"] === "number" ? { width: r["width"] } : {},
+        ...typeof r["height"] === "number" ? { height: r["height"] } : {}
+      };
+      await files.write(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+      moved.push(`${leaf.slots.join("/")}${inner === "0" ? "" : "/" + inner}`);
+    }
+    const summary = `Rendered ${moved.length} image${moved.length === 1 ? "" : "s"} for ${folder}` + (problems.length > 0 ? ` (${problems.length} problem${problems.length === 1 ? "" : "s"}: ${problems.slice(0, 5).join("; ")}${problems.length > 5 ? "; …" : ""})` : "");
+    if (moved.length === 0) {
+      ui.notice(`${summary}. Nothing to commit.`, "error");
+      return { action: "rendered", folder, images: [], problems, committed: false };
+    }
+    await refreshExpandedBook(host, loc.root);
+    if (!host.settings.commitAfterImport || host.git === void 0) {
+      ui.notice(`${summary}.`, problems.length > 0 ? "error" : "info");
+      return { action: "rendered", folder, images: moved, problems, committed: false };
+    }
+    if (!await host.git.lfsAvailable()) {
+      ui.notice(
+        `${summary}, but git-lfs is not installed on this computer, so the images were not committed (they must not go into plain git). Run _tools/setup/setup-machine.sh, then commit with the Git plugin.`,
+        "error"
+      );
+      return { action: "rendered", folder, images: moved, problems, committed: false };
+    }
+    const git = await host.git.commitAndSync(loc.root, await commitMessage(host, folder));
+    reportGit(host, summary, git, "", problems.length > 0);
+    return { action: "rendered", folder, images: moved, problems, committed: git.status === "pushed" || git.status === "failed" && git.committed };
+  } finally {
+    if (await files.exists(scratch)) await files.remove(scratch);
+    if (await files.exists(RENDER_SCRATCH) && Object.values(await files.list(RENDER_SCRATCH)).every((l) => l.length === 0)) {
+      await files.remove(RENDER_SCRATCH);
+    }
+  }
+}
+
 // src/commands/import-blueprint.ts
 async function chooseImportTarget(host, contextFolder) {
-  const folder = await findBlueprintFolder(
-    contextFolder,
-    (f) => host.files.exists(joinPath(f, BLUEPRINT_FILE))
-  );
-  if (folder !== void 0) return { mode: "update", folder };
+  const loc = await locate(host, contextFolder);
+  if (loc?.kind === "blueprint") return { mode: "update", folder: loc.folder };
   if (!isScannedPath(contextFolder)) {
     return {
       mode: "refuse",
@@ -8498,7 +9247,7 @@ async function importFromClipboard(host, contextFolder) {
   try {
     text = await host.clipboard.readText();
   } catch (e) {
-    return reject4(host, `Could not read the clipboard: ${errorText2(e)}`);
+    return reject6(host, `Could not read the clipboard: ${errorText4(e)}`);
   }
   let value;
   let json;
@@ -8507,19 +9256,24 @@ async function importFromClipboard(host, contextFolder) {
     ({ value, json } = decodeBlueprintString(text));
     description = describeBlueprint(value);
   } catch (e) {
-    return reject4(host, clipboardErrorMessage(e));
+    return reject6(host, clipboardErrorMessage(e));
   }
   const lossy = findLossyNumbers(json);
   if (lossy.length > 0) {
-    return reject4(
+    return reject6(
       host,
       `This blueprint has numbers that cannot be stored exactly (${lossy.slice(0, 3).join(", ")}). Nothing was written.`
     );
   }
   const canonical = writeCanonicalJson(value);
   const summary = summarizeBlueprint(description);
+  const loc = await locate(host, contextFolder);
+  if (loc?.kind === "book") {
+    const result = description.kind === "blueprint-book" ? await updateExpandedBook(host, loc, value) : await addEntryToBook(host, loc, value);
+    return { action: "expanded-book", result };
+  }
   const target = await chooseImportTarget(host, contextFolder);
-  if (target.mode === "refuse") return reject4(host, target.reason);
+  if (target.mode === "refuse") return reject6(host, target.reason);
   const commit = host.settings.commitAfterImport && host.git !== void 0;
   let folder;
   let blockWarning = "";
@@ -8566,13 +9320,19 @@ async function importFromClipboard(host, contextFolder) {
         if (next !== notes) await host.files.write(notesPath, next);
       }
     } catch (e) {
-      return reject4(host, `Could not write ${folder}: ${errorText2(e)}`);
+      return reject6(host, `Could not write ${folder}: ${errorText4(e)}`);
     }
     commitMessage2 = oneLine(answer.changeNote) || `update ${title}`;
     action = "updated";
   } else {
     const title = plainLabel(description.label ?? "") || capitalize(KIND_NAMES[description.kind]);
     const slug = slugify(title) || slugify(KIND_NAMES[description.kind]);
+    if (description.kind === "blueprint-book") {
+      const existing = await locate(host, joinPath(target.parent, slug));
+      if (existing?.kind === "book" && existing.folder === joinPath(target.parent, slug)) {
+        return { action: "expanded-book", result: await updateExpandedBook(host, existing, value) };
+      }
+    }
     const checkSlug = (s) => checkNewSlug(host, target.parent, s);
     const answer = await ui.askCreate({
       parent: target.parent,
@@ -8584,7 +9344,7 @@ async function importFromClipboard(host, contextFolder) {
     });
     if (!answer) return { action: "cancelled" };
     const problem = await checkSlug(answer.slug);
-    if (problem !== void 0) return reject4(host, problem);
+    if (problem !== void 0) return reject6(host, problem);
     const newTitle = oneLine(answer.title) || title;
     folder = joinPath(target.parent, answer.slug);
     try {
@@ -8600,11 +9360,21 @@ async function importFromClipboard(host, contextFolder) {
       if (block.status === "invalid") blockWarning = ` ${block.reason}`;
       await host.files.write(joinPath(folder, NOTES_FILE), block.text);
     } catch (e) {
-      return reject4(host, `Could not write ${folder}: ${errorText2(e)}`);
+      return reject6(host, `Could not write ${folder}: ${errorText4(e)}`);
     }
     commitMessage2 = oneLine(answer.changeNote) || `add ${newTitle}`;
     action = "created";
     if (ui.openNote) await ui.openNote(joinPath(folder, NOTES_FILE)).catch(() => void 0);
+  }
+  let commitFolder = folder;
+  if (action === "updated" && loc && loc.slots.length > 0) {
+    try {
+      await refreshExpandedBook(host, loc.root);
+      folder = await locateBySlots(host, loc.root, loc.slots) ?? folder;
+    } catch (e) {
+      blockWarning += ` The book's notes were not refreshed: ${errorText4(e)}`;
+    }
+    commitFolder = loc.root;
   }
   const verb = action === "created" ? "Created" : "Updated";
   let renderNote = "";
@@ -8621,7 +9391,7 @@ async function importFromClipboard(host, contextFolder) {
   if (!commit) {
     ui.notice(`${verb} ${folder} with ${summary}${renderNote}.${blockWarning}`);
   } else {
-    git = await host.git.commitAndSync(folder, commitMessage2);
+    git = await host.git.commitAndSync(commitFolder, commitMessage2);
     reportGit(host, `${verb} ${folder} with ${summary}${renderNote}`, git, blockWarning);
   }
   if (host.settings.render.afterImport) await renderPreview(host, folder);
@@ -8661,7 +9431,7 @@ function clipboardErrorMessage(e) {
         return e.message;
     }
   }
-  return `Could not read the blueprint string: ${errorText2(e)}`;
+  return `Could not read the blueprint string: ${errorText4(e)}`;
 }
 function safeSummary(text) {
   try {
@@ -8670,7 +9440,7 @@ function safeSummary(text) {
     return void 0;
   }
 }
-function reject4(host, reason) {
+function reject6(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "rejected", reason };
 }
@@ -8680,7 +9450,7 @@ function oneLine(s) {
 function capitalize(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
-function errorText2(e) {
+function errorText4(e) {
   return e instanceof Error ? e.message : String(e);
 }
 
@@ -9047,6 +9817,30 @@ var PickModal = class extends import_obsidian.SuggestModal {
     setTimeout(() => this.resolve?.(this.chosen), 0);
   }
 };
+var ConfirmModal = class extends AnswerModal {
+  prompt;
+  constructor(app, prompt) {
+    super(app);
+    this.prompt = prompt;
+  }
+  onOpen() {
+    this.titleEl.setText(this.prompt.title);
+    const box = this.contentEl.createDiv();
+    box.style.maxHeight = "60vh";
+    box.style.overflowY = "auto";
+    let list;
+    for (const line of this.prompt.lines) {
+      if (line.startsWith("- ")) {
+        list ??= box.createEl("ul");
+        list.createEl("li", { text: line.slice(2) });
+      } else {
+        list = void 0;
+        box.createEl("p", { text: line });
+      }
+    }
+    this.buttons(this.prompt.okText, () => this.finish(true));
+  }
+};
 
 // src/obsidian/settings.ts
 var import_obsidian2 = require("obsidian");
@@ -9204,6 +9998,15 @@ function createObsidianHost(app, settings, openSettings) {
         const listed = await adapter.list(p(path));
         const clean = (x2) => x2.replace(/^\/+/, "");
         return { files: listed.files.map(clean), folders: listed.folders.map(clean) };
+      },
+      // The adapter, not fileManager.renameFile: the vault has "update links on rename" on, and
+      // Obsidian rewriting the generated lists behind the plugin's back would race its own refresh.
+      rename: (from, to) => adapter.rename(p(from), p(to)),
+      async remove(path) {
+        const stat = await adapter.stat(p(path));
+        if (!stat) return;
+        if (stat.type === "folder") await adapter.rmdir(p(path), true);
+        else await adapter.remove(p(path));
       }
     },
     clipboard: {
@@ -9216,6 +10019,7 @@ function createObsidianHost(app, settings, openSettings) {
       },
       askCreate: (prompt) => new CreateBlueprintModal(app, prompt).ask(),
       askUpdate: (prompt) => new UpdateBlueprintModal(app, prompt).ask(),
+      confirm: async (prompt) => await new ConfirmModal(app, prompt).ask() === true,
       pick: (items, placeholder) => new PickModal(app, items, placeholder).ask(),
       progress(message) {
         const notice = new import_obsidian3.Notice(message, 0);
@@ -9264,6 +10068,15 @@ var FOLDER_COMMANDS = [
     menuOnlyInBlueprintFolder: false,
     exclusive: true,
     run: importFromClipboard
+  },
+  {
+    id: "expand-book-into-folders",
+    name: "Expand book into folders",
+    menuTitle: "Expand book into folders",
+    icon: "folder-tree",
+    menuOnlyInBlueprintFolder: true,
+    exclusive: true,
+    run: expandBookIntoFolders
   },
   {
     id: "copy-blueprint-string",
@@ -9462,7 +10275,8 @@ var FactorioBlueprintsPlugin = class extends import_obsidian4.Plugin {
         await stat(joinPath(rendersDir, RENDER_MANIFEST)),
         await host.files.exists(rendersDir) ? JSON.stringify(await adapter.list(rendersDir)) : ""
       ].join("|");
-      let cached = this.statusCache.get(folder);
+      const isBook = await host.files.exists(joinPath(folder, BOOK_FILE));
+      let cached = isBook ? void 0 : this.statusCache.get(folder);
       if (cached?.key !== key) {
         cached = { key, label: renderStateLabel(await folderRenderState(host, folder)) };
         this.statusCache.set(folder, cached);
@@ -9476,7 +10290,7 @@ var FactorioBlueprintsPlugin = class extends import_obsidian4.Plugin {
   }
   blueprintFolderOf(folder) {
     return selfAndAncestors(folder).find(
-      (f) => f !== "" && isScannedPath(f) && this.app.vault.getAbstractFileByPath(joinPath(f, BLUEPRINT_FILE)) instanceof import_obsidian4.TFile
+      (f) => f !== "" && isScannedPath(f) && [BLUEPRINT_FILE, BOOK_FILE].some((name) => this.app.vault.getAbstractFileByPath(joinPath(f, name)) instanceof import_obsidian4.TFile)
     );
   }
   async runCommand(cmd, folder) {

@@ -3,12 +3,13 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, beforeEach, describe, test } from "node:test";
 
 import type { GitSync } from "../../src/commands/host.ts";
+import { expandBookIntoFolders } from "../../src/commands/expand-book.ts";
 import { cancelRender, renderPreview } from "../../src/commands/render-preview.ts";
 import { folderRenderState, foldersNeedingRender, renderAllNeeded } from "../../src/commands/render-status.ts";
 import { importFromClipboard } from "../../src/commands/import-blueprint.ts";
@@ -376,3 +377,51 @@ describe("render only what needs it", () => {
     assert.ok(existsSync(join(vault, "cat/fussganger-brucke/renders/0.jpg")));
   });
 });
+
+describe("render an expanded book", () => {
+  const LEAF_PAD = `${BOOK_DIR}/0-concrete-pad`;
+  const LEAF_LAMPS = `${BOOK_DIR}/1-inner-book/0-wired-lamps`;
+  const expandedHost = async (mode: string) => {
+    const h = host(mode);
+    assert.equal((await expandBookIntoFolders(h, BOOK_DIR)).action, "expanded");
+    return h;
+  };
+
+  test("one run on the assembled book; images and render.json move into the leaves; one commit of the book", async () => {
+    const h = await expandedHost("ok");
+    const out = await renderPreview(h, BOOK_DIR);
+    assert.deepStrictEqual(out.action === "rendered" && out.images, ["0", "1/0"]);
+    const args = lastArgs();
+    assert.match(args[args.indexOf("--input") + 1]!, /\/\.factorio-render\/[^/]+\/blueprint\.json$/);
+    assert.ok(!args.includes("--only"));
+    assert.equal(read(`${LEAF_LAMPS}/renders/0.jpg`), "jpeg 1/0.jpg");
+    const target = renderTargets(JSON.parse(read(`${LEAF_LAMPS}/blueprint.json`)))[0]!;
+    assert.deepStrictEqual(parseRenderManifest(read(`${LEAF_LAMPS}/renders/render.json`))!.entries, {
+      "0": { file: "0.jpg", sha256: target.hash, width: 10, height: 20 },
+    });
+    assert.ok(!existsSync(join(vault, ".factorio-render")), "scratch removed, and its empty parent too");
+    assert.deepStrictEqual((await folderRenderState(h, BOOK_DIR)).overall, "current");
+    assert.ok(read(`${BOOK_DIR}/README.md`).includes(`/${BOOK_DIR}/cover.jpg)`));
+    assert.ok(read(`${LEAF_PAD}/README.md`).includes(`/${BOOK_DIR}/renders/0.jpg)`));
+    assert.deepStrictEqual(remoteLog().slice(0, 2), ["render The Book 3", "expand The Book into folders"]);
+  });
+
+  test("--only the leaves that need it; the scratch folder is removed", async () => {
+    const h = await expandedHost("ok");
+    await renderPreview(h, BOOK_DIR);
+    const value = JSON.parse(read(`${LEAF_LAMPS}/blueprint.json`));
+    value.blueprint.label = "Changed lamps";
+    writeFileSync(join(vault, LEAF_LAMPS, "blueprint.json"), writeCanonicalJson(value));
+    await renderPreview(h, BOOK_DIR);
+    const args = lastArgs();
+    assert.deepStrictEqual(args.slice(args.indexOf("--only"), args.indexOf("--only") + 2), ["--only", "1/0"]);
+    // The label changed, so the leaf's folder follows it, image and all.
+    assert.ok(existsSync(join(vault, BOOK_DIR, "1-inner-book/0-changed-lamps/renders/0.jpg")));
+    assert.equal((await folderRenderState(h, BOOK_DIR)).overall, "current");
+    assert.ok(!existsSync(join(vault, ".factorio-render")) || readdirSync(join(vault, ".factorio-render")).length === 0);
+    // A nested book renders on its own, with slot paths relative to it; already current here.
+    await renderPreview(h, `${BOOK_DIR}/1-inner-book`);
+    assert.match(h.notices.at(-1)!.message, /already current/);
+  });
+});
+

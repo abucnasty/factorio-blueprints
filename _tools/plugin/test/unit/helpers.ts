@@ -1,10 +1,11 @@
 // Fake Hosts for the command tests: an in-memory vault, or a real folder on
 // disk (for the render command, which runs a real process and git).
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type {
+  ConfirmPrompt,
   CreateAnswer,
   CreatePrompt,
   GitSync,
@@ -25,6 +26,7 @@ export { fixture } from "./fixtures.ts";
 export const BASE = "https://blueprints.abucnasty.dev";
 
 export interface FakeHost extends Host {
+  confirms: ConfirmPrompt[];
   vault: Map<string, string>;
   folders: Set<string>;
   notices: { message: string; kind: string }[];
@@ -49,6 +51,8 @@ export interface FakeOptions {
   lfs?: boolean;
   /** Use a real folder instead of the in-memory vault. */
   disk?: string;
+  /** Answer to confirmations (default: OK). */
+  confirm?: (p: ConfirmPrompt) => boolean;
   /** Process runner for a disk vault (default: run programs directly). */
   processes?: ProcessRunner;
 }
@@ -76,6 +80,23 @@ export function fakeHost(opts: FakeOptions = {}): FakeHost {
       const parts = p.split("/");
       for (let i = 1; i <= parts.length; i++) folders.add(parts.slice(0, i).join("/"));
     },
+    rename: async (from, to) => {
+      if (vault.has(to) || folders.has(to)) throw new Error(`EEXIST: ${to}`);
+      if (vault.has(from)) {
+        vault.set(to, vault.get(from)!);
+        vault.delete(from);
+        return;
+      }
+      if (!folders.has(from)) throw new Error(`ENOENT: ${from}`);
+      const move = (p: string) => to + p.slice(from.length);
+      for (const k of [...vault.keys()]) if (k.startsWith(from + "/")) (vault.set(move(k), vault.get(k)!), vault.delete(k));
+      for (const f of [...folders]) if (f === from || f.startsWith(from + "/")) (folders.add(move(f)), folders.delete(f));
+    },
+    remove: async (p) => {
+      vault.delete(p);
+      for (const k of [...vault.keys()]) if (k.startsWith(p + "/")) vault.delete(k);
+      for (const f of [...folders]) if (f === p || f.startsWith(p + "/")) folders.delete(f);
+    },
     list: async (p) => {
       const prefix = p === "" ? "" : p + "/";
       const direct = (all: Iterable<string>) =>
@@ -94,6 +115,7 @@ export function fakeHost(opts: FakeOptions = {}): FakeHost {
     notices: [],
     clipboardText: opts.clipboard ?? "",
     createPrompts: [],
+    confirms: [],
     updatePrompts: [],
     picks: [],
     progress: [],
@@ -142,6 +164,10 @@ export function fakeHost(opts: FakeOptions = {}): FakeHost {
       openSettings: () => {
         host.settingsOpened++;
       },
+      confirm: async (p) => {
+        host.confirms.push(p);
+        return opts.confirm ? opts.confirm(p) : true;
+      },
     },
     git:
       opts.git === "none"
@@ -167,6 +193,8 @@ export function diskFiles(root: string): VaultFiles {
     read: async (p) => readFileSync(abs(p), "utf8"),
     write: async (p, text) => writeFileSync(abs(p), text),
     mkdir: async (p) => void mkdirSync(abs(p), { recursive: true }),
+    rename: async (from, to) => renameSync(abs(from), abs(to)),
+    remove: async (p) => rmSync(abs(p), { recursive: true, force: true }),
     list: async (p) => {
       const entries = readdirSync(abs(p), { withFileTypes: true });
       const path = (n: string) => (p === "" ? n : `${p}/${n}`);

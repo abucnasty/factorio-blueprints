@@ -14,6 +14,10 @@ export interface VaultFiles {
   mkdir(path: string): Promise<void>;
   /** Direct children of a folder, as vault paths. */
   list(path: string): Promise<{ files: string[]; folders: string[] }>;
+  /** Move a file or folder; the destination's parent must exist and the destination must not. */
+  rename(from: string, to: string): Promise<void>;
+  /** Delete a file, or a folder with everything in it. */
+  remove(path: string): Promise<void>;
 }
 
 export interface Clipboard {
@@ -91,6 +95,13 @@ export interface UpdateAnswer {
 
 export type NoticeKind = "info" | "error";
 
+export interface ConfirmPrompt {
+  title: string;
+  /** Lines of text; lines starting with "- " are shown as a list. */
+  lines: string[];
+  okText: string;
+}
+
 export interface PickItem {
   label: string;
   detail?: string;
@@ -114,6 +125,8 @@ export interface UI {
   progress(message: string): Progress;
   /** Open the plugin's settings. Optional. */
   openSettings?(): void;
+  /** Ask before a change; resolves true on OK. */
+  confirm(prompt: ConfirmPrompt): Promise<boolean>;
 }
 
 export interface GitSync {
