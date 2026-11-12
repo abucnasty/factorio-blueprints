@@ -18,6 +18,16 @@ test("just input and output, with Factorio from the environment", async () => {
     assert.equal(options.timeoutSeconds, 300);
     assert.equal(options.keepWork, false);
     assert.equal(options.mods, undefined);
+    assert.deepEqual(options.backdrop, ["lab-dark-1", "black-refined-concrete"]);
+});
+
+test("the backdrop tiles come from the argument, environment or config, and are checked", async () => {
+    const base = ["--input", "a", "--out", "b", "--factorio", "f"];
+    assert.deepEqual((await parse([...base, "--backdrop", "lab-dark-1, lab-dark-2"])).backdrop, ["lab-dark-1", "lab-dark-2"]);
+    assert.deepEqual((await parse(base, { env: { FACTORIO_RENDER_BACKDROP: "concrete,stone-path" } })).backdrop, ["concrete", "stone-path"]);
+    assert.deepEqual((await parse(base, { config: { backdrop: ["refined-concrete", "black-refined-concrete"] } })).backdrop, ["refined-concrete", "black-refined-concrete"]);
+    await assert.rejects(parse([...base, "--backdrop", "one-tile"]), /two tile names/);
+    await assert.rejects(parse([...base, "--backdrop", "a,b,c"]), /two tile names/);
 });
 
 test("arguments beat environment, environment beats the config file", async () => {

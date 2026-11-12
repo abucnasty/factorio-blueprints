@@ -22,3 +22,13 @@ test("the mod's info.json targets Factorio 2.1 and names the remote interface th
     const scenario = JSON.parse(await fs.readFile(new URL("../mod/scenarios/stage/description.json", import.meta.url), "utf8"));
     assert.equal(scenario["multiplayer-compatible"], true);
 });
+
+test("the mod researches everything, lays the default backdrop and knows space platforms", async () => {
+    const build = await fs.readFile(new URL("../mod/scripts/build.lua", import.meta.url), "utf8");
+    assert.match(build, /force\.research_all_technologies\(\)/);
+    assert.match(build, /force\.enable_all_recipes\(\)/);
+    assert.match(build, /DEFAULT_BACKDROP = \{ "lab-dark-1", "black-refined-concrete" \}/);
+    assert.match(build, /create_space_platform/);
+    const { DEFAULT_BACKDROP } = await import("../src/cli.js");
+    assert.deepEqual([...DEFAULT_BACKDROP], ["lab-dark-1", "black-refined-concrete"]);
+});

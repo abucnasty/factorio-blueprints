@@ -908,7 +908,7 @@
             }
           ],
           "item": "blueprint",
-          "label": "smoke 3 (Space Age): platform foundation and a thruster (surface conditions ignored)",
+          "label": "smoke 3 (Space Age): platform module without a hub (foundation, thruster, chest)",
           "tiles": [
             {
               "name": "space-platform-foundation",

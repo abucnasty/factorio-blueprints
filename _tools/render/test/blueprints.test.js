@@ -62,3 +62,12 @@ test("the smoke-test book in fixtures lists three blueprints and skips its plann
     assert.deepEqual(skipped, [{ path: "2", kind: "upgrade_planner" }]);
     for (const entry of blueprints) assert.deepEqual(decodeBlueprintString(blueprintStringOf(entry)).blueprint, entry.blueprint);
 });
+
+test("the platform ship fixture is one blueprint with a hub, foundation and platform-only entities", async () => {
+    const { value } = await readInput(new URL("./fixtures/platform-ship.json", import.meta.url).pathname);
+    const { blueprints } = listBlueprints(value);
+    assert.equal(blueprints.length, 1);
+    const names = blueprints[0].blueprint.entities.map(entity => entity.name);
+    assert.deepEqual(names, ["space-platform-hub", "thruster", "asteroid-collector", "steel-chest"]);
+    assert.ok(blueprints[0].blueprint.tiles.every(tile => tile.name === "space-platform-foundation"));
+});

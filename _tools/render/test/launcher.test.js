@@ -24,6 +24,7 @@ async function setup(t) {
 function options(env, overrides = {}) {
     return {
         factorio: env.root, out: env.out, framing: { ...FRAMING_DEFAULTS }, workDir: env.work, keepWork: false,
+        backdrop: ["lab-dark-1", "black-refined-concrete"],
         hideStatusIcons: true, timeoutSeconds: 20, ...overrides,
     };
 }
@@ -48,8 +49,14 @@ test("a book renders one image per blueprint, numbered in book order, and the ga
     // 0 A, 1 B, 2 C, 3 D render; 4 is tiles only (the fake builds no tiles), 5 is empty, 6 cannot be placed
     assert.deepEqual(report.images.map(image => [image.number, image.label]), [[0, "A"], [1, "B"], [2, "C"], [3, "D"]]);
     assert.deepEqual(report.without_image.map(item => [item.number, item.reason]), [
-        [5, "empty blueprint"], [4, "nothing of it could be built"], [6, "nothing of it could be built"],
+        [5, "empty blueprint"], [4, "nothing of it could be built (tried ordinary, platform)"],
+        [6, "nothing of it could be built (tried ordinary, platform)"],
     ]);
+    assert.deepEqual(report.without_image.find(item => item.number === 6).attempts.map(attempt => attempt.strategy), ["ordinary", "platform"]);
+    assert.ok(report.images.every(image => image.strategy === "ordinary"));
+    // the plain log has the counts and every problem, not only --json
+    assert.ok(messages.includes("  [ordinary] built 0 entities, 0 tiles; failed: none; missing: 2× fake-unplaceable-thing"), messages.join("\n"));
+    assert.ok(messages.some(line => line.startsWith("  [ordinary] built 3 entities, 0 tiles; failed: none; missing: none")));
     assert.deepEqual(report.without_image.find(item => item.number === 6).missing, { "fake-unplaceable-thing": 2 });
     assert.deepEqual(report.skipped.map(item => item.kind), ["upgrade_planner", "deconstruction_planner"]);
     assert.deepEqual((await fs.readdir(env.out)).sort(), ["0.jpg", "1.jpg", "2.jpg", "3.jpg", "notes.txt"]);
@@ -61,11 +68,60 @@ test("a book renders one image per blueprint, numbered in book order, and the ga
     assert.equal(report.images[2].pixels_per_tile, 48);
     assert.ok(meta.width >= 11 * 48 && meta.height >= 5 * 48 && meta.width < 12 * 48, `${meta.width}×${meta.height}`);
     await assertNothingRunning(env.work);
+    // all technologies are researched once, before building, and the backdrop goes with every build
+    assert.equal(await fs.readFile(path.join(env.work, "server", "setup.done"), "utf8"), "researched");
+    assert.deepEqual(report.setup, { technologies_researched: 250, recipes_still_disabled: 0 });
+    assert.ok(messages.includes("Researched all technologies (250); recipes still disabled: 0"));
+    const builds = (await fs.readFile(path.join(env.work, "server", "builds.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    assert.ok(builds.every(job => JSON.stringify(job.backdrop) === JSON.stringify(["lab-dark-1", "black-refined-concrete"])));
     // the work directory was chosen, so it is kept, with the logs
     await fs.access(path.join(env.work, "server-output.log"));
     const shots = (await fs.readFile(path.join(env.work, "server", "screenshots.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
     assert.equal(shots.length, 4);
     assert.ok(shots.every(shot => shot.show_entity_info === true && shot.show_gui === false && shot.surface.startsWith("blueprint-render-")));
+});
+
+test("a space platform blueprint is built on a platform first; others fall back to it", async t => {
+    const env = await setup(t);
+    const input = path.join(env.dir, "blueprint.json");
+    const ship = row("ship", 2, 0, "steel-chest");
+    ship.entities.push({ entity_number: 9, name: "thruster", position: { x: 3, y: 3.5 } });
+    ship.tiles = [{ name: "space-platform-foundation", position: { x: 0, y: 0 } }];
+    await fs.writeFile(input, JSON.stringify({ blueprint_book: { blueprints: [{ index: 0, blueprint: ship }, { index: 1, blueprint: row("plain", 1) }] } }));
+    const messages = [];
+    const report = await render({ ...options(env), input }, message => messages.push(message));
+    assert.deepEqual(report.images.map(image => [image.number, image.strategy, image.attempts.length]), [[0, "platform", 1], [1, "ordinary", 1]]);
+    assert.ok(messages.some(line => line.startsWith("  space platform blueprint: thruster is platform only; foundation tiles; trying platform, then ordinary")), messages.join("\n"));
+    const shots = (await fs.readFile(path.join(env.work, "server", "screenshots.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+    assert.deepEqual(shots.map(shot => shot.surface), ["platform-1", "blueprint-render-1-ordinary"]);
+    assert.deepEqual((await fs.readFile(path.join(env.work, "server", "prepared.log"), "utf8")).trim().split("\n"), ["platform-1", "blueprint-render-1-ordinary"]);
+    assert.deepEqual((await fs.readFile(path.join(env.work, "server", "deleted.log"), "utf8")).trim().split("\n"), ["blueprint-render-0-platform", "blueprint-render-1-ordinary"]);
+    await assertNothingRunning(env.work);
+});
+
+test("the platform ship fixture renders on a platform", async t => {
+    const env = await setup(t);
+    const input = new URL("./fixtures/platform-ship.json", import.meta.url).pathname;
+    const report = await render({ ...options(env), input }, () => {});
+    assert.deepEqual(report.images.map(image => [image.number, image.strategy]), [[0, "platform"]]);
+    await assertNothingRunning(env.work);
+});
+
+test("without Space Age a platform blueprint gets an ordinary attempt that says why it failed", async t => {
+    const env = await setup(t);
+    const input = path.join(env.dir, "bp.txt");
+    const ship = row("ship", 1, 0, "thruster");
+    await fs.writeFile(input, encodeBlueprintString({ blueprint: ship }));
+    process.env.FAKE_NO_SPACE_AGE = "1";
+    t.after(() => { delete process.env.FAKE_NO_SPACE_AGE; });
+    const messages = [];
+    const report = await render({ ...options(env), input }, message => messages.push(message));
+    assert.equal(report.images.length, 0);
+    const [missing] = report.without_image;
+    assert.equal(missing.reason, "nothing of it could be built (tried ordinary)");
+    assert.deepEqual(missing.problems, ["build_blueprint placed no ghosts at all on a lab-tile surface"]);
+    assert.ok(messages.includes("  [ordinary] problem: build_blueprint placed no ghosts at all on a lab-tile surface"));
+    assert.ok(messages.some(line => line.startsWith("  [ordinary] diagnostics: ")));
 });
 
 test("without --work-dir, a temporary work directory is used and removed after success", async t => {

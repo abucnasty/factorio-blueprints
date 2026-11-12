@@ -92,21 +92,41 @@ function startServer() {
         setTimeout(() => fs.writeFileSync(file, png), 300);
     }
 
-    function build(job) {
-        const blueprint = decodeBlueprintString(parts.join("")).blueprint;
-        parts = [];
+    const blueprintOf = () => decodeBlueprintString(parts.join("")).blueprint;
+    // stands in for the mod's prototype-derived rule
+    const PLATFORM_MARKERS = /^(space-platform-hub|thruster|asteroid-collector)$/;
+    function inspect() {
+        const blueprint = blueprintOf();
         if (!blueprint) return { error: "not a blueprint" };
-        surfaces.add(job.surface);
+        const reasons = [...new Set([
+            ...(blueprint.entities ?? []).filter(entity => PLATFORM_MARKERS.test(entity.name)).map(entity => `${entity.name} is platform only`),
+            ...(blueprint.tiles ?? []).filter(tile => tile.name === "space-platform-foundation").map(() => "foundation tiles"),
+        ])];
+        return { platform: reasons.length > 0, reasons, platforms_available: process.env.FAKE_NO_SPACE_AGE !== "1" };
+    }
+
+    let platforms = 0;
+    const names = new Map();
+    function build(job) {
+        const blueprint = blueprintOf();
+        if (!blueprint) return { error: "not a blueprint" };
+        const isPlatformBlueprint = inspect().platform;
+        if (job.strategy === "platform" && process.env.FAKE_NO_SPACE_AGE === "1") return { error: "no starter pack", strategy: job.strategy };
+        const surface = job.strategy === "platform" ? `platform-${++platforms}` : job.surface;
+        surfaces.add(surface);
+        names.set(job.surface, surface);
         const entities = blueprint.entities ?? [];
-        const placed = entities.filter(entity => !entity.name.startsWith("fake-unplaceable"));
-        const missing = {};
-        for (const entity of entities) if (!placed.includes(entity)) missing[entity.name] = (missing[entity.name] ?? 0) + 1;
-        if (!placed.length) return { surface: job.surface, built: 0, failed: {}, missing, problems: [], tick: tick() };
+        const wanted = {};
+        for (const entity of entities) wanted[entity.name] = (wanted[entity.name] ?? 0) + 1;
+        const refused = job.strategy === "ordinary" && isPlatformBlueprint;
+        const placed = refused ? [] : entities.filter(entity => !entity.name.startsWith("fake-unplaceable"));
+        const missing = { ...wanted };
+        for (const entity of placed) if (--missing[entity.name] === 0) delete missing[entity.name];
+        const problems = refused ? ["build_blueprint placed no ghosts at all on a lab-tile surface"] : [];
+        const report = { strategy: job.strategy, surface, built: placed.length, tiles: 0, failed: [], missing: Object.keys(missing).length ? missing : [], problems, diagnostics: { surface_kind: job.strategy }, tick: tick() };
+        if (!placed.length) return report;
         const xs = placed.map(entity => entity.position.x), ys = placed.map(entity => entity.position.y);
-        return {
-            surface: job.surface, built: placed.length, tiles: 0, failed: {}, missing, problems: [], tick: tick(),
-            area: { left_top: { x: Math.min(...xs) - 0.5, y: Math.min(...ys) - 0.5 }, right_bottom: { x: Math.max(...xs) + 0.5, y: Math.max(...ys) + 0.5 } },
-        };
+        return { ...report, area: { left_top: { x: Math.min(...xs) - 0.5, y: Math.min(...ys) - 0.5 }, right_bottom: { x: Math.max(...xs) + 0.5, y: Math.max(...ys) + 0.5 } } };
     }
 
     async function run(command) {
@@ -118,11 +138,25 @@ function startServer() {
             if (iface !== MOD) return `Error: unknown interface ${iface}`;
             if (name === "reset") { parts = []; return "ok"; }
             if (name === "append") { parts.push(text); return String(parts.length); }
+            if (name === "inspect") return JSON.stringify(inspect());
+            if (name === "setup") {
+                fs.writeFileSync(path.join(writeData, "setup.done"), "researched");
+                return JSON.stringify({ technologies_researched: 250, recipes_still_disabled: 0 });
+            }
             if (name === "build") {
                 if (mode === "stall-build") return new Promise(() => {});
+                fs.appendFileSync(path.join(writeData, "builds.jsonl"), text + "\n");
                 return JSON.stringify(build(JSON.parse(text)));
             }
-            if (name === "delete") { surfaces.delete(text); return "ok"; }
+            if (name === "prepare") {
+                fs.appendFileSync(path.join(writeData, "prepared.log"), `${text}\n`);
+                return surfaces.has(text) ? "0" : "Error: no such surface";
+            }
+            if (name === "delete") {
+                surfaces.delete(names.get(text) ?? text);
+                fs.appendFileSync(path.join(writeData, "deleted.log"), `${text}\n`);
+                return "ok";
+            }
             return `Error: unknown function ${name}`;
         }
         const shot = /^\/sc game\.take_screenshot\(helpers\.json_to_table\(\[(=*)\[([\s\S]*)\]\1\]\)\)$/.exec(command);
