@@ -25,7 +25,7 @@ _tools/                    everything that is not a blueprint
 <category>/<sub-category>/<blueprint-slug>/
   README.md                notes + frontmatter
   blueprint.json           the decoded blueprint
-  renders/<n>.jpg          one image per blueprint in the string, 0-based
+  renders/<slot path>.jpg  one image per blueprint: 0.jpg, or 3/1.jpg in a book
 ```
 
 A directory is a **blueprint folder** if and only if it contains
@@ -137,9 +137,11 @@ bytes. There is exactly one implementation of the writer, in
 
 A book entry's **slot path** is the slot numbers from the root book down to
 it, each the entry's `index` or, without one, its position in `blueprints`:
-`3/1` is the entry in slot 1 of the book in slot 3. Slots are positions, so
-reordering a book changes what a latest entry link returns. A blueprint
-folder never contains another, so what follows its path is a slot path.
+`3/1` is the entry in slot 1 of the book in slot 3. If entries share a
+slot, the first in the array keeps it and later ones get no link or render.
+Slots are positions, so reordering a book changes what a latest entry link
+returns. A blueprint folder never contains another, so what follows its
+path is a slot path.
 
 Render files are `renders/<slot path>.jpg` for each blueprint in a book
 (`renders/3/1.jpg`) and `renders/0.jpg` for a single blueprint; nested
