@@ -16,8 +16,8 @@ local ROLLING_STOCK_TYPES = { ["cargo-wagon"] = true, ["fluid-wagon"] = true, ["
 local PREFERRED_RESOURCES = { "iron-ore", "crude-oil", "stone", "coal", "copper-ore" }
 -- Room around the blueprint's own extent, for the underlay and chunk generation
 local MARGIN_TILES = 8
--- Tiles between a blueprint without a hub and the platform's own hub and starter foundation, so they stay out of
--- the picture (the frame is the build plus 2 tiles)
+-- Tiles between a blueprint without a hub and the platform's own starter foundation. The blueprint goes SOUTH of it:
+-- thruster exhausts point south, and the game makes no foundation north of space_platform_max_size (y = -200).
 local HUB_CLEARANCE = 64
 -- The collision layer of the space around a platform; a tile that can only be placed over it is platform foundation
 local EMPTY_SPACE_LAYER = "empty_space"
@@ -47,6 +47,106 @@ local function blueprint_extent(entities, tiles)
         top, bottom = math.min(top, tile.position.y), math.max(bottom, tile.position.y + 1)
     end
     return left, top, right, bottom
+end
+
+---Quarter turns of a 16-way direction (0 north, 4 east, 8 south, 12 west), or nil for a diagonal
+local function quarter_turns(direction)
+    direction = direction or 0
+    if direction % 4 ~= 0 then
+        return nil
+    end
+    return (direction / 4) % 4
+end
+
+---The box build_blueprint centres a blueprint on: tile cells and entity footprints (tile_width x tile_height,
+---swapped for east and west). Measured in 2.1.24: a blueprint without a hub lands with offset
+---floor(position - centre + 0.5) per axis.
+---@return number left, number top, number right, number bottom
+local function footprint_extent(entities, tiles)
+    local left, top, right, bottom = math.huge, math.huge, -math.huge, -math.huge
+    for _, entity in pairs(entities) do
+        local prototype = prototypes.entity[entity.name]
+        local width, height = 1, 1
+        if prototype then
+            width, height = prototype.tile_width, prototype.tile_height
+        end
+        local turns = quarter_turns(entity.direction)
+        if turns == 1 or turns == 3 then
+            width, height = height, width
+        end
+        left, right = math.min(left, entity.position.x - width / 2), math.max(right, entity.position.x + width / 2)
+        top, bottom = math.min(top, entity.position.y - height / 2), math.max(bottom, entity.position.y + height / 2)
+    end
+    for _, tile in pairs(tiles) do
+        left, right = math.min(left, tile.position.x), math.max(right, tile.position.x + 1)
+        top, bottom = math.min(top, tile.position.y), math.max(bottom, tile.position.y + 1)
+    end
+    return left, top, right, bottom
+end
+
+---The largest build grid of the blueprint's entities (2 for some entity types): build_blueprint moves the
+---blueprint in steps of it, so offsets that are a multiple of it land exactly (measured in 2.1.24)
+local function build_grid(entities)
+    local grid = 1
+    for _, entity in pairs(entities) do
+        local prototype = prototypes.entity[entity.name]
+        if prototype then
+            local ok, size = pcall(function() return prototype.build_grid_size end)
+            if ok and type(size) == "number" and size > grid then
+                grid = size
+            end
+        end
+    end
+    return grid
+end
+
+---A tile_buildability_rules area turned with the entity
+local function rotate_area(area, turns)
+    local l, t, r, b = area.left_top.x, area.left_top.y, area.right_bottom.x, area.right_bottom.y
+    for _ = 1, turns do
+        -- a quarter turn clockwise: (x, y) -> (-y, x)
+        l, t, r, b = -b, l, -t, r
+    end
+    return l, t, r, b
+end
+
+local function any_layer(layers, wanted)
+    for layer in pairs(wanted or {}) do
+        if layers[layer] then
+            return true
+        end
+    end
+    return false
+end
+
+---The blueprint's tiles that break a tile rule of one of its own entities (a tile in a thruster's exhaust, in front
+---of an asteroid collector). The game refuses a blueprint with any such tile completely, in every build mode and on
+---every surface, so they are left out and reported instead.
+---@return table<integer, string> conflicting tile index -> the entity whose rule it breaks
+local function self_conflicts(entities, tiles)
+    local conflicts = {}
+    for _, entity in pairs(entities) do
+        local prototype = prototypes.entity[entity.name]
+        local turns = quarter_turns(entity.direction)
+        for _, rule in pairs(prototype and turns and prototype.tile_buildability_rules or {}) do
+            local l, t, r, b = rotate_area(rule.area, turns)
+            local colliding = rule.colliding_tiles and rule.colliding_tiles.layers or {}
+            local required = rule.required_tiles and rule.required_tiles.layers or {}
+            local needs_some = next(required) ~= nil
+            for index, tile in pairs(tiles) do
+                local x = tile.position.x + 0.5 - entity.position.x
+                local y = tile.position.y + 0.5 - entity.position.y
+                if x > l and x < r and y > t and y < b then
+                    local tile_prototype = prototypes.tile[tile.name]
+                    local layers = tile_prototype and tile_prototype.collision_mask.layers or {}
+                    if any_layer(layers, colliding) or (needs_some and not any_layer(layers, required)) then
+                        conflicts[index] = entity.name
+                    end
+                end
+            end
+        end
+    end
+    return conflicts
 end
 
 ---The offset from the blueprint's positions to the world's, from the ghosts that a build of it made: the one that
@@ -330,7 +430,7 @@ end
 
 ---Revive ghosts: tiles first (entities may stand on them), then entities, rolling stock last (it needs its rails)
 ---@return LuaEntity[] entities, table<string, integer> built, table<string, integer> failed, string[] problems
-local function revive_all(ghosts)
+local function revive_all(surface, ghosts)
     local tiles, entities_first, rolling = {}, {}, {}
     for _, ghost in pairs(ghosts) do
         if ghost.valid then
@@ -341,10 +441,15 @@ local function revive_all(ghosts)
             end
         end
     end
-    for _, ghost in ipairs(tiles) do
-        if ghost.valid then
-            ghost.revive()
+    -- one set_tiles for all of them: reviving foundation ghosts one by one fails for every ghost not yet next to
+    -- foundation (most of a large ship), and set_tiles leaves the ghosts behind, so they are removed after
+    if #tiles > 0 then
+        local laid = {}
+        for _, ghost in ipairs(tiles) do
+            table.insert(laid, { name = ghost.ghost_name, position = ghost.position })
         end
+        surface.set_tiles(laid, true, false)
+        destroy_all(tiles)
     end
     local entities, built, failed, problems = {}, {}, {}, {}
     for _, list in ipairs({ entities_first, rolling }) do
@@ -501,69 +606,105 @@ local function generate(surface, center, half_width, half_height)
     surface.force_generate_chunk_requests()
 end
 
----Lay tiles for real (set_tiles does not check placement rules), shifted by `offset`
----@return table[] placed tiles, string|nil error
-local function lay_tiles(surface, tiles, offset)
-    local placed = {}
+---Tile names that are open space around a platform (the empty_space layer)
+local function space_tile_names()
+    local names = {}
+    for name, tile in pairs(prototypes.tile) do
+        if (tile.collision_mask.layers or {})[EMPTY_SPACE_LAYER] then
+            table.insert(names, name)
+        end
+    end
+    return names
+end
+
+---The first row south of the platform's own hub and starter foundation (a blueprint without a hub goes below it)
+local function starter_bottom(surface, hub)
+    local bottom = hub and hub.bounding_box.right_bottom.y or 0
+    local space = space_tile_names()
+    if #space > 0 then
+        local ok, tiles = pcall(surface.find_tiles_filtered, { area = { { -64, -64 }, { 64, 64 } }, name = space, invert = true })
+        if ok then
+            for _, tile in pairs(tiles) do
+                bottom = math.max(bottom, tile.position.y + 1)
+            end
+        end
+    end
+    return math.ceil(bottom)
+end
+
+---Why the game will not build this entity on this surface by its surface conditions, or nil
+local function surface_refusal(entity_name, surface)
+    local prototype = prototypes.entity[entity_name]
+    local conditions = prototype and prototype.surface_conditions
+    if not conditions or #conditions == 0 or surface.ignore_surface_conditions then
+        return nil
+    end
+    for _, condition in pairs(conditions) do
+        local ok, value = pcall(surface.get_property, condition.property)
+        if ok and (value < condition.min or value > condition.max) then
+            return entity_name .. " cannot be built here: it needs " .. condition.property .. " " .. condition.min
+                .. "–" .. condition.max .. " and this surface has " .. value .. " (surface conditions)"
+        end
+    end
+    return nil
+end
+
+---Leave out the blueprint's tiles that break a tile rule of its own entities, which would make the game refuse the
+---whole blueprint (see self_conflicts)
+---@return table[] tiles kept, string[] problems, integer left out
+local function drop_self_conflicts(stack, entities, tiles)
+    local conflicts = self_conflicts(entities, tiles)
+    if not next(conflicts) then
+        return tiles, {}, 0
+    end
+    local kept, by_entity, dropped = {}, {}, 0
+    for index, tile in ipairs(tiles) do
+        if conflicts[index] then
+            dropped = dropped + 1
+            count(by_entity, conflicts[index])
+        else
+            table.insert(kept, tile)
+        end
+    end
+    stack.set_blueprint_tiles(kept)
+    local problems = {}
+    for name, n in pairs(by_entity) do
+        table.insert(problems, "left out " .. n .. " of the blueprint's tiles: they lie where its " .. name
+            .. " needs open space (its tile rules); with them the game builds nothing of the blueprint")
+    end
+    return kept, problems, dropped
+end
+
+---Move a blueprint so that its hub is at (0, 0). build_blueprint moves a blueprint with a hub only in steps of 256
+---tiles (measured in 2.1.24: offset = 256 * floor(position / 256 + 0.5)), so it is placed by its own coordinates
+local function centre_on_hub(stack, entities, tiles, hub_entity)
+    local dx, dy = hub_entity.position.x, hub_entity.position.y
+    if dx == 0 and dy == 0 then
+        return entities, tiles
+    end
+    for _, entity in pairs(entities) do
+        entity.position = { x = entity.position.x - dx, y = entity.position.y - dy }
+    end
     for _, tile in pairs(tiles) do
-        table.insert(placed, {
-            name = tile.name,
-            position = { x = math.floor(tile.position.x + offset.x + 0.5), y = math.floor(tile.position.y + offset.y + 0.5) },
-        })
+        tile.position = { x = tile.position.x - dx, y = tile.position.y - dy }
     end
-    local ok, message = pcall(function() surface.set_tiles(placed, true, false) end)
-    if not ok then
-        return {}, tostring(message)
-    end
-    return placed
-end
-
----Build `stack` so that its entities land at blueprint position + `offset`: build at a first guess, read where the
----ghosts landed (blueprint_offset), move by the difference and build again, until they land where asked. Nothing is
----assumed about how build_blueprint places a blueprint; the game's ghosts decide.
----@return LuaEntity[] ghosts, integer builds, string|nil problem
-local function land(surface, stack, blueprint_entities, offset, guess, mode)
-    local position = guess
-    for builds = 1, 4 do
-        local ghosts = stack.build_blueprint({
-            surface = surface,
-            force = game.forces.player,
-            position = position,
-            build_mode = mode or defines.build_mode.forced,
-            skip_fog_of_war = false,
-        })
-        local landed = blueprint_offset(blueprint_entities, ghosts)
-        if not landed then
-            return ghosts, builds, nil
-        end
-        if math.abs(landed.x - offset.x) < 0.01 and math.abs(landed.y - offset.y) < 0.01 then
-            return ghosts, builds, nil
-        end
-        destroy_all(ghosts)
-        position = { x = position.x + offset.x - landed.x, y = position.y + offset.y - landed.y }
-    end
-    return {}, 4, "the blueprint did not land where its tiles were laid after 4 builds"
-end
-
-local function entity_ghost_count(ghosts)
-    local n = 0
-    for _, ghost in pairs(ghosts) do
-        if ghost.valid and ghost.type == "entity-ghost" then
-            n = n + 1
-        end
-    end
-    return n
+    stack.set_blueprint_entities(entities)
+    stack.set_blueprint_tiles(tiles)
+    return stack.get_blueprint_entities() or {}, stack.get_blueprint_tiles() or {}
 end
 
 ---Build a blueprint string on a new surface.
 ---
 ---Ordinary blueprints (no tiles, or tiles that go on lab tiles such as concrete): build_blueprint on a lab-tile
----surface, then revive the ghosts (verified in the real game).
----Blueprints with tiles that need something special under them (platform foundation, landfill), and every blueprint
----on a platform: the blueprint's tiles are laid for real with set_tiles at a chosen offset, so nothing depends on
----tile-ghost rules, then the blueprint is built so that its entities land on them (land), and revived. On a
----platform the offset puts the blueprint's hub on the platform's hub; a blueprint without a hub goes clear of it
----and, only if the game then refuses every entity, is joined to the starter foundation by a temporary strip.
+---surface, then revive the ghosts (verified in the real game). Every other blueprint is built once at a position
+---computed from the placement rules measured in 2.1.24:
+---  * tiles that break a tile rule of the blueprint's own entities are left out (else nothing is built at all);
+---  * a blueprint with a hub lands at its own coordinates (moved to put its hub at (0, 0)), so on a platform its hub
+---    lines up with the platform's;
+---  * a blueprint without a hub lands with offset floor(position - centre + 0.5) of its footprint box, in steps of
+---    its build grid, so it is built at centre + an offset that is a multiple of the grid; on a platform
+---    it goes HUB_CLEARANCE tiles south of the starter foundation (no connection to it is needed);
+---  * on a lab surface, tiles that need something under them (foundation: empty space; landfill: water) get it.
 ---@param blueprint string a blueprint string of one blueprint (not a book)
 ---@param surface_name string the name for the new surface (ordinary) or platform (platform)
 ---@param strategy "ordinary"|"platform"
@@ -576,11 +717,17 @@ function build.run(blueprint, surface_name, strategy, backdrop)
     end
     local blueprint_entities = stack.get_blueprint_entities() or {}
     local blueprint_tiles = stack.get_blueprint_tiles() or {}
-    local left, top, right, bottom = blueprint_extent(blueprint_entities, blueprint_tiles)
-    if left > right then
-        inventory.destroy()
-        return { error = "the blueprint has no entities or tiles", strategy = strategy }
+    local problems = {}
+    local diagnostics = { surface_kind = strategy == "platform" and "space platform" or "lab-tile surface" }
+    local kept, dropped_problems, dropped = drop_self_conflicts(stack, blueprint_entities, blueprint_tiles)
+    blueprint_tiles = kept
+    for _, problem in ipairs(dropped_problems) do
+        table.insert(problems, problem)
     end
+    if dropped > 0 then
+        diagnostics.tiles_left_out = dropped
+    end
+
     local wanted, tile_names = {}, {}
     local has_drill, blueprint_hub, special_tiles = false, nil, false
     for _, entity in pairs(blueprint_entities) do
@@ -591,17 +738,42 @@ function build.run(blueprint, surface_name, strategy, backdrop)
             blueprint_hub = entity
         end
     end
+    if blueprint_hub then
+        blueprint_entities, blueprint_tiles = centre_on_hub(stack, blueprint_entities, blueprint_tiles, blueprint_hub)
+        for _, entity in pairs(blueprint_entities) do
+            if entity.name == blueprint_hub.name then
+                blueprint_hub = entity
+                break
+            end
+        end
+    end
+    local underlay, by_underlay, best = nil, {}, 0
     for _, tile in pairs(blueprint_tiles) do
         tile_names[tile.name] = true
-        special_tiles = special_tiles or underlay_for(tile.name) ~= nil
+        local needed = underlay_for(tile.name)
+        if needed then
+            special_tiles = true
+            count(by_underlay, needed)
+            if by_underlay[needed] > best then
+                underlay, best = needed, by_underlay[needed]
+            end
+        end
+    end
+    local left, top, right, bottom = footprint_extent(blueprint_entities, blueprint_tiles)
+    if left > right then
+        inventory.destroy()
+        return { error = "the blueprint has no entities or tiles", strategy = strategy, problems = problems }
     end
     local half_width = math.ceil((right - left) / 2) + MARGIN_TILES
     local half_height = math.ceil((bottom - top) / 2) + MARGIN_TILES
-    local problems = {}
-    local diagnostics = { surface_kind = strategy == "platform" and "space platform" or "lab-tile surface" }
+    local centre = { x = (left + right) / 2, y = (top + bottom) / 2 }
 
     local surface, platform, hub
-    local offset = { x = -math.floor((left + right) / 2), y = -math.floor((top + bottom) / 2) }
+    -- where the blueprint's positions go in the world: world = blueprint + offset. A multiple of the build grid, so
+    -- that position = centre + offset is exactly on the grid and no rounding decides where it lands.
+    local grid = build_grid(blueprint_entities)
+    -- (+ 0 turns -0 into 0 for the report)
+    local offset = { x = -grid * math.floor(centre.x / grid) + 0, y = -grid * math.floor(centre.y / grid) + 0 }
     if strategy == "platform" then
         local message
         platform, message = new_platform(surface_name)
@@ -610,93 +782,69 @@ function build.run(blueprint, surface_name, strategy, backdrop)
             return { error = message, strategy = strategy }
         end
         surface, hub = platform.surface, platform.hub
-        if blueprint_hub and hub then
-            -- the blueprint's hub goes onto the platform's hub, as when pasting a ship onto a new platform
-            offset = { x = hub.position.x - blueprint_hub.position.x, y = hub.position.y - blueprint_hub.position.y }
-        else
-            -- clear of the platform's own hub and starter foundation, so they stay out of the picture
-            offset.y = -HUB_CLEARANCE - math.ceil(bottom)
+        if not blueprint_hub then
+            offset.y = grid * math.ceil((starter_bottom(surface, hub) + HUB_CLEARANCE - top) / grid)
         end
     else
         surface = new_ordinary_surface(surface_name)
     end
-    local center = { x = offset.x + (left + right) / 2, y = offset.y + (top + bottom) / 2 }
+    if blueprint_hub then
+        -- its own coordinates; the platform's hub is at (0, 0)
+        offset = { x = 0, y = 0 }
+    end
+    if grid > 1 then
+        diagnostics.build_grid = grid
+    end
+    local at = { x = centre.x + offset.x, y = centre.y + offset.y }
     local around = {
-        left_top = { x = center.x - half_width, y = center.y - half_height },
-        right_bottom = { x = center.x + half_width, y = center.y + half_height },
+        left_top = { x = at.x - half_width, y = at.y - half_height },
+        right_bottom = { x = at.x + half_width, y = at.y + half_height },
     }
-    generate(surface, center, half_width, half_height)
+    generate(surface, at, half_width, half_height)
 
+    local function build_ghosts(position)
+        return stack.build_blueprint({
+            surface = surface, force = game.forces.player, position = position,
+            build_mode = defines.build_mode.forced, skip_fog_of_war = false,
+        })
+    end
     local ghosts
-    local strip = {}
     if strategy == "platform" or special_tiles then
-        diagnostics.method = "real tiles, then entities landed on them"
-        local placed, message = lay_tiles(surface, blueprint_tiles, offset)
-        diagnostics.tiles_laid = #placed
-        if message then
-            table.insert(problems, "could not lay the blueprint's tiles: " .. message)
+        diagnostics.method = "built once at a computed position"
+        if strategy ~= "platform" and underlay then
+            -- what these tiles need under them, under the whole frame (whatever the blueprint does not cover is turned
+            -- back into the checkerboard after)
+            local cover = {}
+            for x = math.floor(around.left_top.x), math.ceil(around.right_bottom.x) - 1 do
+                for y = math.floor(around.left_top.y), math.ceil(around.right_bottom.y) - 1 do
+                    table.insert(cover, { name = underlay, position = { x = x, y = y } })
+                end
+            end
+            local ok, message = pcall(function() surface.set_tiles(cover, true, false) end)
+            diagnostics.underlay = underlay
+            if not ok then
+                table.insert(problems, "could not lay " .. underlay .. " under the blueprint: " .. tostring(message))
+            end
         end
         if has_drill and strategy ~= "platform" then
             diagnostics.ores = place_drill_ore(surface, blueprint_entities, offset)
         end
-        local builds, problem
-        if #blueprint_entities > 0 then
-            ghosts, builds, problem = land(surface, stack, blueprint_entities, offset, center)
-            diagnostics.builds = builds
-            if problem then
-                table.insert(problems, problem)
-            end
-            if strategy == "platform" and not (blueprint_hub and hub) and entity_ghost_count(ghosts) == 0 and #placed > 0 then
-                -- refused everything: try once more with the blueprint joined to the starter foundation
-                destroy_all(ghosts)
-                local bottom_tile = placed[1]
-                for _, tile in pairs(placed) do
-                    if tile.position.y > bottom_tile.position.y then
-                        bottom_tile = tile
-                    end
-                end
-                local occupied = {}
-                for _, tile in pairs(placed) do
-                    occupied[tile.position.x .. "," .. tile.position.y] = true
-                end
-                local x = bottom_tile.position.x
-                local corner_x = math.max(-5, math.min(4, x))
-                for y = bottom_tile.position.y + 1, -6 do
-                    table.insert(strip, { name = bottom_tile.name, position = { x = x, y = y } })
-                end
-                local step = corner_x >= x and 1 or -1
-                for sx = x, corner_x, step do
-                    if not occupied[sx .. ",-6"] then
-                        table.insert(strip, { name = bottom_tile.name, position = { x = sx, y = -6 } })
-                    end
-                end
-                local ok = pcall(function() surface.set_tiles(strip, true, false) end)
-                diagnostics.joined_to_starter = ok and #strip or ("failed")
-                ghosts, builds, problem = land(surface, stack, blueprint_entities, offset, center)
-                diagnostics.builds_after_joining = builds
-                if problem then
-                    table.insert(problems, problem)
-                end
-            end
-        else
-            ghosts = {}
+        -- a blueprint with a hub stays at its own coordinates for any position within 127 tiles of (0, 0)
+        ghosts = build_ghosts(blueprint_hub and (hub and hub.position or { x = 0, y = 0 }) or at)
+        local landed = blueprint_offset(blueprint_entities, ghosts)
+        if landed and (math.abs(landed.x - offset.x) > 0.01 or math.abs(landed.y - offset.y) > 0.01) then
+            table.insert(problems, "the blueprint landed at offset " .. landed.x .. ", " .. landed.y .. " instead of "
+                .. offset.x .. ", " .. offset.y)
         end
         if hub and blueprint_hub then
-            local landed = blueprint_offset(blueprint_entities, ghosts)
-            diagnostics.hub = (landed and math.abs(landed.x - offset.x) < 0.01 and math.abs(landed.y - offset.y) < 0.01)
-                and "lined up with the platform's hub" or "not lined up"
+            local lined_up = landed == nil or (math.abs(landed.x) < 0.01 and math.abs(landed.y) < 0.01)
+            diagnostics.hub = lined_up and "lined up with the platform's hub" or "not lined up"
         end
     else
         diagnostics.method = "ghosts on a lab floor"
-        local function build_ghosts(at)
-            return stack.build_blueprint({
-                surface = surface, force = game.forces.player, position = at,
-                build_mode = defines.build_mode.forced, skip_fog_of_war = false,
-            })
-        end
         if has_drill then
             -- probe build: where the blueprint lands, to put ore under its drills before the real build
-            local probe = build_ghosts(center)
+            local probe = build_ghosts(at)
             local landed = blueprint_offset(blueprint_entities, probe)
             destroy_all(probe)
             if landed then
@@ -705,16 +853,15 @@ function build.run(blueprint, surface_name, strategy, backdrop)
                 table.insert(problems, "the probe build placed " .. #probe .. " ghosts, not enough to tell where the blueprint lands")
             end
         end
-        ghosts = build_ghosts(center)
+        ghosts = build_ghosts(at)
     end
     inventory.destroy()
     diagnostics.ghosts = #ghosts
     if #ghosts == 0 and #blueprint_entities > 0 then
-        table.insert(problems, "build_blueprint placed no ghosts at all on a " .. diagnostics.surface_kind
-            .. (diagnostics.tiles_laid and (" (with " .. diagnostics.tiles_laid .. " of its tiles laid for real)") or ""))
+        table.insert(problems, "build_blueprint placed no ghosts at all on a " .. diagnostics.surface_kind)
     end
 
-    local entities, built, failed, revive_problems = revive_all(ghosts)
+    local entities, built, failed, revive_problems = revive_all(surface, ghosts)
     for _, problem in ipairs(revive_problems) do
         table.insert(problems, problem)
     end
@@ -724,18 +871,17 @@ function build.run(blueprint, surface_name, strategy, backdrop)
         failed[blueprint_hub.name] = nil
         table.insert(entities, hub)
     end
-    if #strip > 0 then
-        -- take the temporary strip away again, before the screenshot
-        local space = underlay_for(strip[1].name)
-        if space then
-            local back = {}
-            for _, tile in pairs(strip) do
-                table.insert(back, { name = space, position = tile.position })
+    if strategy ~= "platform" and underlay then
+        -- the underlay the blueprint does not cover goes back to the lab checkerboard (the backdrop comes later),
+        -- one tile at a time so the game's own checker pattern comes back
+        local ok, message = pcall(function()
+            for _, tile in pairs(surface.find_tiles_filtered({ area = around, name = underlay })) do
+                local p = tile.position
+                surface.build_checkerboard({ left_top = { x = p.x, y = p.y }, right_bottom = { x = p.x + 1, y = p.y + 1 } })
             end
-            local ok, message = pcall(function() surface.set_tiles(back, true, false) end)
-            if not ok then
-                table.insert(problems, "could not remove the joining strip: " .. tostring(message))
-            end
+        end)
+        if not ok then
+            table.insert(problems, "could not reset the " .. underlay .. " around the blueprint: " .. tostring(message))
         end
     end
 
@@ -745,6 +891,12 @@ function build.run(blueprint, surface_name, strategy, backdrop)
         local short = wanted_count - (built[name] or 0) - (failed[name] or 0)
         if short > 0 then
             missing[name] = short
+        end
+        if short > 0 or failed[name] then
+            local refusal = surface_refusal(name, surface)
+            if refusal then
+                table.insert(problems, refusal)
+            end
         end
     end
 
@@ -817,6 +969,14 @@ function build.diagnose(blueprint, prefix)
         table.insert(lines, line)
         table.insert(experiments, record)
     end
+    local conflicts, conflicting = self_conflicts(entities, tiles), {}
+    for _, name in pairs(conflicts) do
+        count(conflicting, name)
+    end
+    for name, n in pairs(conflicting) do
+        note("[diagnose] " .. n .. " tiles lie where its " .. name .. " needs open space: the game refuses the whole blueprint with them (the build leaves them out)",
+            { self_conflict = name, tiles = n })
+    end
 
     -- the foundation to lay for real: the blueprint's own platform tile, else its most common tile, else the game's
     local foundation, counts, best = nil, {}, 0
@@ -854,10 +1014,11 @@ function build.diagnose(blueprint, prefix)
         platform, problem = new_platform(prefix .. "-platform")
     end)
     if platform then
-        local far = -HUB_CLEARANCE - 4 * span
+        -- south of the hub: north of y = -200 the game makes no foundation at all
+        local far = HUB_CLEARANCE + 4 * span
         add_place("platform far from hub", platform.surface, { x = 0, y = far }, nil)
         if foundation then
-            add_place("platform far + real " .. foundation, platform.surface, { x = 0, y = far - 8 * span }, foundation)
+            add_place("platform far + real " .. foundation, platform.surface, { x = 0, y = far + 8 * span }, foundation)
         end
         if platform.hub then
             add_place("platform at hub", platform.surface, { x = platform.hub.position.x, y = platform.hub.position.y }, nil)

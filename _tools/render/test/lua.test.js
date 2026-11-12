@@ -29,6 +29,11 @@ test("the mod researches everything, lays the default backdrop and knows space p
     assert.match(build, /force\.enable_all_recipes\(\)/);
     assert.match(build, /DEFAULT_BACKDROP = \{ "lab-dark-1", "black-refined-concrete" \}/);
     assert.match(build, /create_space_platform/);
+    // platform placement rules measured in the game: no blueprint tile may break its own entities' tile rules,
+    // offsets follow the build grid, and nothing has to be joined to the starter foundation
+    assert.match(build, /local function self_conflicts\(/);
+    assert.match(build, /build_grid_size/);
+    assert.doesNotMatch(build, /joined_to_starter/);
     const { DEFAULT_BACKDROP } = await import("../src/cli.js");
     assert.deepEqual([...DEFAULT_BACKDROP], ["lab-dark-1", "black-refined-concrete"]);
 });
