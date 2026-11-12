@@ -10,6 +10,8 @@ blueprints: 3
 factorio_version: "2.0.64.2"
 ---
 
+![Logistics Science (480/s)](https://blueprints.abucnasty.dev/megabasing/common-quality-science/logistics-science-480/cover.jpg)
+
 - [Stage1](https://blueprints.abucnasty.dev/megabasing/common-quality-science/logistics-science-480/0.txt)
 - [Stage2](https://blueprints.abucnasty.dev/megabasing/common-quality-science/logistics-science-480/1.txt)
 - [Final](https://blueprints.abucnasty.dev/megabasing/common-quality-science/logistics-science-480/2.txt)
