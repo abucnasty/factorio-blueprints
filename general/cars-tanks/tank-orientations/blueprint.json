@@ -1,0 +1,627 @@
+{
+  "blueprint_book": {
+    "active_index": 11,
+    "blueprints": [
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "N",
+          "version": 562949958139904
+        },
+        "index": 0
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.03125,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "NbE",
+          "version": 562949958139904
+        },
+        "index": 1
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.0625,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "NNE",
+          "version": 562949958139904
+        },
+        "index": 2
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.09375,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "NEbN",
+          "version": 562949958139904
+        },
+        "index": 3
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.125,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "NE",
+          "version": 562949958139904
+        },
+        "index": 4
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.15625,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "NEbE",
+          "version": 562949958139904
+        },
+        "index": 5
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.1875,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "ENE",
+          "version": 562949958139904
+        },
+        "index": 6
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.21875,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "EbN",
+          "version": 562949958139904
+        },
+        "index": 7
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.25,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "E",
+          "version": 562949958139904
+        },
+        "index": 8
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.28125,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "EbS",
+          "version": 562949958139904
+        },
+        "index": 9
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.3125,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "ESE",
+          "version": 562949958139904
+        },
+        "index": 10
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.34375,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "SEbE",
+          "version": 562949958139904
+        },
+        "index": 11
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.375,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "SE",
+          "version": 562949958139904
+        },
+        "index": 12
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.40625,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "SEbS",
+          "version": 562949958139904
+        },
+        "index": 13
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.4375,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "SSE",
+          "version": 562949958139904
+        },
+        "index": 14
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.46875,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "SbE",
+          "version": 562949958139904
+        },
+        "index": 15
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.5,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "S",
+          "version": 562949958139904
+        },
+        "index": 16
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.53125,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "SbW",
+          "version": 562949958139904
+        },
+        "index": 17
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.5625,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "SSW",
+          "version": 562949958139904
+        },
+        "index": 18
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.59375,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "SWbS",
+          "version": 562949958139904
+        },
+        "index": 19
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.625,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "SW",
+          "version": 562949958139904
+        },
+        "index": 20
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.65625,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "SWbW",
+          "version": 562949958139904
+        },
+        "index": 21
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.6875,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "WSW",
+          "version": 562949958139904
+        },
+        "index": 22
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.71875,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "WbS",
+          "version": 562949958139904
+        },
+        "index": 23
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.75,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "W",
+          "version": 562949958139904
+        },
+        "index": 24
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.78125,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "WbN",
+          "version": 562949958139904
+        },
+        "index": 25
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.8125,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "WNW",
+          "version": 562949958139904
+        },
+        "index": 26
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.84375,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "NWbW",
+          "version": 562949958139904
+        },
+        "index": 27
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.875,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "NW",
+          "version": 562949958139904
+        },
+        "index": 28
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.90625,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "NWbN",
+          "version": 562949958139904
+        },
+        "index": 29
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.9375,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "NNW",
+          "version": 562949958139904
+        },
+        "index": 30
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"ammo_inventory":null,"driver_is_main_gunner":false,"enable_logistics_while_moving":false,"entity_number":1,"name":"tank","orientation":0.96875,"position":{"x":0,"y":0},"request_filters":{"sections":[{"index":1}]},"selected_gun_index":1,"trunk_inventory":null}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "tank"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "NbW",
+          "version": 562949958139904
+        },
+        "index": 31
+      }
+    ],
+    "description": "For when you need a tank in a very specific orientation and for 32 steps of a compass..\n\n- abucnasty says hi",
+    "icons": [
+      {
+        "index": 1,
+        "signal": {
+          "name": "tank"
+        }
+      }
+    ],
+    "item": "blueprint-book",
+    "label": "Tank Orientations",
+    "version": 562949958139904
+  }
+}

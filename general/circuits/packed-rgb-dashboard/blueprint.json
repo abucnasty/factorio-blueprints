@@ -1,0 +1,353 @@
+{
+  "blueprint_book": {
+    "active_index": 0,
+    "blueprints": [
+      {
+        "blueprint": {
+          "description": "By default, this BP displays up to three resources but is unlimited by adding additional lights.\n\nThe constant combinator by default has 3 resources set to their stack size. This can be modified afterwards or you can connect a red wire to set externally.\n\nThe constant combinator has values to decide the color of the lights for each resource:\nH = Light is green when greater than this percent (default 90%)\nL = Light is red when lower than this percent (default 10%)\n\n- designed by abucnasty",
+          "entities": [
+            {"control_behavior":{"parameters":[{"condition":{"comparator":"≥","constant":100,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 100%[/font]"},{"condition":{"comparator":"≥","constant":98,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 98%[/font]"},{"condition":{"comparator":"≥","constant":96,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 96%[/font]"},{"condition":{"comparator":"≥","constant":94,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 94%[/font]"},{"condition":{"comparator":"≥","constant":92,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 92%[/font]"},{"condition":{"comparator":"≥","constant":90,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 90%[/font]"},{"condition":{"comparator":"≥","constant":88,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 88%[/font]"},{"condition":{"comparator":"≥","constant":86,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 86%[/font]"},{"condition":{"comparator":"≥","constant":84,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 84%[/font]"},{"condition":{"comparator":"≥","constant":82,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 82%[/font]"},{"condition":{"comparator":"≥","constant":80,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 80%[/font]"},{"condition":{"comparator":"≥","constant":78,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 78%[/font]"},{"condition":{"comparator":"≥","constant":76,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 76%[/font]"},{"condition":{"comparator":"≥","constant":74,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 74%[/font]"},{"condition":{"comparator":"≥","constant":72,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 72%[/font]"},{"condition":{"comparator":"≥","constant":70,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 70%[/font]"},{"condition":{"comparator":"≥","constant":68,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 68%[/font]"},{"condition":{"comparator":"≥","constant":66,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 66%[/font]"},{"condition":{"comparator":"≥","constant":64,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 64%[/font]"},{"condition":{"comparator":"≥","constant":62,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 62%[/font]"},{"condition":{"comparator":"≥","constant":60,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 60%[/font]"},{"condition":{"comparator":"≥","constant":57,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 58%[/font]"},{"condition":{"comparator":"≥","constant":56,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 56%[/font]"},{"condition":{"comparator":"≥","constant":54,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 54%[/font]"},{"condition":{"comparator":"≥","constant":52,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 52%[/font]"},{"condition":{"comparator":"≥","constant":50,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 50%[/font]"},{"condition":{"comparator":"≥","constant":48,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 48%[/font]"},{"condition":{"comparator":"≥","constant":46,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 46%[/font]"},{"condition":{"comparator":"≥","constant":44,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 44%[/font]"},{"condition":{"comparator":"≥","constant":42,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 42%[/font]"},{"condition":{"comparator":"≥","constant":40,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 40%[/font]"},{"condition":{"comparator":"≥","constant":38,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 38%[/font]"},{"condition":{"comparator":"≥","constant":36,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 36%[/font]"},{"condition":{"comparator":"≥","constant":34,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 34%[/font]"},{"condition":{"comparator":"≥","constant":32,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 32%[/font]"},{"condition":{"comparator":"≥","constant":30,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 30%[/font]"},{"condition":{"comparator":"≥","constant":28,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 28%[/font]"},{"condition":{"comparator":"≥","constant":26,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 26%[/font]"},{"condition":{"comparator":"≥","constant":24,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 24%[/font]"},{"condition":{"comparator":"≥","constant":22,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 22%[/font]"},{"condition":{"comparator":"≥","constant":20,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 20%[/font]"},{"condition":{"comparator":"≥","constant":18,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 18%[/font]"},{"condition":{"comparator":"≥","constant":16,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 16%[/font]"},{"condition":{"comparator":"≥","constant":14,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 14%[/font]"},{"condition":{"comparator":"≥","constant":12,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 12%[/font]"},{"condition":{"comparator":"≥","constant":10,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 10%[/font]"},{"condition":{"comparator":"≥","constant":8,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 8%[/font]"},{"condition":{"comparator":"≥","constant":6,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 6%[/font]"},{"condition":{"comparator":"≥","constant":4,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 4%[/font]"},{"condition":{"comparator":"≥","constant":2,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 2%[/font]"},{"condition":{"comparator":"≥","constant":0,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]░░░░░░[/color] 0%[/font]"}]},"direction":8,"entity_number":1,"name":"display-panel","position":{"x":59.5,"y":-473.5}},
+            {"always_on":true,"color":{"a":1,"b":0,"g":0,"r":1},"control_behavior":{"circuit_condition":{"comparator":"<","constant":10,"first_signal":{"name":"signal-percent","type":"virtual"}},"color_mode":2,"rgb_signal":{"name":"parameter-0"},"use_colors":true},"entity_number":2,"name":"small-lamp","position":{"x":59.5,"y":-472.5}},
+            {"control_behavior":{"parameters":[{"condition":{"comparator":"≥","constant":100,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 100%[/font]"},{"condition":{"comparator":"≥","constant":98,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 98%[/font]"},{"condition":{"comparator":"≥","constant":96,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 96%[/font]"},{"condition":{"comparator":"≥","constant":94,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 94%[/font]"},{"condition":{"comparator":"≥","constant":92,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 92%[/font]"},{"condition":{"comparator":"≥","constant":90,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 90%[/font]"},{"condition":{"comparator":"≥","constant":88,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 88%[/font]"},{"condition":{"comparator":"≥","constant":86,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 86%[/font]"},{"condition":{"comparator":"≥","constant":84,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 84%[/font]"},{"condition":{"comparator":"≥","constant":82,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 82%[/font]"},{"condition":{"comparator":"≥","constant":80,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 80%[/font]"},{"condition":{"comparator":"≥","constant":78,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 78%[/font]"},{"condition":{"comparator":"≥","constant":76,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 76%[/font]"},{"condition":{"comparator":"≥","constant":74,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 74%[/font]"},{"condition":{"comparator":"≥","constant":72,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 72%[/font]"},{"condition":{"comparator":"≥","constant":70,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 70%[/font]"},{"condition":{"comparator":"≥","constant":68,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 68%[/font]"},{"condition":{"comparator":"≥","constant":66,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 66%[/font]"},{"condition":{"comparator":"≥","constant":64,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 64%[/font]"},{"condition":{"comparator":"≥","constant":62,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 62%[/font]"},{"condition":{"comparator":"≥","constant":60,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 60%[/font]"},{"condition":{"comparator":"≥","constant":57,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 58%[/font]"},{"condition":{"comparator":"≥","constant":56,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 56%[/font]"},{"condition":{"comparator":"≥","constant":54,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 54%[/font]"},{"condition":{"comparator":"≥","constant":52,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 52%[/font]"},{"condition":{"comparator":"≥","constant":50,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 50%[/font]"},{"condition":{"comparator":"≥","constant":48,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 48%[/font]"},{"condition":{"comparator":"≥","constant":46,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 46%[/font]"},{"condition":{"comparator":"≥","constant":44,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 44%[/font]"},{"condition":{"comparator":"≥","constant":42,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 42%[/font]"},{"condition":{"comparator":"≥","constant":40,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 40%[/font]"},{"condition":{"comparator":"≥","constant":38,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 38%[/font]"},{"condition":{"comparator":"≥","constant":36,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 36%[/font]"},{"condition":{"comparator":"≥","constant":34,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 34%[/font]"},{"condition":{"comparator":"≥","constant":32,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 32%[/font]"},{"condition":{"comparator":"≥","constant":30,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 30%[/font]"},{"condition":{"comparator":"≥","constant":28,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 28%[/font]"},{"condition":{"comparator":"≥","constant":26,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 26%[/font]"},{"condition":{"comparator":"≥","constant":24,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 24%[/font]"},{"condition":{"comparator":"≥","constant":22,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 22%[/font]"},{"condition":{"comparator":"≥","constant":20,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 20%[/font]"},{"condition":{"comparator":"≥","constant":18,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 18%[/font]"},{"condition":{"comparator":"≥","constant":16,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 16%[/font]"},{"condition":{"comparator":"≥","constant":14,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 14%[/font]"},{"condition":{"comparator":"≥","constant":12,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 12%[/font]"},{"condition":{"comparator":"≥","constant":10,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 10%[/font]"},{"condition":{"comparator":"≥","constant":8,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 8%[/font]"},{"condition":{"comparator":"≥","constant":6,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 6%[/font]"},{"condition":{"comparator":"≥","constant":4,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 4%[/font]"},{"condition":{"comparator":"≥","constant":2,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 2%[/font]"},{"condition":{"comparator":"≥","constant":0,"first_signal":{"name":"parameter-2"}},"icon":{"name":"parameter-2"},"text":"[font=scenario-message-dialog][color=#FFffffff]░░░░░░[/color] 0%[/font]"}]},"direction":8,"entity_number":3,"name":"display-panel","position":{"x":61.5,"y":-473.5}},
+            {"control_behavior":{"parameters":[{"condition":{"comparator":"≥","constant":100,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 100%[/font]"},{"condition":{"comparator":"≥","constant":98,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 98%[/font]"},{"condition":{"comparator":"≥","constant":96,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 96%[/font]"},{"condition":{"comparator":"≥","constant":94,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 94%[/font]"},{"condition":{"comparator":"≥","constant":92,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 92%[/font]"},{"condition":{"comparator":"≥","constant":90,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 90%[/font]"},{"condition":{"comparator":"≥","constant":88,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 88%[/font]"},{"condition":{"comparator":"≥","constant":86,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 86%[/font]"},{"condition":{"comparator":"≥","constant":84,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 84%[/font]"},{"condition":{"comparator":"≥","constant":82,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 82%[/font]"},{"condition":{"comparator":"≥","constant":80,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 80%[/font]"},{"condition":{"comparator":"≥","constant":78,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 78%[/font]"},{"condition":{"comparator":"≥","constant":76,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 76%[/font]"},{"condition":{"comparator":"≥","constant":74,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 74%[/font]"},{"condition":{"comparator":"≥","constant":72,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 72%[/font]"},{"condition":{"comparator":"≥","constant":70,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 70%[/font]"},{"condition":{"comparator":"≥","constant":68,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 68%[/font]"},{"condition":{"comparator":"≥","constant":66,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 66%[/font]"},{"condition":{"comparator":"≥","constant":64,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 64%[/font]"},{"condition":{"comparator":"≥","constant":62,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 62%[/font]"},{"condition":{"comparator":"≥","constant":60,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 60%[/font]"},{"condition":{"comparator":"≥","constant":57,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 58%[/font]"},{"condition":{"comparator":"≥","constant":56,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 56%[/font]"},{"condition":{"comparator":"≥","constant":54,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 54%[/font]"},{"condition":{"comparator":"≥","constant":52,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 52%[/font]"},{"condition":{"comparator":"≥","constant":50,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 50%[/font]"},{"condition":{"comparator":"≥","constant":48,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 48%[/font]"},{"condition":{"comparator":"≥","constant":46,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 46%[/font]"},{"condition":{"comparator":"≥","constant":44,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 44%[/font]"},{"condition":{"comparator":"≥","constant":42,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 42%[/font]"},{"condition":{"comparator":"≥","constant":40,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 40%[/font]"},{"condition":{"comparator":"≥","constant":38,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 38%[/font]"},{"condition":{"comparator":"≥","constant":36,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 36%[/font]"},{"condition":{"comparator":"≥","constant":34,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 34%[/font]"},{"condition":{"comparator":"≥","constant":32,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 32%[/font]"},{"condition":{"comparator":"≥","constant":30,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 30%[/font]"},{"condition":{"comparator":"≥","constant":28,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 28%[/font]"},{"condition":{"comparator":"≥","constant":26,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 26%[/font]"},{"condition":{"comparator":"≥","constant":24,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 24%[/font]"},{"condition":{"comparator":"≥","constant":22,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 22%[/font]"},{"condition":{"comparator":"≥","constant":20,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 20%[/font]"},{"condition":{"comparator":"≥","constant":18,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 18%[/font]"},{"condition":{"comparator":"≥","constant":16,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 16%[/font]"},{"condition":{"comparator":"≥","constant":14,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 14%[/font]"},{"condition":{"comparator":"≥","constant":12,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 12%[/font]"},{"condition":{"comparator":"≥","constant":10,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 10%[/font]"},{"condition":{"comparator":"≥","constant":8,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 8%[/font]"},{"condition":{"comparator":"≥","constant":6,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 6%[/font]"},{"condition":{"comparator":"≥","constant":4,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 4%[/font]"},{"condition":{"comparator":"≥","constant":2,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 2%[/font]"},{"condition":{"comparator":"≥","constant":0,"first_signal":{"name":"parameter-1"}},"icon":{"name":"parameter-1"},"text":"[font=scenario-message-dialog][color=#FFffffff]░░░░░░[/color] 0%[/font]"}]},"direction":8,"entity_number":4,"name":"display-panel","position":{"x":60.5,"y":-473.5}},
+            {"always_on":true,"color":{"a":1,"b":0,"g":0,"r":1},"control_behavior":{"circuit_condition":{"comparator":"<","constant":10,"first_signal":{"name":"signal-percent","type":"virtual"}},"color_mode":2,"rgb_signal":{"name":"parameter-1"},"use_colors":true},"entity_number":5,"name":"small-lamp","position":{"x":60.5,"y":-472.5}},
+            {"always_on":true,"color":{"a":1,"b":0,"g":0,"r":1},"control_behavior":{"circuit_condition":{"comparator":"<","constant":10,"first_signal":{"name":"signal-percent","type":"virtual"}},"color_mode":2,"rgb_signal":{"name":"parameter-2"},"use_colors":true},"entity_number":6,"name":"small-lamp","position":{"x":61.5,"y":-472.5}},
+            {"control_behavior":{"decider_conditions":{"conditions":[{"first_signal":{"name":"signal-each","type":"virtual"},"first_signal_networks":{"green":true,"red":false},"second_signal":{"name":"signal-H","type":"virtual"},"second_signal_networks":{"green":false,"red":true}}],"outputs":[{"constant":16711680,"copy_count_from_input":false,"signal":{"name":"signal-each","type":"virtual"}}]}},"entity_number":7,"name":"decider-combinator","position":{"x":59.5,"y":-471}},
+            {"control_behavior":{"decider_conditions":{"conditions":[{"comparator":">","first_signal":{"name":"signal-each","type":"virtual"},"first_signal_networks":{"green":true,"red":false},"second_signal":{"name":"signal-L","type":"virtual"},"second_signal_networks":{"green":false,"red":true}}],"outputs":[{"constant":65280,"copy_count_from_input":false,"signal":{"name":"signal-each","type":"virtual"}}]}},"entity_number":8,"name":"decider-combinator","position":{"x":60.5,"y":-471}},
+            {"control_behavior":{"arithmetic_conditions":{"first_signal":{"name":"signal-each","type":"virtual"},"first_signal_networks":{"green":true,"red":false},"operation":"/","output_signal":{"name":"signal-each","type":"virtual"},"second_signal":{"name":"signal-each","type":"virtual"},"second_signal_networks":{"green":false,"red":true}}},"entity_number":9,"name":"arithmetic-combinator","position":{"x":61.5,"y":-471}},
+            {"control_behavior":{"arithmetic_conditions":{"first_signal":{"name":"signal-each","type":"virtual"},"operation":"*","output_signal":{"name":"signal-each","type":"virtual"},"second_constant":100}},"entity_number":10,"name":"arithmetic-combinator","position":{"x":62.5,"y":-471}},
+            {"entity_number":11,"name":"medium-electric-pole","position":{"x":64.5,"y":-470.5},"quality":"legendary"},
+            {"control_behavior":{"sections":{"sections":[{"filters":[{"comparator":"=","count":1001,"index":1,"name":"parameter-0","quality":"normal"},{"comparator":"=","count":1002,"index":2,"name":"parameter-1","quality":"normal"},{"comparator":"=","count":1003,"index":3,"name":"parameter-2","quality":"normal"}],"index":1},{"filters":[{"comparator":"=","count":90,"index":1,"name":"signal-H","quality":"normal","type":"virtual"},{"comparator":"=","count":10,"index":2,"name":"signal-L","quality":"normal","type":"virtual"}],"index":2}]}},"entity_number":12,"name":"constant-combinator","position":{"x":59.5,"y":-469.5}}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "display-panel"
+              }
+            },
+            {
+              "index": 2,
+              "signal": {
+                "name": "signal-red",
+                "type": "virtual"
+              }
+            },
+            {
+              "index": 3,
+              "signal": {
+                "name": "signal-yellow",
+                "type": "virtual"
+              }
+            },
+            {
+              "index": 4,
+              "signal": {
+                "name": "signal-green",
+                "type": "virtual"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "Resource (RYG) %",
+          "parameters": [
+            {
+              "id": "parameter-0",
+              "name": "Item 1",
+              "quality-condition": {
+                "comparator": "=",
+                "quality": "normal"
+              },
+              "type": "id"
+            },
+            {
+              "id": "parameter-1",
+              "name": "Item 2",
+              "quality-condition": {
+                "comparator": "=",
+                "quality": "normal"
+              },
+              "type": "id"
+            },
+            {
+              "id": "parameter-2",
+              "name": "Item 3",
+              "quality-condition": {
+                "comparator": "=",
+                "quality": "normal"
+              },
+              "type": "id"
+            },
+            {
+              "name": "High Percent (Green)",
+              "number": "90",
+              "type": "number"
+            },
+            {
+              "name": "Low Percent (Red)",
+              "number": "10",
+              "type": "number"
+            },
+            {
+              "dependent": true,
+              "formula": "p0_s",
+              "name": "Item 1 Amount (Default)",
+              "number": "1001",
+              "type": "number"
+            },
+            {
+              "dependent": true,
+              "formula": "p1_s",
+              "name": "Item 2 Amount (Default)",
+              "number": "1002",
+              "type": "number"
+            },
+            {
+              "dependent": true,
+              "formula": "p2_s",
+              "name": "Item 3 Amount (Default)",
+              "number": "1003",
+              "type": "number"
+            }
+          ],
+          "version": 562949957353472,
+          "wires": [
+            [1,2,4,2],
+            [2,1,5,1],
+            [2,1,7,3],
+            [3,2,4,2],
+            [3,2,9,4],
+            [5,1,6,1],
+            [7,1,8,1],
+            [7,1,12,1],
+            [7,2,8,2],
+            [7,3,8,3],
+            [8,1,9,1],
+            [8,2,9,4],
+            [9,2,10,4],
+            [10,2,11,2]
+          ]
+        },
+        "index": 0
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"always_on":true,"color":{"a":1,"b":0,"g":0,"r":1},"control_behavior":{"circuit_condition":{"comparator":"<","constant":10,"first_signal":{"name":"signal-percent","type":"virtual"}},"color_mode":2,"rgb_signal":{"name":"parameter-0"},"use_colors":true},"entity_number":1,"name":"small-lamp","position":{"x":-6.5,"y":5.5}},
+            {"control_behavior":{"parameters":[{"condition":{"comparator":"≥","constant":100,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 100%[/font]"},{"condition":{"comparator":"≥","constant":98,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 98%[/font]"},{"condition":{"comparator":"≥","constant":96,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 96%[/font]"},{"condition":{"comparator":"≥","constant":94,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 94%[/font]"},{"condition":{"comparator":"≥","constant":92,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 92%[/font]"},{"condition":{"comparator":"≥","constant":90,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 90%[/font]"},{"condition":{"comparator":"≥","constant":88,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 88%[/font]"},{"condition":{"comparator":"≥","constant":86,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 86%[/font]"},{"condition":{"comparator":"≥","constant":84,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██████[/color] 84%[/font]"},{"condition":{"comparator":"≥","constant":82,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 82%[/font]"},{"condition":{"comparator":"≥","constant":80,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 80%[/font]"},{"condition":{"comparator":"≥","constant":78,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 78%[/font]"},{"condition":{"comparator":"≥","constant":76,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 76%[/font]"},{"condition":{"comparator":"≥","constant":74,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 74%[/font]"},{"condition":{"comparator":"≥","constant":72,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 72%[/font]"},{"condition":{"comparator":"≥","constant":70,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 70%[/font]"},{"condition":{"comparator":"≥","constant":68,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█████░[/color] 68%[/font]"},{"condition":{"comparator":"≥","constant":66,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 66%[/font]"},{"condition":{"comparator":"≥","constant":64,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 64%[/font]"},{"condition":{"comparator":"≥","constant":62,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 62%[/font]"},{"condition":{"comparator":"≥","constant":60,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 60%[/font]"},{"condition":{"comparator":"≥","constant":57,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 58%[/font]"},{"condition":{"comparator":"≥","constant":56,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 56%[/font]"},{"condition":{"comparator":"≥","constant":54,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 54%[/font]"},{"condition":{"comparator":"≥","constant":52,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]████░░[/color] 52%[/font]"},{"condition":{"comparator":"≥","constant":50,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 50%[/font]"},{"condition":{"comparator":"≥","constant":48,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 48%[/font]"},{"condition":{"comparator":"≥","constant":46,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 46%[/font]"},{"condition":{"comparator":"≥","constant":44,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 44%[/font]"},{"condition":{"comparator":"≥","constant":42,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 42%[/font]"},{"condition":{"comparator":"≥","constant":40,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 40%[/font]"},{"condition":{"comparator":"≥","constant":38,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 38%[/font]"},{"condition":{"comparator":"≥","constant":36,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 36%[/font]"},{"condition":{"comparator":"≥","constant":34,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]███░░░[/color] 34%[/font]"},{"condition":{"comparator":"≥","constant":32,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 32%[/font]"},{"condition":{"comparator":"≥","constant":30,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 30%[/font]"},{"condition":{"comparator":"≥","constant":28,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 28%[/font]"},{"condition":{"comparator":"≥","constant":26,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 26%[/font]"},{"condition":{"comparator":"≥","constant":24,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 24%[/font]"},{"condition":{"comparator":"≥","constant":22,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 22%[/font]"},{"condition":{"comparator":"≥","constant":20,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 20%[/font]"},{"condition":{"comparator":"≥","constant":18,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]██░░░░[/color] 18%[/font]"},{"condition":{"comparator":"≥","constant":16,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 16%[/font]"},{"condition":{"comparator":"≥","constant":14,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 14%[/font]"},{"condition":{"comparator":"≥","constant":12,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 12%[/font]"},{"condition":{"comparator":"≥","constant":10,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 10%[/font]"},{"condition":{"comparator":"≥","constant":8,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 8%[/font]"},{"condition":{"comparator":"≥","constant":6,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 6%[/font]"},{"condition":{"comparator":"≥","constant":4,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 4%[/font]"},{"condition":{"comparator":"≥","constant":2,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]█░░░░░[/color] 2%[/font]"},{"condition":{"comparator":"≥","constant":0,"first_signal":{"name":"parameter-0"}},"icon":{"name":"parameter-0"},"text":"[font=scenario-message-dialog][color=#FFffffff]░░░░░░[/color] 0%[/font]"}]},"direction":8,"entity_number":2,"name":"display-panel","position":{"x":-6.5,"y":4.5}}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "display-panel"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "Expansion with %",
+          "parameters": [
+            {
+              "id": "parameter-0",
+              "quality-condition": {
+                "comparator": "=",
+                "quality": "normal"
+              },
+              "type": "id"
+            }
+          ],
+          "version": 562949957353472
+        },
+        "index": 1
+      },
+      {
+        "blueprint": {
+          "description": "By default, this BP displays up to three resources but is unlimited by adding additional lights.\n\nThe constant combinator by default has 3 resources set to their stack size. This can be modified afterwards or you can connect a red wire to set externally.\n\nThe constant combinator has values to decide the color of the lights for each resource:\nH = Light is green when greater than this percent (default 90%)\nL = Light is red when lower than this percent (default 10%)\n\n- designed by abucnasty",
+          "entities": [
+            {"entity_number":1,"icon":{"name":"parameter-0"},"name":"display-panel","position":{"x":9.5,"y":-675.5}},
+            {"always_on":true,"color":{"a":1,"b":0,"g":0,"r":1},"control_behavior":{"circuit_condition":{"comparator":"<","constant":10,"first_signal":{"name":"signal-percent","type":"virtual"}},"color_mode":2,"rgb_signal":{"name":"parameter-0"},"use_colors":true},"entity_number":2,"name":"small-lamp","position":{"x":9.5,"y":-674.5}},
+            {"entity_number":3,"icon":{"name":"parameter-2"},"name":"display-panel","position":{"x":11.5,"y":-675.5}},
+            {"entity_number":4,"icon":{"name":"parameter-1"},"name":"display-panel","position":{"x":10.5,"y":-675.5}},
+            {"always_on":true,"color":{"a":1,"b":0,"g":0,"r":1},"control_behavior":{"circuit_condition":{"comparator":"<","constant":10,"first_signal":{"name":"signal-percent","type":"virtual"}},"color_mode":2,"rgb_signal":{"name":"parameter-2"},"use_colors":true},"entity_number":5,"name":"small-lamp","position":{"x":11.5,"y":-674.5}},
+            {"always_on":true,"color":{"a":1,"b":0,"g":0,"r":1},"control_behavior":{"circuit_condition":{"comparator":"<","constant":10,"first_signal":{"name":"signal-percent","type":"virtual"}},"color_mode":2,"rgb_signal":{"name":"parameter-1"},"use_colors":true},"entity_number":6,"name":"small-lamp","position":{"x":10.5,"y":-674.5}},
+            {"control_behavior":{"decider_conditions":{"conditions":[{"first_signal":{"name":"signal-each","type":"virtual"},"first_signal_networks":{"green":true,"red":false},"second_signal":{"name":"signal-H","type":"virtual"},"second_signal_networks":{"green":false,"red":true}}],"outputs":[{"constant":16711680,"copy_count_from_input":false,"signal":{"name":"signal-each","type":"virtual"}}]}},"entity_number":7,"name":"decider-combinator","position":{"x":9.5,"y":-673}},
+            {"control_behavior":{"arithmetic_conditions":{"first_signal":{"name":"signal-each","type":"virtual"},"first_signal_networks":{"green":true,"red":false},"operation":"/","output_signal":{"name":"signal-each","type":"virtual"},"second_signal":{"name":"signal-each","type":"virtual"},"second_signal_networks":{"green":false,"red":true}}},"entity_number":8,"name":"arithmetic-combinator","position":{"x":11.5,"y":-673}},
+            {"control_behavior":{"decider_conditions":{"conditions":[{"comparator":">","first_signal":{"name":"signal-each","type":"virtual"},"first_signal_networks":{"green":true,"red":false},"second_signal":{"name":"signal-L","type":"virtual"},"second_signal_networks":{"green":false,"red":true}}],"outputs":[{"constant":65280,"copy_count_from_input":false,"signal":{"name":"signal-each","type":"virtual"}}]}},"entity_number":9,"name":"decider-combinator","position":{"x":10.5,"y":-673}},
+            {"control_behavior":{"arithmetic_conditions":{"first_signal":{"name":"signal-each","type":"virtual"},"operation":"*","output_signal":{"name":"signal-each","type":"virtual"},"second_constant":100}},"entity_number":10,"name":"arithmetic-combinator","position":{"x":12.5,"y":-673}},
+            {"entity_number":11,"name":"medium-electric-pole","position":{"x":14.5,"y":-672.5},"quality":"legendary"},
+            {"control_behavior":{"sections":{"sections":[{"filters":[{"comparator":"=","count":1001,"index":1,"name":"parameter-0","quality":"normal"},{"comparator":"=","count":1002,"index":2,"name":"parameter-1","quality":"normal"},{"comparator":"=","count":1003,"index":3,"name":"parameter-2","quality":"normal"}],"index":1},{"filters":[{"comparator":"=","count":90,"index":1,"name":"signal-H","quality":"normal","type":"virtual"},{"comparator":"=","count":10,"index":2,"name":"signal-L","quality":"normal","type":"virtual"}],"index":2}]}},"entity_number":12,"name":"constant-combinator","position":{"x":9.5,"y":-671.5}}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "display-panel"
+              }
+            },
+            {
+              "index": 2,
+              "signal": {
+                "name": "signal-red",
+                "type": "virtual"
+              }
+            },
+            {
+              "index": 3,
+              "signal": {
+                "name": "signal-yellow",
+                "type": "virtual"
+              }
+            },
+            {
+              "index": 4,
+              "signal": {
+                "name": "signal-green",
+                "type": "virtual"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "Resource (RYG)",
+          "parameters": [
+            {
+              "id": "parameter-0",
+              "name": "Item 1",
+              "quality-condition": {
+                "comparator": "=",
+                "quality": "normal"
+              },
+              "type": "id"
+            },
+            {
+              "id": "parameter-1",
+              "name": "Item 2",
+              "quality-condition": {
+                "comparator": "=",
+                "quality": "normal"
+              },
+              "type": "id"
+            },
+            {
+              "id": "parameter-2",
+              "name": "Item 3",
+              "quality-condition": {
+                "comparator": "=",
+                "quality": "normal"
+              },
+              "type": "id"
+            },
+            {
+              "name": "High Percent (Green)",
+              "number": "90",
+              "type": "number"
+            },
+            {
+              "name": "Low Percent (Red)",
+              "number": "10",
+              "type": "number"
+            },
+            {
+              "dependent": true,
+              "formula": "p0_s",
+              "name": "Item 1 Amount (Default)",
+              "number": "1001",
+              "type": "number"
+            },
+            {
+              "dependent": true,
+              "formula": "p1_s",
+              "name": "Item 2 Amount (Default)",
+              "number": "1002",
+              "type": "number"
+            },
+            {
+              "dependent": true,
+              "formula": "p2_s",
+              "name": "Item 3 Amount (Default)",
+              "number": "1003",
+              "type": "number"
+            }
+          ],
+          "version": 562949957353472,
+          "wires": [
+            [2,1,6,1],
+            [2,1,7,3],
+            [5,1,6,1],
+            [7,1,9,1],
+            [7,1,12,1],
+            [7,2,9,2],
+            [7,3,9,3],
+            [8,1,9,1],
+            [8,2,10,4],
+            [8,4,9,2],
+            [10,2,11,2]
+          ]
+        },
+        "index": 6
+      },
+      {
+        "blueprint": {
+          "entities": [
+            {"entity_number":1,"icon":{"name":"parameter-0"},"name":"display-panel","position":{"x":1.5,"y":-679.5}},
+            {"always_on":true,"color":{"a":1,"b":0,"g":0,"r":1},"control_behavior":{"circuit_condition":{"comparator":"<","constant":10,"first_signal":{"name":"signal-percent","type":"virtual"}},"color_mode":2,"rgb_signal":{"name":"parameter-0"},"use_colors":true},"entity_number":2,"name":"small-lamp","position":{"x":1.5,"y":-678.5}}
+          ],
+          "icons": [
+            {
+              "index": 1,
+              "signal": {
+                "name": "display-panel"
+              }
+            }
+          ],
+          "item": "blueprint",
+          "label": "Expansion",
+          "parameters": [
+            {
+              "id": "parameter-0",
+              "quality-condition": {
+                "comparator": "=",
+                "quality": "normal"
+              },
+              "type": "id"
+            }
+          ],
+          "version": 562949957353472
+        },
+        "index": 7
+      }
+    ],
+    "description": "Collection of display panels with configurable percent indicators. The ranges are configurable to show red for low, green for high, and yellow for in between low and high setpoint.\n- designed by abucnasty",
+    "icons": [
+      {
+        "index": 1,
+        "signal": {
+          "name": "display-panel"
+        }
+      },
+      {
+        "index": 2,
+        "signal": {
+          "name": "signal-red",
+          "type": "virtual"
+        }
+      },
+      {
+        "index": 3,
+        "signal": {
+          "name": "signal-green",
+          "type": "virtual"
+        }
+      },
+      {
+        "index": 4,
+        "signal": {
+          "name": "signal-yellow",
+          "type": "virtual"
+        }
+      }
+    ],
+    "item": "blueprint-book",
+    "label": "Packed RGB Dashboard",
+    "version": 562949957353472
+  }
+}
