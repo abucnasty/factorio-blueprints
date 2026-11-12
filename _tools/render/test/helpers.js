@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
 
 export const tempDir = prefix => fs.mkdtemp(path.join(os.tmpdir(), prefix));
 
@@ -83,4 +84,41 @@ export async function fakePids(workDir) {
         if (pid) pids.push(Number(pid));
     }
     return pids;
+}
+
+/** A zip file holding { name: text } entries, deflated, like the mod zips the game downloads */
+export function zipBytes(files) {
+    const locals = [];
+    const central = [];
+    let offset = 0;
+    for (const [name, text] of Object.entries(files)) {
+        const data = Buffer.from(text);
+        const packed = zlib.deflateRawSync(data);
+        const nameBytes = Buffer.from(name);
+        const header = Buffer.alloc(30);
+        header.writeUInt32LE(0x04034b50, 0);
+        header.writeUInt16LE(20, 4);
+        header.writeUInt16LE(8, 8);
+        header.writeUInt32LE(zlib.crc32(data), 14);
+        header.writeUInt32LE(packed.length, 18);
+        header.writeUInt32LE(data.length, 22);
+        header.writeUInt16LE(nameBytes.length, 26);
+        const entry = Buffer.alloc(46);
+        entry.writeUInt32LE(0x02014b50, 0);
+        entry.writeUInt16LE(20, 4);
+        entry.writeUInt16LE(20, 6);
+        header.copy(entry, 8, 6, 30);
+        entry.writeUInt32LE(offset, 42);
+        locals.push(header, nameBytes, packed);
+        central.push(entry, nameBytes);
+        offset += header.length + nameBytes.length + packed.length;
+    }
+    const directory = Buffer.concat(central);
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0);
+    end.writeUInt16LE(Object.keys(files).length, 8);
+    end.writeUInt16LE(Object.keys(files).length, 10);
+    end.writeUInt32LE(directory.length, 12);
+    end.writeUInt32LE(offset, 16);
+    return Buffer.concat([...locals, directory, end]);
 }

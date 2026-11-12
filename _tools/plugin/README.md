@@ -28,7 +28,8 @@ notes beside them, and back. The built plugin is committed in
 
 Settings: default authors, commit after import and render, the template
 path and the link service address (shared); per computer: the git binary,
-Factorio path, Node path, extra render arguments and render after import.
+Factorio path, Node path, extra render arguments, render after import, and
+render mods with their mods folder (`--enable-mods`, `--mods`).
 
 ## Build and test
 

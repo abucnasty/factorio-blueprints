@@ -31,6 +31,8 @@ export const LOCAL = {
   factorioPath: "factorio-blueprints-factorio-path",
   nodePath: "factorio-blueprints-node-path",
   renderArgs: "factorio-blueprints-render-args",
+  renderMods: "factorio-blueprints-render-mods",
+  modsFolder: "factorio-blueprints-mods-folder",
   renderAfterImport: "factorio-blueprints-render-after-import",
 } as const;
 
@@ -49,6 +51,14 @@ export function parseArgs(text: string): string[] {
   return [...text.matchAll(/"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2]!);
 }
 
+/** Mod names separated by commas or new lines. */
+export function parseModNames(text: string): string[] {
+  return text
+    .split(/[,\n]/)
+    .map((m) => m.trim())
+    .filter((m) => m !== "");
+}
+
 function localString(app: App, key: string): string {
   const v = app.loadLocalStorage(key);
   return typeof v === "string" ? v : "";
@@ -59,6 +69,8 @@ export function loadRenderSettings(app: App): RenderSettings {
     factorioPath: localString(app, LOCAL.factorioPath),
     nodePath: localString(app, LOCAL.nodePath) || defaultNodeBinary(),
     extraArgs: parseArgs(localString(app, LOCAL.renderArgs)),
+    enableMods: parseModNames(localString(app, LOCAL.renderMods)),
+    modsFolder: localString(app, LOCAL.modsFolder),
     afterImport: app.loadLocalStorage(LOCAL.renderAfterImport) === true,
   };
 }
@@ -159,6 +171,20 @@ export class BlueprintSettingTab extends PluginSettingTab {
       "Added to every render, for example --show-window.",
       LOCAL.renderArgs,
       "--show-window",
+    );
+    new Setting(containerEl)
+      .setName("Render mods")
+      .setDesc("Mods to enable for renders, for example ones that change planet backgrounds. Separate names with commas or new lines.")
+      .addTextArea((t) =>
+        t
+          .setValue(localString(this.app, LOCAL.renderMods))
+          .onChange((v) => this.app.saveLocalStorage(LOCAL.renderMods, v.trim() === "" ? null : v.trim())),
+      );
+    this.localText(
+      "Mods folder",
+      "Where the render mods are. Leave empty to use the game's own mods folder.",
+      LOCAL.modsFolder,
+      "/path/to/mods",
     );
     new Setting(containerEl)
       .setName("Render after import")

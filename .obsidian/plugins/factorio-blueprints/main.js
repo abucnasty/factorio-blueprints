@@ -8944,6 +8944,8 @@ then render again.`
     abs(joinPath(folder, "renders")),
     "--json",
     ...only.length > 0 ? ["--only", only.join(",")] : [],
+    ...settings.enableMods.length > 0 ? ["--enable-mods", settings.enableMods.join(",")] : [],
+    ...settings.enableMods.length > 0 && settings.modsFolder.trim() !== "" ? ["--mods", settings.modsFolder.trim()] : [],
     ...settings.extraArgs
   ];
   const result = await runTool(host, node2, args, folder, signal);
@@ -9131,6 +9133,8 @@ async function renderExpandedBook(host, loc, signal, node2) {
       abs(joinPath(scratch, "out")),
       "--json",
       ...only.length > 0 ? ["--only", only.join(",")] : [],
+      ...settings.enableMods.length > 0 ? ["--enable-mods", settings.enableMods.join(",")] : [],
+      ...settings.enableMods.length > 0 && settings.modsFolder.trim() !== "" ? ["--mods", settings.modsFolder.trim()] : [],
       ...settings.extraArgs
     ];
     const result = await runTool(host, node2, args, folder, signal);
@@ -9821,6 +9825,8 @@ var LOCAL = {
   factorioPath: "factorio-blueprints-factorio-path",
   nodePath: "factorio-blueprints-node-path",
   renderArgs: "factorio-blueprints-render-args",
+  renderMods: "factorio-blueprints-render-mods",
+  modsFolder: "factorio-blueprints-mods-folder",
   renderAfterImport: "factorio-blueprints-render-after-import"
 };
 var GIT_BINARY_KEY = LOCAL.gitBinary;
@@ -9829,6 +9835,9 @@ function parseAuthors(authors) {
 }
 function parseArgs(text) {
   return [...text.matchAll(/"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2]);
+}
+function parseModNames(text) {
+  return text.split(/[,\n]/).map((m) => m.trim()).filter((m) => m !== "");
 }
 function localString(app, key) {
   const v = app.loadLocalStorage(key);
@@ -9839,6 +9848,8 @@ function loadRenderSettings(app) {
     factorioPath: localString(app, LOCAL.factorioPath),
     nodePath: localString(app, LOCAL.nodePath) || defaultNodeBinary(),
     extraArgs: parseArgs(localString(app, LOCAL.renderArgs)),
+    enableMods: parseModNames(localString(app, LOCAL.renderMods)),
+    modsFolder: localString(app, LOCAL.modsFolder),
     afterImport: app.loadLocalStorage(LOCAL.renderAfterImport) === true
   };
 }
@@ -9904,6 +9915,15 @@ var BlueprintSettingTab = class extends import_obsidian2.PluginSettingTab {
       "Added to every render, for example --show-window.",
       LOCAL.renderArgs,
       "--show-window"
+    );
+    new import_obsidian2.Setting(containerEl).setName("Render mods").setDesc("Mods to enable for renders, for example ones that change planet backgrounds. Separate names with commas or new lines.").addTextArea(
+      (t) => t.setValue(localString(this.app, LOCAL.renderMods)).onChange((v) => this.app.saveLocalStorage(LOCAL.renderMods, v.trim() === "" ? null : v.trim()))
+    );
+    this.localText(
+      "Mods folder",
+      "Where the render mods are. Leave empty to use the game's own mods folder.",
+      LOCAL.modsFolder,
+      "/path/to/mods"
     );
     new import_obsidian2.Setting(containerEl).setName("Render after import").setDesc("Run Render preview right after each import (a second commit). Needs the Factorio path.").addToggle(
       (t) => t.setValue(this.app.loadLocalStorage(LOCAL.renderAfterImport) === true).onChange((v) => this.app.saveLocalStorage(LOCAL.renderAfterImport, v ? true : null))

@@ -128,7 +128,7 @@ export function fakeHost(opts: FakeOptions = {}): FakeHost {
       templatePath: "_tools/templates/blueprint-notes.md",
       linkBase: BASE,
       ...plain,
-      render: { factorioPath: "", nodePath: process.execPath, extraArgs: [], afterImport: false, ...render },
+      render: { factorioPath: "", nodePath: process.execPath, extraArgs: [], enableMods: [], modsFolder: "", afterImport: false, ...render },
     },
     today: () => "2026-11-12",
     vaultPath: opts.disk,

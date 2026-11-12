@@ -129,6 +129,8 @@ async function run(host: Host, contextFolder: string, signal: AbortSignal, optio
     abs(joinPath(folder, "renders")),
     "--json",
     ...(only.length > 0 ? ["--only", only.join(",")] : []),
+    ...(settings.enableMods.length > 0 ? ["--enable-mods", settings.enableMods.join(",")] : []),
+    ...(settings.enableMods.length > 0 && settings.modsFolder.trim() !== "" ? ["--mods", settings.modsFolder.trim()] : []),
     ...settings.extraArgs,
   ];
   const result = await runTool(host, node, args, folder, signal);
@@ -360,6 +362,8 @@ async function renderExpandedBook(host: Host, loc: Located, signal: AbortSignal,
       abs(joinPath(scratch, "out")),
       "--json",
       ...(only.length > 0 ? ["--only", only.join(",")] : []),
+      ...(settings.enableMods.length > 0 ? ["--enable-mods", settings.enableMods.join(",")] : []),
+      ...(settings.enableMods.length > 0 && settings.modsFolder.trim() !== "" ? ["--mods", settings.modsFolder.trim()] : []),
       ...settings.extraArgs,
     ];
     const result = await runTool(host, node, args, folder, signal);
