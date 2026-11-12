@@ -4,6 +4,9 @@ authors: [abucnasty, geist]
 version: "1.3"
 posted: 2026-07-18
 factoriobin: https://factoriobin.com/post/jtmegd
+entities: 3117
+tiles: 9824
+factorio_version: "2.1.11.1"
 ---
 
 Main Notes:

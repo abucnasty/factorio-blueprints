@@ -5,7 +5,13 @@ version: "1.2"
 posted: 2026-02-03
 video: https://youtu.be/hhn6a_TgCOQ
 factoriobin: https://factoriobin.com/post/cgy91k
+entities: 968
+blueprints: 2
+factorio_version: "2.0.73.1"
 ---
+
+- [Lead (clocks)](https://blueprints.abucnasty.dev/megabasing/common-quality-science/automation-science-480/0.txt)
+- [Follower](https://blueprints.abucnasty.dev/megabasing/common-quality-science/automation-science-480/1.txt)
 
 inspired by Syvkal & phlap
 

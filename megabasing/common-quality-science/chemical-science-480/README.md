@@ -5,6 +5,8 @@ posted: 2025-09-30
 video: https://youtu.be/ueV6b7eCEGY
 factoriobin: https://factoriobin.com/post/q9xxwq
 deprecated: true
+entities: 2550
+factorio_version: "2.0.66.1"
 ---
 
 red circuits by thaeln, engine switching absurdity by abucnasty

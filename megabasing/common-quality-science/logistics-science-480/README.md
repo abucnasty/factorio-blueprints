@@ -5,7 +5,14 @@ posted: 2025-08-30
 video: https://www.youtube.com/watch?v=2ENY4AjjdqE
 factoriobin: https://factoriobin.com/post/bmvzi0
 deprecated: true
+entities: 2296
+blueprints: 3
+factorio_version: "2.0.64.2"
 ---
+
+- [Stage1](https://blueprints.abucnasty.dev/megabasing/common-quality-science/logistics-science-480/0.txt)
+- [Stage2](https://blueprints.abucnasty.dev/megabasing/common-quality-science/logistics-science-480/1.txt)
+- [Final](https://blueprints.abucnasty.dev/megabasing/common-quality-science/logistics-science-480/2.txt)
 
 480 Logistic Science Pack /s on 2 Turbo Transport Belt on 2 lanes each.
 Clocking based on leading assembler IO conditions.
