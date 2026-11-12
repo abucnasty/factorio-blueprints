@@ -13,7 +13,8 @@ The repo root is the Obsidian vault.
 .github/workflows/         CI and deploys
 .gitattributes .lfsconfig  Git LFS setup for render images
 _tools/                    everything that is not a blueprint
-  docs/                    design docs, this file, setup guides
+  docs/                    this file and the setup doc
+  setup/                   per-machine setup check script
   templates/               note templates
   plugin/                  Obsidian plugin source (TypeScript)
   lfs-worker/              Cloudflare Worker: Git LFS endpoint backed by R2
