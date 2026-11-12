@@ -2,12 +2,19 @@
 
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
 
-import { decodeBlueprintString, encodeFactorioVersion, plainLabel, writeCanonicalJson } from "../../plugin/src/core/index.ts";
+import {
+  decodeBlueprintString,
+  encodeFactorioVersion,
+  expandBook,
+  type ExpandedEntry,
+  plainLabel,
+  writeCanonicalJson,
+} from "../../plugin/src/core/index.ts";
 import { buildCatalog, entryKey, type LiveIndex, produceStrings, selectStrings, stringKey } from "../build-catalog.ts";
 
 process.env["GIT_CONFIG_GLOBAL"] = "/dev/null";
@@ -53,7 +60,7 @@ const notes = (fm: string) => `---\n${fm}\n---\n\nNotes.\n`;
 const pointer = (oid: string, size = 1234) => `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${size}\n`;
 const OID = "a".repeat(64);
 
-test("builds the index: history, renames via previous_paths, renders, frontmatter", () => {
+test("builds the index: history, renames via previous_paths, renders, frontmatter", async () => {
   const r = repo();
   r.write("cat/a/blueprint.json", bp("A"));
   r.write("cat/a/README.md", notes("title: A\nauthors: [me]\nversion: 1\nposted: 2026-03-10\ncustom: dropped"));
@@ -73,7 +80,7 @@ test("builds the index: history, renames via previous_paths, renders, frontmatte
   r.write("cat/a/README.md", notes("title: A2\nauthors: [me]"));
   const c4 = r.commit("retitle a");
 
-  const { index, problems } = buildCatalog(r.dir, { now: new Date("2026-01-01T00:00:00Z") });
+  const { index, problems } = await buildCatalog(r.dir, { now: new Date("2026-01-01T00:00:00Z") });
   assert.deepEqual(problems, []);
   assert.equal(index.commit, c4);
   assert.equal(index.generatedAt, "2026-01-01T00:00:00.000Z");
@@ -100,7 +107,7 @@ test("builds the index: history, renames via previous_paths, renders, frontmatte
   assert.deepEqual(b.history.map((h) => h.sha), [c3, c1], "history follows the old path");
 });
 
-test("history dates are author dates, in git log order", () => {
+test("history dates are author dates, in git log order", async () => {
   const r = repo();
   r.write("cat/a/blueprint.json", bp("A1"));
   r.write("cat/a/README.md", notes("title: A\nauthors: []"));
@@ -114,7 +121,7 @@ test("history dates are author dates, in git log order", () => {
   const newer = r.git("rev-parse", "HEAD");
   assert.notEqual(r.git("log", "-1", "--format=%cI", newer).slice(0, 4), "2023");
 
-  const [a] = buildCatalog(r.dir).index.blueprints;
+  const [a] = (await buildCatalog(r.dir)).index.blueprints;
   assert.deepEqual(
     a!.history.map((h) => [h.sha, h.date]),
     [
@@ -124,7 +131,7 @@ test("history dates are author dates, in git log order", () => {
   );
 });
 
-test("produces each version's string from that commit, under the current path", () => {
+test("produces each version's string from that commit, under the current path", async () => {
   const r = repo();
   r.write("cat/a/blueprint.json", bp("A1"));
   r.write("cat/a/README.md", notes("title: A\nauthors: []"));
@@ -135,9 +142,9 @@ test("produces each version's string from that commit, under the current path", 
   r.write("cat/z/README.md", notes("title: A\nauthors: []\nprevious_paths: [cat/a]"));
   const c3 = r.commit("rename");
 
-  const catalog = buildCatalog(r.dir);
+  const catalog = await buildCatalog(r.dir);
   const out = new Map<string, string>();
-  produceStrings(r.dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
+  await produceStrings(r.dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
   assert.deepEqual([...out.keys()].sort(), [c1, c2, c3].map((s) => stringKey("cat/z", s)).sort());
   const label = (sha: string) => (decodeBlueprintString(out.get(stringKey("cat/z", sha))!).value as any).blueprint.label;
   assert.equal(label(c1), "A1");
@@ -145,30 +152,30 @@ test("produces each version's string from that commit, under the current path", 
   assert.equal(label(c3), "A2");
 });
 
-test("an old version that was not a valid blueprint is dropped from the history", () => {
+test("an old version that was not a valid blueprint is dropped from the history", async () => {
   const r = repo();
   r.write("cat/a/blueprint.json", "{ broken");
   r.write("cat/a/README.md", notes("title: A\nauthors: []"));
   const bad = r.commit("broken");
   r.write("cat/a/blueprint.json", bp("A"));
   const good = r.commit("fixed");
-  const catalog = buildCatalog(r.dir);
+  const catalog = await buildCatalog(r.dir);
   assert.deepEqual(catalog.index.blueprints[0]!.history.map((h) => h.sha), [good, bad]);
   const keys: string[] = [];
-  const { warnings } = produceStrings(r.dir, catalog, selectStrings(catalog.index), (k) => keys.push(k));
+  const { warnings } = await produceStrings(r.dir, catalog, selectStrings(catalog.index), (k) => keys.push(k));
   assert.deepEqual(keys, [stringKey("cat/a", good)]);
   assert.equal(warnings.length, 1);
   assert.deepEqual(catalog.index.blueprints[0]!.history.map((h) => h.sha), [good]);
 });
 
-test("selects only strings the live index lacks", () => {
+test("selects only strings the live index lacks", async () => {
   const r = repo();
   r.write("cat/a/blueprint.json", bp("A"));
   r.write("cat/a/README.md", notes("title: A\nauthors: []"));
   r.write("cat/b/blueprint.json", bp("B"));
   r.write("cat/b/README.md", notes("title: B\nauthors: []"));
   const c1 = r.commit("one");
-  const live = buildCatalog(r.dir).index;
+  const live = (await buildCatalog(r.dir)).index;
   assert.equal(selectStrings(live).length, 2, "no live index: everything");
   assert.deepEqual(selectStrings(live, live), []);
 
@@ -181,14 +188,14 @@ test("selects only strings the live index lacks", () => {
   r.git("mv", "cat/b", "cat/c");
   r.write("cat/c/README.md", notes("title: B\nauthors: []\nprevious_paths: [cat/b]"));
   const c4 = r.commit("rename b");
-  const next = buildCatalog(r.dir).index;
+  const next = (await buildCatalog(r.dir)).index;
   assert.deepEqual(
     selectStrings(next, live).map((j) => j.key),
     [stringKey("cat/a", c3), stringKey("cat/a", c2), stringKey("cat/c", c4), stringKey("cat/c", c1)],
   );
 });
 
-test("book nodes: slot paths with and without index, nested books, planners, renders and cover", () => {
+test("book nodes: slot paths with and without index, nested books, planners, renders and cover", async () => {
   const inner = { item: "blueprint-book", label: "Inner [item=iron-plate]", blueprints: [{ blueprint: bpBody("Y") }, { index: 4, blueprint: bpBody("X") }] };
   const upgrade = { item: "upgrade-planner", label: "Up", settings: { mappers: [] } };
   const decon = { item: "deconstruction-planner", settings: {} };
@@ -203,7 +210,7 @@ test("book nodes: slot paths with and without index, nested books, planners, ren
   r.write("cat/book/renders/3/0.png", pointer("3".repeat(64)));
   const sha = r.commit("book");
 
-  const catalog = buildCatalog(r.dir);
+  const catalog = await buildCatalog(r.dir);
   assert.deepEqual(catalog.problems, []);
   const e = catalog.index.blueprints[0]!;
   assert.equal(catalog.index.schema, 2);
@@ -227,7 +234,7 @@ test("book nodes: slot paths with and without index, nested books, planners, ren
   assert.equal(e.history[0]!.entries, true);
 
   const out = new Map<string, string>();
-  const stats = produceStrings(r.dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
+  const stats = await produceStrings(r.dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
   assert.deepEqual(stats, { warnings: [], roots: 1, entries: 6 });
   const decoded = (slot: string) => decodeBlueprintString(out.get(entryKey("cat/book", sha, slot))!).value;
   assert.deepEqual(decoded("3"), { blueprint_book: inner }, "a nested book's own string");
@@ -238,7 +245,7 @@ test("book nodes: slot paths with and without index, nested books, planners, ren
   assert.ok(out.has(stringKey("cat/book", sha)));
 });
 
-test("non-image files under renders/ are ignored; a shared slot goes to the first entry", () => {
+test("non-image files under renders/ are ignored; a shared slot goes to the first entry", async () => {
   const r = repo();
   r.write("cat/book/blueprint.json", book("B", [{ index: 0, blueprint: bpBody("first") }, { index: 0, blueprint: bpBody("second") }]));
   r.write("cat/book/README.md", notes("title: B\nauthors: []"));
@@ -249,43 +256,43 @@ test("non-image files under renders/ are ignored; a shared slot goes to the firs
   r.write("cat/book/renders/notes.txt", "anything\n");
   r.commit("fix the book, add a render and its manifest");
 
-  const catalog = buildCatalog(r.dir);
+  const catalog = await buildCatalog(r.dir);
   assert.deepEqual(catalog.problems, []);
   const e = catalog.index.blueprints[0]!;
   assert.deepEqual(e.renders.map((x) => x.file), ["0.jpg"]);
   assert.equal(e.cover, "0.jpg");
 
   const out = new Map<string, string>();
-  const { warnings } = produceStrings(r.dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
+  const { warnings } = await produceStrings(r.dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
   const label = (decodeBlueprintString(out.get(entryKey("cat/book", old, "0"))!).value as any).blueprint.label;
   assert.equal(label, "first");
   assert.match(warnings.join(), /second entry in slot 0/);
 });
 
-test("an entry that a later version removes keeps its string for the older version only", () => {
+test("an entry that a later version removes keeps its string for the older version only", async () => {
   const r = repo();
   r.write("cat/book/blueprint.json", book("B", [{ index: 0, blueprint: bpBody("keep") }, { index: 1, blueprint: bpBody("gone") }]));
   r.write("cat/book/README.md", notes("title: B\nauthors: []"));
   const c1 = r.commit("two entries");
   r.write("cat/book/blueprint.json", book("B", [{ index: 0, blueprint: bpBody("keep") }]));
   const c2 = r.commit("one entry");
-  const catalog = buildCatalog(r.dir);
+  const catalog = await buildCatalog(r.dir);
   const keys = new Set<string>();
-  produceStrings(r.dir, catalog, selectStrings(catalog.index), (k) => keys.add(k));
+  await produceStrings(r.dir, catalog, selectStrings(catalog.index), (k) => keys.add(k));
   assert.ok(keys.has(entryKey("cat/book", c1, "1")));
   assert.ok(keys.has(entryKey("cat/book", c2, "0")));
   assert.ok(!keys.has(entryKey("cat/book", c2, "1")));
   assert.deepEqual(catalog.index.blueprints[0]!.nodes!.map((n) => n.path), ["0"]);
 });
 
-test("entry strings: a schema 1 live index gets all of them once, then a second run has nothing to do", () => {
+test("entry strings: a schema 1 live index gets all of them once, then a second run has nothing to do", async () => {
   const r = repo();
   r.write("cat/book/blueprint.json", book("B", [{ blueprint: bpBody("a") }, { blueprint: bpBody("b") }]));
   r.write("cat/book/README.md", notes("title: B\nauthors: []"));
   r.commit("one");
   r.write("cat/book/blueprint.json", book("B", [{ blueprint: bpBody("a") }, { blueprint: bpBody("c") }]));
   r.commit("two");
-  const index = buildCatalog(r.dir).index;
+  const index = (await buildCatalog(r.dir)).index;
   const v1: LiveIndex = JSON.parse(JSON.stringify(index));
   v1.schema = 1;
   for (const e of v1.blueprints) for (const h of e.history) delete h.entries;
@@ -293,16 +300,16 @@ test("entry strings: a schema 1 live index gets all of them once, then a second 
   const jobs = selectStrings(index, v1);
   assert.equal(jobs.length, 2);
   assert.ok(jobs.every((j) => !j.root && j.entries), "roots exist, entries do not");
-  const catalog = buildCatalog(r.dir);
+  const catalog = await buildCatalog(r.dir);
   const keys: string[] = [];
-  produceStrings(r.dir, catalog, jobs, (k) => keys.push(k));
+  await produceStrings(r.dir, catalog, jobs, (k) => keys.push(k));
   assert.equal(keys.length, 4);
   assert.ok(keys.every((k) => /\/[0-9a-f]{40}\/[01]\.txt$/.test(k)));
 
   assert.deepEqual(selectStrings(index, index), [], "the schema 2 index it published leaves nothing to do");
 });
 
-test("a blueprint folder inside another is rejected; the outer one is still published", () => {
+test("a blueprint folder inside another is rejected; the outer one is still published", async () => {
   const r = repo();
   r.write("cat/outer/blueprint.json", bp("Outer"));
   r.write("cat/outer/README.md", notes("title: O\nauthors: []"));
@@ -311,14 +318,14 @@ test("a blueprint folder inside another is rejected; the outer one is still publ
   r.write("cat/dup/blueprint.json", book("D", [{ index: 1, blueprint: bpBody("a") }, { blueprint: bpBody("b") }]));
   r.write("cat/dup/README.md", notes("title: D\nauthors: []"));
   r.commit("nested");
-  const { index, problems, invalid } = buildCatalog(r.dir);
+  const { index, problems, invalid } = await buildCatalog(r.dir);
   assert.deepEqual(index.blueprints.map((e) => e.path), ["cat/outer"]);
   assert.deepEqual(invalid, ["cat/dup", "cat/outer/3"]);
   assert.match(problems.find((p) => p.folder === "cat/outer/3")!.message, /inside the blueprint folder cat\/outer/);
   assert.match(problems.find((p) => p.folder === "cat/dup")!.message, /more than one entry in book slot 1/);
 });
 
-test("lists validation failures and leaves those blueprints out", () => {
+test("lists validation failures and leaves those blueprints out", async () => {
   const r = repo();
   r.write("ok/a/blueprint.json", bp("A"));
   r.write("ok/a/README.md", notes("title: A\nauthors: []"));
@@ -343,7 +350,7 @@ test("lists validation failures and leaves those blueprints out", () => {
   r.write("bad/render/renders/cover.jpg", pointer(OID));
   r.commit("mixed");
 
-  const { index, problems } = buildCatalog(r.dir);
+  const { index, problems } = await buildCatalog(r.dir);
   assert.deepEqual(index.blueprints.map((e) => e.path), ["ok/a"]);
   const byPath = (p: string) => problems.filter((x) => x.path.startsWith(p + "/") || x.path === p).map((x) => x.message);
   assert.match(byPath("bad/noncanonical").join(), /canonical/);
@@ -359,6 +366,163 @@ test("lists validation failures and leaves those blueprints out", () => {
     "bad/render/renders/cover.jpg",
   ]);
   assert.equal(byPath("ok/a").length, 0);
+});
+
+// Expanded books: a book stored as folders (book.json and slot folders).
+
+type Repo = ReturnType<typeof repo>;
+
+/** Write `value` (a book) as an expanded book at `folder`, with a README.md in every folder. */
+function writeExpanded(r: Repo, folder: string, value: unknown) {
+  const { book, entries } = expandBook(value);
+  const write = (dir: string, b: unknown, list: ExpandedEntry[]) => {
+    r.write(`${dir}/book.json`, writeCanonicalJson(b));
+    r.write(`${dir}/README.md`, notes(`title: ${dir}\nauthors: []`));
+    for (const e of list) {
+      const path = `${dir}/${e.folder}`;
+      if (e.entries) write(path, e.book, e.entries);
+      else {
+        r.write(`${path}/blueprint.json`, writeCanonicalJson(e.value));
+        r.write(`${path}/README.md`, notes(`title: ${e.label}\nauthors: []`));
+      }
+    }
+  };
+  write(folder, book, entries);
+}
+
+const nestedBook = () =>
+  JSON.parse(
+    book("Root", [
+      { index: 0, blueprint: bpBody("Stone") },
+      { index: 1, blueprint_book: { item: "blueprint-book", label: "Inner", blueprints: [{ index: 0, blueprint: bpBody("Bricks") }, { index: 3, blueprint: bpBody("Iron") }] } },
+      { index: 2, upgrade_planner: { item: "upgrade-planner", label: "Up", settings: {} } },
+    ]),
+  );
+
+test("expanding a book keeps its path, history, root string and entry strings", async () => {
+  const r = repo();
+  r.write("cat/book/blueprint.json", writeCanonicalJson(nestedBook()));
+  r.write("cat/book/README.md", notes("title: Book\nauthors: []"));
+  r.write("cat/book/renders/0.jpg", pointer("0".repeat(64)));
+  r.write("cat/book/renders/1/3.jpg", pointer("3".repeat(64)));
+  const c1 = r.commit("add book");
+
+  r.git("rm", "-r", "-q", "cat/book/blueprint.json", "cat/book/renders");
+  writeExpanded(r, "cat/book", nestedBook());
+  r.write("cat/book/README.md", notes("title: Book\nauthors: []"));
+  r.write("cat/book/0-stone/renders/0.jpg", pointer("a".repeat(64), 10));
+  r.write("cat/book/0-stone/renders/render.json", "{}\n");
+  r.write("cat/book/1-inner/3-iron/renders/0.png", pointer("b".repeat(64), 20));
+  const c2 = r.commit("expand book");
+  r.write("cat/book/1-inner/README.md", notes("title: Inner book\nauthors: [me]"));
+  r.commit("notes only");
+
+  const catalog = await buildCatalog(r.dir);
+  assert.deepEqual(catalog.problems, []);
+  assert.deepEqual(catalog.index.blueprints.map((e) => e.path), ["cat/book"], "slot folders are not entries");
+  const e = catalog.index.blueprints[0]!;
+  assert.equal(e.title, "Book");
+  assert.equal(e.commit, c2);
+  assert.deepEqual(e.history.map((h) => h.sha), [c2, c1], "a notes-only commit is not a version");
+  assert.equal(e.blueprint.kind, "blueprint-book");
+  assert.equal(e.blueprint.counts.blueprints, 3);
+  assert.deepEqual(e.renders, [
+    { file: "0.jpg", oid: "a".repeat(64), size: 10 },
+    { file: "1/3.png", oid: "b".repeat(64), size: 20 },
+  ]);
+  assert.equal(e.cover, "0.jpg");
+  assert.deepEqual(e.nodes, [
+    { slot: 0, path: "0", kind: "blueprint", label: "Stone", render: "0.jpg", folder: "cat/book/0-stone" },
+    {
+      slot: 1,
+      path: "1",
+      kind: "blueprint-book",
+      label: "Inner",
+      folder: "cat/book/1-inner",
+      children: [
+        { slot: 0, path: "1/0", kind: "blueprint", label: "Bricks", folder: "cat/book/1-inner/0-bricks" },
+        { slot: 3, path: "1/3", kind: "blueprint", label: "Iron", render: "1/3.png", folder: "cat/book/1-inner/3-iron" },
+      ],
+    },
+    { slot: 2, path: "2", kind: "upgrade-planner", label: "Up", folder: "cat/book/2-up" },
+  ]);
+
+  const out = new Map<string, string>();
+  const stats = await produceStrings(r.dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
+  assert.deepEqual(stats, { warnings: [], roots: 2, entries: 10 });
+  assert.equal(out.get(stringKey("cat/book", c2)), out.get(stringKey("cat/book", c1)), "the same root string before and after");
+  for (const sha of [c1, c2]) {
+    for (const slot of ["0", "1", "1/0", "1/3", "2"]) assert.ok(out.has(entryKey("cat/book", sha, slot)), `${slot}@${sha}`);
+  }
+  assert.deepEqual(decodeBlueprintString(out.get(entryKey("cat/book", c2, "1/3"))!).value, { blueprint: bpBody("Iron") });
+
+  // A change to one leaf is a new version of the root book.
+  r.write("cat/book/1-inner/0-bricks/blueprint.json", bp("Bricks", 2));
+  const c3 = r.commit("grow bricks");
+  const next = await buildCatalog(r.dir);
+  assert.deepEqual(next.index.blueprints[0]!.history.map((h) => h.sha), [c3, c2, c1]);
+  assert.deepEqual(selectStrings(next.index, catalog.index).map((j) => j.sha), [c3]);
+});
+
+test("expanded book rules: slot folders, both files, nesting, notes and renders", async () => {
+  const r = repo();
+  const value = () => JSON.parse(book("B", [{ index: 0, blueprint: bpBody("a") }, { index: 1, blueprint: bpBody("b") }]));
+  writeExpanded(r, "ok/book", value());
+  r.write("ok/book/notes/picture.txt", "a folder without blueprints may be anything");
+  writeExpanded(r, "bad/name", value());
+  renameSync(join(r.dir, "bad/name/1-b"), join(r.dir, "bad/name/misc"));
+  writeExpanded(r, "bad/holder", value());
+  r.write("bad/holder/stuff/0-x/blueprint.json", bp("x"));
+  r.write("bad/holder/stuff/0-x/README.md", notes("title: x\nauthors: []"));
+  writeExpanded(r, "bad/dup", value());
+  r.write("bad/dup/1-other/blueprint.json", bp("c"));
+  r.write("bad/dup/1-other/README.md", notes("title: c\nauthors: []"));
+  writeExpanded(r, "bad/both", value());
+  r.write("bad/both/0-a/book.json", writeCanonicalJson({ blueprint_book: { item: "blueprint-book" } }));
+  writeExpanded(r, "bad/notes", value());
+  r.write("bad/notes/1-b/README.md", notes("authors: []"));
+  writeExpanded(r, "bad/renders", value());
+  r.write("bad/renders/renders/0.jpg", pointer(OID));
+  writeExpanded(r, "bad/leaf-render", value());
+  r.write("bad/leaf-render/1-b/renders/1.jpg", pointer(OID));
+  writeExpanded(r, "bad/entries", value());
+  r.write("bad/entries/book.json", book("B", []));
+  r.write("bad/inside/blueprint.json", bp("outer"));
+  r.write("bad/inside/README.md", notes("title: o\nauthors: []"));
+  writeExpanded(r, "bad/inside/sub", value());
+  r.commit("books");
+  // A README.md missing from a nested folder is found too.
+  writeExpanded(r, "bad/nonotes", value());
+  r.git("add", "-A");
+  r.git("rm", "-q", "--cached", "bad/nonotes/0-a/README.md");
+  r.git("commit", "-q", "-m", "no notes");
+
+  const { index, problems, invalid } = await buildCatalog(r.dir);
+  assert.deepEqual(index.blueprints.map((e) => e.path), ["bad/inside", "ok/book"]);
+  assert.deepEqual(invalid, [
+    "bad/both",
+    "bad/dup",
+    "bad/entries",
+    "bad/holder",
+    "bad/inside/sub",
+    "bad/leaf-render",
+    "bad/name",
+    "bad/nonotes",
+    "bad/notes",
+    "bad/renders",
+  ]);
+  const of = (folder: string) => problems.filter((p) => p.folder === folder).map((p) => `${p.path}: ${p.message}`).join("\n");
+  assert.match(of("bad/name"), /^bad\/name\/misc: is in the expanded book bad\/name but is not named by slot: rename it <slot> or <slot>-<name>, such as 0 or 0-misc$/);
+  assert.match(of("bad/holder"), /^bad\/holder\/stuff: holds blueprints inside the expanded book bad\/holder, so it must be a slot folder/);
+  assert.match(of("bad/dup"), /^bad\/dup: bad\/dup has two folders for slot 1 \(1-b, 1-other\)/);
+  assert.match(of("bad/both"), /^bad\/both\/0-a: has both book\.json and blueprint\.json/);
+  assert.match(of("bad/notes"), /^bad\/notes\/1-b\/README\.md: frontmatter needs a title$/);
+  assert.match(of("bad/nonotes"), /^bad\/nonotes\/0-a: has no README\.md$/);
+  assert.equal(of("bad/renders"), "bad/renders/renders: an expanded book has no renders of its own; images live in renders/ of its blueprint folders");
+  assert.equal(of("bad/leaf-render"), "bad/leaf-render/1-b/renders/1.jpg: a blueprint in an expanded book has one image, renders/0.jpg (or .jpeg, .png, .webp)");
+  assert.match(of("bad/entries"), /^bad\/entries\/book\.json: must not list the book's entries/);
+  assert.match(of("bad/inside/sub"), /^bad\/inside\/sub: is inside the blueprint folder bad\/inside/);
+  assert.equal(of("bad/inside"), "", "the outer blueprint folder is still valid");
 });
 
 // The CLI's publish path, as a dry run into a directory standing in for R2.
