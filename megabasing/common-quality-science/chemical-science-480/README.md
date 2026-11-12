@@ -9,6 +9,8 @@ entities: 2550
 factorio_version: "2.0.66.1"
 ---
 
+![Chemical Science (480/s)](https://blueprints.abucnasty.dev/megabasing/common-quality-science/chemical-science-480/cover.jpg)
+
 red circuits by thaeln, engine switching absurdity by abucnasty
 
 stage 1 fills the recipe switcher chests, wait until they are full
