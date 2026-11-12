@@ -311,3 +311,38 @@ test("Ctrl+C stops the game", async t => {
     await sleep(100);
     assert.equal(alive(pid), false);
 });
+
+const clientStarts = async env => (await fs.readFile(path.join(env.work, "client", "client-starts.log"), "utf8")).trim().split("\n");
+
+test("on Linux the game client runs without a window unless --show-window is given", { skip: process.platform !== "linux" }, async t => {
+    const env = await setup(t);
+    const input = path.join(env.dir, "bp.txt");
+    await fs.writeFile(input, encodeBlueprintString({ blueprint: row("x", 1) }));
+    const messages = [];
+    const report = await render({ ...options(env), input }, message => messages.push(message));
+    assert.deepEqual(await clientStarts(env), ["offscreen"]);
+    assert.equal(report.window, "no window (SDL offscreen video driver)");
+    assert.ok(messages.some(line => line.includes("starting the game client with no window")), messages.join("\n"));
+    await assertNothingRunning(env.work);
+
+    const shown = await setup(t);
+    const visible = await render({ ...options(shown, { showWindow: true }), input }, () => {});
+    assert.deepEqual(await clientStarts(shown), [process.env.SDL_VIDEO_DRIVER ?? "<unset>"]);
+    assert.equal(visible.window, "a visible game window");
+    await assertNothingRunning(shown.work);
+});
+
+test("a hidden client that cannot start is replaced by a visible window, with a notice", { skip: process.platform !== "linux" }, async t => {
+    const env = await setup(t);
+    const input = path.join(env.dir, "bp.txt");
+    await fs.writeFile(input, encodeBlueprintString({ blueprint: row("x", 1) }));
+    process.env.FAKE_FACTORIO_MODE = "offscreen-fails";
+    t.after(() => { delete process.env.FAKE_FACTORIO_MODE; });
+    const messages = [];
+    const report = await render({ ...options(env), input }, message => messages.push(message));
+    assert.equal(report.images.length, 1);
+    assert.deepEqual(await clientStarts(env), ["offscreen", "<unset>"]);
+    assert.equal(report.window, "a visible game window");
+    assert.ok(messages.some(line => line.startsWith("The hidden game client exited before joining")), messages.join("\n"));
+    await assertNothingRunning(env.work);
+});

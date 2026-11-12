@@ -23,6 +23,13 @@ test("just input and output, with Factorio from the environment", async () => {
     assert.equal((await parse(["--input", "a", "--out", "b", "--diagnose"], { env: { FACTORIO_PATH: "f" } })).diagnose, true);
 });
 
+test("the game window is hidden unless --show-window or showWindow in the config asks for it", async () => {
+    const base = ["--input", "a", "--out", "b", "--factorio", "f"];
+    assert.equal((await parse(base)).showWindow, false);
+    assert.equal((await parse([...base, "--show-window"])).showWindow, true);
+    assert.equal((await parse(base, { config: { showWindow: true } })).showWindow, true);
+});
+
 test("the backdrop tiles come from the argument, environment or config, and are checked", async () => {
     const base = ["--input", "a", "--out", "b", "--factorio", "f"];
     assert.deepEqual((await parse([...base, "--backdrop", "lab-dark-1, lab-dark-2"])).backdrop, ["lab-dark-1", "lab-dark-2"]);

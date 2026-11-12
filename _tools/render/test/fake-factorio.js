@@ -6,7 +6,8 @@
 //   client (--mp-connect): tells the server where its write-data folder is (over the game's UDP port), so the server
 //     can write screenshots into the client's script-output, as the real client would draw them.
 // Each process writes its pid to <write-data>/fake.pid so tests can check nothing is left running.
-// FAKE_FACTORIO_MODE: ok (default) | exit-early | hang | client-crash | no-screenshot | stall-build | refuse-all
+// FAKE_FACTORIO_MODE: ok (default) | exit-early | hang | client-crash | no-screenshot | stall-build | refuse-all |
+//   offscreen-fails (the client exits when started with SDL_VIDEO_DRIVER=offscreen)
 import dgram from "node:dgram";
 import fs from "node:fs";
 import net from "node:net";
@@ -40,7 +41,10 @@ if (!modList.mods.some(mod => mod.name === MOD && mod.enabled)) fail("render mod
 if (!fs.existsSync(path.join(modsDir, MOD, "control.lua"))) fail("render mod not in the mod directory");
 
 if (arg("--mp-connect")) {
+    // every client start, with the video driver it was given, so tests can see hidden and visible starts
+    fs.appendFileSync(path.join(writeData, "client-starts.log"), `${process.env.SDL_VIDEO_DRIVER ?? "<unset>"}\n`);
     if (mode === "client-crash") fail("fake client crashed");
+    if (mode === "offscreen-fails" && process.env.SDL_VIDEO_DRIVER === "offscreen") fail("fake client: no offscreen video");
     const [host, port] = arg("--mp-connect").split(":");
     const socket = dgram.createSocket("udp4");
     const hello = () => socket.send(`hello ${writeData}`, Number(port), host);
