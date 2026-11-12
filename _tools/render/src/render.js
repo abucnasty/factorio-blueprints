@@ -23,6 +23,7 @@ const IMAGE_NAME = /^(\d+)\.jpg$/;
  * @property {string} [workDir]       must be empty or missing
  * @property {boolean} keepWork
  * @property {boolean} hideStatusIcons
+ * @property {boolean} [showWindow]   a visible game window instead of none (Linux hides it by default)
  * @property {number} timeoutSeconds  for the game to start and the window to join
  * @property {boolean} [diagnose]  run the experiment matrix for every blueprint
  * @property {[string, string]} [backdrop]  tiles replacing lab-dark-1 and lab-dark-2 on ordinary surfaces
@@ -228,8 +229,9 @@ export async function render(options, print) {
     try {
         session = await Session.start({
             executable, workDir, extraModsDir: options.mods, save: options.save,
-            hideStatusIcons: options.hideStatusIcons, timeoutSeconds: options.timeoutSeconds, log,
+            hideStatusIcons: options.hideStatusIcons, showWindow: options.showWindow, timeoutSeconds: options.timeoutSeconds, log,
         });
+        report.window = session.window;
         const setup = await session.setup();
         if (setup.error) throw new Error(`Could not research all technologies: ${setup.error}`);
         log(`Researched all technologies (${setup.technologies_researched}); recipes still disabled: ${setup.recipes_still_disabled}`);

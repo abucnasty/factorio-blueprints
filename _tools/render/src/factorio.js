@@ -116,6 +116,18 @@ async function freeUdpPort() {
     });
 }
 
+export const HIDDEN_WINDOW = "no window (SDL offscreen video driver)";
+export const VISIBLE_WINDOW = "a visible game window";
+
+/**
+ * The environment that keeps the game client off the desktop, or null where there is none. Linux: SDL's offscreen
+ * video driver, which the game (SDL 3, linked in) supports; it still renders with the GPU (OpenGL through EGL), and
+ * its screenshots match a windowed client's. Windows and macOS keep the visible window for now.
+ */
+export function hiddenWindowEnv(platform = process.platform) {
+    return platform === "linux" ? { SDL_VIDEO_DRIVER: "offscreen" } : null;
+}
+
 /** Long bracket level that the text does not close, for passing text to Lua untouched (ported: luaLongString) */
 export function luaLongString(text) {
     let level = 1;
@@ -250,10 +262,11 @@ export async function prepareWorkDir({ workDir, executable, extraModsDir, save, 
 
 // ---------------------------------------------------------------------------------------------------------------
 
-function spawnLogged(executable, args, logFile) {
+function spawnLogged(executable, args, logFile, extraEnv = null) {
     const out = fs.openSync(logFile, "a");
     try {
-        return track(spawn(executable, args, { stdio: ["ignore", out, out], windowsHide: false }));
+        const env = extraEnv ? { ...process.env, ...extraEnv } : process.env;
+        return track(spawn(executable, args, { stdio: ["ignore", out, out], windowsHide: false, env }));
     } finally {
         fs.closeSync(out);
     }
@@ -273,12 +286,14 @@ function tail(file, lines = 30) {
 export class Session {
     constructor({ workDir, dirs, server, client, serverLog, clientLog, log }) {
         Object.assign(this, { workDir, dirs, server, client, serverLog, clientLog, log });
+        /** How the client is shown: HIDDEN_WINDOW or VISIBLE_WINDOW */
+        this.window = null;
         /** @type {RconClient | null} */
         this.rcon = null;
     }
 
     /**
-     * @param {{ executable: string, workDir: string, extraModsDir?: string, save?: string, hideStatusIcons: boolean,
+     * @param {{ executable: string, workDir: string, extraModsDir?: string, save?: string, hideStatusIcons: boolean, showWindow?: boolean,
      *   timeoutSeconds: number, log: (message: string) => void }} options
      */
     static async start(options) {
@@ -305,13 +320,32 @@ export class Session {
         try {
             await session.waitForServer(deadline);
             session.rcon = await RconClient.connect(rconPort, rconPassword);
-            log("Server is up; opening the game window to join it (it draws the screenshots)");
-            session.client = spawnLogged(executable, [
+            const clientArgs = [
                 "--config", path.join(dirs.client, "config.ini"),
                 "--mod-directory", path.join(dirs.client, "mods"),
                 "--mp-connect", `127.0.0.1:${gamePort}`,
-            ], clientLog);
-            await session.waitForClient(deadline);
+            ];
+            const hidden = options.showWindow ? null : hiddenWindowEnv();
+            if (hidden) {
+                session.window = HIDDEN_WINDOW;
+                log(`Server is up; starting the game client with ${HIDDEN_WINDOW} (it draws the screenshots)`);
+                session.client = spawnLogged(executable, clientArgs, clientLog, hidden);
+                try {
+                    await session.waitForClient(deadline);
+                } catch (error) {
+                    // only a client that gave up is retried visibly; a server that died or a timeout is a real failure
+                    if (!session.client || isRunning(session.client) || session.client.startError || !isRunning(server)) throw error;
+                    log(`The hidden game client exited before joining (code ${session.client.exitCode}); opening a visible game window instead`);
+                    session.window = VISIBLE_WINDOW;
+                    session.client = spawnLogged(executable, clientArgs, clientLog);
+                    await session.waitForClient(deadline);
+                }
+            } else {
+                session.window = VISIBLE_WINDOW;
+                log("Server is up; opening the game window to join it (it draws the screenshots)");
+                session.client = spawnLogged(executable, clientArgs, clientLog);
+                await session.waitForClient(deadline);
+            }
         } catch (error) {
             await session.close();
             throw error;

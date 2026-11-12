@@ -33,6 +33,8 @@ Options:
   --mods <dir>                  extra mods for modded blueprints (copied, never modified) (env FACTORIO_RENDER_MODS)
   --save <file>                 start from a copy of this save instead of the built-in scenario
   --show-status-icons           keep "no power" / "no fuel" icons (hidden by default)
+  --show-window                 show the game window while rendering (Linux renders without one by default;
+                                Windows and macOS always show it)
   --backdrop <tile>,<tile>      floor tiles replacing lab-dark-1 and lab-dark-2, default ${DEFAULT_BACKDROP.join(",")}
                                 (env FACTORIO_RENDER_BACKDROP); "lab-dark-1,lab-dark-2" is the plain lab floor
   --diagnose                    run the placement experiment matrix for every blueprint (it always runs for a
@@ -46,7 +48,7 @@ Options:
 
 Config file (JSON, every key optional):
   { "factorio": "...", "mods": "...", "maxSize": 4096, "minPixelsPerTile": 8, "maxOutputSize": 8192,
-    "timeout": 300, "showStatusIcons": false, "backdrop": ["lab-dark-1", "black-refined-concrete"] }
+    "timeout": 300, "showStatusIcons": false, "showWindow": false, "backdrop": ["lab-dark-1", "black-refined-concrete"] }
 
 Exit status: 0 every blueprint has an image; 2 some blueprint got no image (see the report); 1 the run failed.`;
 
@@ -68,6 +70,7 @@ const OPTIONS = {
     mods: { type: "string" },
     save: { type: "string" },
     "show-status-icons": { type: "boolean" },
+    "show-window": { type: "boolean" },
     diagnose: { type: "boolean" },
     backdrop: { type: "string" },
     timeout: { type: "string" },
@@ -139,6 +142,7 @@ export async function parseCommandLine(argv, context = {}) {
         workDir: args["work-dir"],
         keepWork: Boolean(args["keep-work"]),
         hideStatusIcons: !showStatusIcons,
+        showWindow: Boolean(args["show-window"] ?? config.showWindow ?? false),
         diagnose: Boolean(args.diagnose),
         backdrop: parseBackdrop(pick(args.backdrop, "FACTORIO_RENDER_BACKDROP", "backdrop")),
         timeoutSeconds: number("--timeout", pick(args.timeout, null, "timeout"), { min: 10 }) ?? 300,
