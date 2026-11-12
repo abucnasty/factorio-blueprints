@@ -40,7 +40,6 @@ async function main() {
     }
     const report = await render(options, log);
     if (options.json) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
-    for (const missing of report.without_image) log(`No image for blueprint ${missing.number}: ${missing.reason}`);
     return report.without_image.length ? 2 : 0;
 }
 

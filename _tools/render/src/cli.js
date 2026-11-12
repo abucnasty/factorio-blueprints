@@ -35,6 +35,8 @@ Options:
   --show-status-icons           keep "no power" / "no fuel" icons (hidden by default)
   --backdrop <tile>,<tile>      floor tiles replacing lab-dark-1 and lab-dark-2, default ${DEFAULT_BACKDROP.join(",")}
                                 (env FACTORIO_RENDER_BACKDROP); "lab-dark-1,lab-dark-2" is the plain lab floor
+  --diagnose                    run the placement experiment matrix for every blueprint (it always runs for a
+                                blueprint the game refused completely); adds [diagnose] lines to the log
   --timeout <s>                 time allowed for the game to start and its window to join, default 300
   --work-dir <dir>              empty or new folder for the game's files (default: a temporary folder)
   --keep-work                   keep the work folder after a successful run (it is always kept after a failure)
@@ -66,6 +68,7 @@ const OPTIONS = {
     mods: { type: "string" },
     save: { type: "string" },
     "show-status-icons": { type: "boolean" },
+    diagnose: { type: "boolean" },
     backdrop: { type: "string" },
     timeout: { type: "string" },
     "work-dir": { type: "string" },
@@ -136,6 +139,7 @@ export async function parseCommandLine(argv, context = {}) {
         workDir: args["work-dir"],
         keepWork: Boolean(args["keep-work"]),
         hideStatusIcons: !showStatusIcons,
+        diagnose: Boolean(args.diagnose),
         backdrop: parseBackdrop(pick(args.backdrop, "FACTORIO_RENDER_BACKDROP", "backdrop")),
         timeoutSeconds: number("--timeout", pick(args.timeout, null, "timeout"), { min: 10 }) ?? 300,
         json: Boolean(args.json),

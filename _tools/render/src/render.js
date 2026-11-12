@@ -24,6 +24,7 @@ const IMAGE_NAME = /^(\d+)\.jpg$/;
  * @property {boolean} keepWork
  * @property {boolean} hideStatusIcons
  * @property {number} timeoutSeconds  for the game to start and the window to join
+ * @property {boolean} [diagnose]  run the experiment matrix for every blueprint
  * @property {[string, string]} [backdrop]  tiles replacing lab-dark-1 and lab-dark-2 on ordinary surfaces
  */
 
@@ -126,14 +127,38 @@ async function renderOne(session, entry, workDir, options, log) {
         log(`  [${strategy}] nothing to photograph${attempts.length < order.length ? "; trying the next strategy" : ""}`);
         await session.remove(surfaceName);
     }
+    let result;
     if (!chosen) {
         const reason = attempts.length === 1 && attempts[0].error ? attempts[0].error : `nothing of it could be built (tried ${order.join(", ")})`;
         log(`  no image: ${reason}`);
         const last = attempts[attempts.length - 1];
-        return { missing: { ...about, reason, failed: last.failed, missing: last.missing, problems: last.problems, attempts } };
+        result = { missing: { ...about, reason, failed: last.failed, missing: last.missing, problems: last.problems, attempts } };
+    } else {
+        result = await capture(session, entry, workDir, options, log, { ...about, attempt: chosen.attempt, attempts, surfaceName: chosen.surfaceName });
     }
+    if (needsDiagnosis(entry, attempts, options.diagnose)) {
+        const diagnosis = await diagnose(session, entry, log);
+        (result.image ?? result.missing).diagnosis = diagnosis;
+    }
+    return result;
+}
 
-    return capture(session, entry, workDir, options, log, { ...about, attempt: chosen.attempt, attempts, surfaceName: chosen.surfaceName });
+/** Whether to run the experiment matrix: asked for, or some attempt got no ghosts for a blueprint with entities */
+export function needsDiagnosis(entry, attempts, asked) {
+    if (asked) return true;
+    const hasEntities = (entry.blueprint.entities?.length ?? 0) > 0;
+    return hasEntities && attempts.some(attempt => !attempt.error && attempt.diagnostics?.ghosts === 0);
+}
+
+async function diagnose(session, entry, log) {
+    log("  running the diagnosis matrix (scratch surfaces; one line per experiment)");
+    const diagnosis = await session.diagnose(`blueprint-render-${entry.number}-diagnose`);
+    if (diagnosis.error) {
+        log(`  [diagnose] error: ${diagnosis.error}`);
+        return diagnosis;
+    }
+    for (const line of Object.values(diagnosis.lines ?? [])) log(`  ${line}`);
+    return { lines: Object.values(diagnosis.lines ?? []), experiments: Object.values(diagnosis.experiments ?? []) };
 }
 
 async function capture(session, entry, workDir, options, log, { attempt, attempts, surfaceName, ...about }) {
@@ -170,7 +195,13 @@ async function capture(session, entry, workDir, options, log, { attempt, attempt
  * @param {RenderOptions} options
  * @param {(message: string) => void} log
  */
-export async function render(options, log) {
+export async function render(options, print) {
+    // everything logged is also kept, for render.log in the work directory
+    const logLines = [];
+    const log = message => {
+        logLines.push(message);
+        print(message);
+    };
     const { value, format } = await readInput(options.input);
     const { blueprints, skipped } = listBlueprints(value);
     for (const item of skipped) log(`Skipping ${item.kind} at book slot ${item.path || "(top level)"}: only blueprints are rendered`);
@@ -188,6 +219,12 @@ export async function render(options, log) {
     const images = [];
     let succeeded = false;
     let session = null;
+    const logFile = path.join(workDir, "render.log");
+    const reportFile = path.join(workDir, "report.json");
+    const persist = async () => {
+        await fsp.writeFile(logFile, logLines.join("\n") + "\n");
+        await fsp.writeFile(reportFile, JSON.stringify(report, null, 2) + "\n");
+    };
     try {
         session = await Session.start({
             executable, workDir, extraModsDir: options.mods, save: options.save,
@@ -207,13 +244,31 @@ export async function render(options, log) {
             }
         }
         succeeded = true;
+    } catch (error) {
+        log(`Failed: ${error.message}`);
+        report.error = error.message;
+        throw error;
     } finally {
         await session?.close();
-        if (!succeeded) log(`Work directory kept: ${workDir} (logs: server-output.log, client-output.log, server/factorio-current.log, client/factorio-current.log)`);
+        if (!succeeded) {
+            log(`Work directory kept: ${workDir}`);
+            log(`Run log: ${logFile}`);
+            log(`Report: ${reportFile} (game logs: server-output.log, client-output.log, server/factorio-current.log, client/factorio-current.log)`);
+            await persist().catch(() => {});
+        }
     }
     report.removed = await publishImages(options.out, images);
     for (const image of report.images) log(`Wrote ${path.join(options.out, `${image.number}.jpg`)} (${image.width}×${image.height})`);
-    if (options.keepWork || chosen) log(`Work directory kept: ${workDir}`);
-    else await fsp.rm(workDir, { recursive: true, force: true });
+    for (const missing of report.without_image) log(`No image for blueprint ${missing.number}: ${missing.reason}`);
+    // kept whenever a blueprint got no image, so its log and report never need a second run
+    const keep = options.keepWork || chosen || report.without_image.length > 0;
+    if (keep) {
+        log(`Work directory kept: ${workDir}`);
+        log(`Run log: ${logFile}`);
+        log(`Report: ${reportFile}`);
+        await persist();
+    } else {
+        await fsp.rm(workDir, { recursive: true, force: true });
+    }
     return report;
 }

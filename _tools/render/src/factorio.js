@@ -409,6 +409,11 @@ export class Session {
         return Session.parseAnswer("Researching all technologies", await this.call("setup"));
     }
 
+    /** Run the mod's experiment matrix for the blueprint sent last: { lines, experiments } or { error } */
+    async diagnose(prefix) {
+        return Session.parseAnswer("Diagnosing", await this.call("diagnose", prefix));
+    }
+
     /** Just before a screenshot: clear asteroids from a platform surface */
     async prepare(surface) {
         await this.call("prepare", surface);
