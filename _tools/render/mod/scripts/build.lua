@@ -14,6 +14,8 @@
 local build = {}
 
 local ROLLING_STOCK_TYPES = { ["cargo-wagon"] = true, ["fluid-wagon"] = true, ["artillery-wagon"] = true, ["locomotive"] = true }
+-- Vehicles that may stand where a ghost will not revive (over other entities), so they are created directly
+local VEHICLE_TYPES = { ["car"] = true, ["spider-vehicle"] = true }
 -- Resources tried first under a drill, so a plain drill sits on plain ore; any resource it can mine is the fallback
 local PREFERRED_RESOURCES = { "iron-ore", "crude-oil", "stone", "coal", "copper-ore" }
 -- Room around the blueprint's own extent, for the underlay and chunk generation
@@ -255,12 +257,11 @@ local function place_drill_ore(surface, blueprint_entities, offset)
     return placed
 end
 
----Put the modules and other items a blueprint asks for straight into the entity, so alt-mode shows them.
----(harness.lua: fulfil_item_requests)
+---Put the items of an insert plan (BlueprintInsertPlan[]) straight into the entity
 ---@param entity LuaEntity
----@param proxy LuaEntity item-request-proxy
-local function fulfil_item_requests(entity, proxy)
-    for _, plan in pairs(proxy.insert_plan) do
+---@param insert_plan BlueprintInsertPlan[]
+local function insert_items(entity, insert_plan)
+    for _, plan in pairs(insert_plan) do
         local id = type(plan.id) == "table" and plan.id or { name = plan.id }
         for _, slot in pairs(plan.items.in_inventory or {}) do
             local inventory = entity.get_inventory(slot.inventory)
@@ -269,7 +270,47 @@ local function fulfil_item_requests(entity, proxy)
             end
         end
     end
+end
+
+---Put the modules and other items a blueprint asks for straight into the entity, so alt-mode shows them.
+---(harness.lua: fulfil_item_requests)
+---@param entity LuaEntity
+---@param proxy LuaEntity item-request-proxy
+local function fulfil_item_requests(entity, proxy)
+    insert_items(entity, proxy.insert_plan)
     proxy.destroy()
+end
+
+---Create a vehicle whose ghost would not revive (it overlaps other entities, as a car parked between inserters as a
+---chest does): create_entity does not check collisions as revive does. The ghost's items are put in, and the ghost
+---is removed.
+---@param ghost LuaEntity entity-ghost of a car or spider-vehicle
+---@return LuaEntity|nil entity, string|nil problem
+local function place_vehicle(surface, ghost)
+    local name, position, force = ghost.ghost_name, ghost.position, ghost.force
+    local problems = {}
+    local function read(field)
+        local ok, value = pcall(function() return ghost[field] end)
+        if not ok then
+            table.insert(problems, "could not read the " .. field .. " of the ghost of " .. name)
+        end
+        return ok and value or nil
+    end
+    local quality, orientation, insert_plan = read("quality"), read("orientation"), read("insert_plan")
+    ghost.destroy()
+    local ok, entity = pcall(surface.create_entity, {
+        name = name, position = position, force = force, quality = quality and quality.name, raise_built = true,
+    })
+    if not ok or not entity then
+        return nil, not ok and ("create_entity failed for " .. name .. ": " .. tostring(entity)) or nil
+    end
+    if orientation and not pcall(function() entity.orientation = orientation end) then
+        table.insert(problems, "could not turn " .. name .. " to orientation " .. orientation)
+    end
+    if insert_plan and not pcall(insert_items, entity, insert_plan) then
+        table.insert(problems, "could not insert the items requested for " .. name)
+    end
+    return entity, problems[1] and table.concat(problems, "; ") or nil
 end
 
 ---@param ghosts LuaEntity[]
@@ -433,16 +474,18 @@ function build.inspect(blueprint)
     return { platform = #reasons > 0, reasons = reasons, platforms_available = starter_pack() ~= nil }
 end
 
----Revive ghosts: tiles first (entities may stand on them), then entities, rolling stock last (it needs its rails)
+---Revive ghosts: tiles first (entities may stand on them), then entities, rolling stock (it needs its rails), vehicles
+---last: a vehicle that will not revive is created over what it overlaps (place_vehicle), after everything else stands
 ---@return LuaEntity[] entities, table<string, integer> built, table<string, integer> failed, string[] problems
 local function revive_all(surface, ghosts)
-    local tiles, entities_first, rolling = {}, {}, {}
+    local tiles, entities_first, rolling, vehicles = {}, {}, {}, {}
     for _, ghost in pairs(ghosts) do
         if ghost.valid then
             if ghost.type == "tile-ghost" then
                 table.insert(tiles, ghost)
             elseif ghost.type == "entity-ghost" then
-                table.insert(ROLLING_STOCK_TYPES[ghost.ghost_type] and rolling or entities_first, ghost)
+                local kind = ghost.ghost_type
+                table.insert(ROLLING_STOCK_TYPES[kind] and rolling or VEHICLE_TYPES[kind] and vehicles or entities_first, ghost)
             end
         end
     end
@@ -456,8 +499,8 @@ local function revive_all(surface, ghosts)
         surface.set_tiles(laid, true, false)
         destroy_all(tiles)
     end
-    local entities, built, failed, problems = {}, {}, {}, {}
-    for _, list in ipairs({ entities_first, rolling }) do
+    local entities, built, failed, problems, placed = {}, {}, {}, {}, {}
+    for _, list in ipairs({ entities_first, rolling, vehicles }) do
         for _, ghost in ipairs(list) do
             if ghost.valid then
                 local name = ghost.ghost_name
@@ -469,6 +512,17 @@ local function revive_all(surface, ghosts)
                             table.insert(problems, "could not insert the items requested for " .. name)
                         end
                     end
+                elseif list == vehicles and ghost.valid then
+                    local problem
+                    entity, problem = place_vehicle(surface, ghost)
+                    if problem then
+                        table.insert(problems, problem)
+                    end
+                    if entity then
+                        count(placed, name)
+                    end
+                end
+                if entity then
                     table.insert(entities, entity)
                     count(built, name)
                 else
@@ -476,6 +530,9 @@ local function revive_all(surface, ghosts)
                 end
             end
         end
+    end
+    for name, n in pairs(placed) do
+        table.insert(problems, "placed " .. n .. " " .. name .. " with create_entity: the ghost would not revive (it overlaps other entities)")
     end
     -- what could not be revived would otherwise be drawn as ghosts
     destroy_all(ghosts)

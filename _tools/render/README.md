@@ -67,6 +67,7 @@ from `--mods <dir>` or else the game's own mods folder; that folder's `mod-list.
 - A ship whose hub is not at its blueprint's (0, 0) is shifted so that it is; nothing else is placed relative to the hub.
 - Behind a ship with a hub, the planet its platform orbits can show. Asteroids are cleared before each screenshot,
   but faint ones may drift in.
+- A car or spidertron whose ghost will not revive (it overlaps other entities) is created directly, and the report says so.
 - Turrets without ammo still show their ammo icon.
 - Large builds are captured as a grid of screenshots and stitched; a one-pixel seam is possible.
 - Only Linux has been run for real; Windows and macOS share only the path handling.

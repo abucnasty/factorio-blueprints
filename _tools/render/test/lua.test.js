@@ -34,6 +34,10 @@ test("the mod researches everything, lays the default backdrop and knows space p
     assert.match(build, /local function self_conflicts\(/);
     assert.match(build, /build_grid_size/);
     assert.doesNotMatch(build, /joined_to_starter/);
+    // a car or spidertron whose ghost will not revive is created directly, after everything else
+    assert.match(build, /VEHICLE_TYPES = \{ \["car"\] = true, \["spider-vehicle"\] = true \}/);
+    assert.match(build, /\{ entities_first, rolling, vehicles \}/);
+    assert.match(build, /local function place_vehicle\(surface, ghost\)[\s\S]*?surface\.create_entity/);
     const { DEFAULT_BACKDROP } = await import("../src/cli.js");
     assert.deepEqual([...DEFAULT_BACKDROP], ["lab-dark-1", "black-refined-concrete"]);
 });
