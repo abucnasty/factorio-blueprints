@@ -153,6 +153,28 @@ test("without Space Age a platform blueprint gets an ordinary attempt that says 
     assert.ok(messages.some(line => line.startsWith("  [ordinary] diagnostics: ")));
 });
 
+test("a car wedged between other entities, whose ghost will not revive, is created directly and counted as built", async t => {
+    const env = await setup(t);
+    const input = path.join(env.dir, "bp.txt");
+    // a car used as a chest: over a heat pipe and between two inserters, as in Quantum Blade
+    const entities = [
+        { entity_number: 1, name: "car", position: { x: 146.953125, y: 5.05078125 }, orientation: 0.90625,
+            items: [{ id: { name: "rocket-fuel" }, items: { in_inventory: [{ inventory: 1, stack: 0, count: 20 }] } }] },
+        { entity_number: 2, name: "heat-pipe", position: { x: 147.5, y: 5.5 } },
+        { entity_number: 3, name: "stack-inserter", position: { x: 146.5, y: 2.5 } },
+        { entity_number: 4, name: "stack-inserter", position: { x: 146.5, y: 7.5 } },
+    ];
+    await fs.writeFile(input, encodeBlueprintString({ blueprint: { item: "blueprint", label: "wedged", entities, version: 562949958139904 } }));
+    const messages = [];
+    const report = await render({ ...options(env), input }, message => messages.push(message));
+    assert.deepEqual(report.images.map(image => [image.strategy, image.built, image.failed]), [["ordinary", 4, {}]]);
+    const fallback = "placed 1 car with create_entity: the ghost would not revive (it overlaps other entities)";
+    assert.deepEqual(report.images[0].problems, [fallback]);
+    assert.ok(messages.includes("  [ordinary] built 4 entities, 0 tiles; failed: none; missing: none"), messages.join("\n"));
+    assert.ok(messages.includes(`  [ordinary] problem: ${fallback}`));
+    await assertNothingRunning(env.work);
+});
+
 test("a blueprint the game refuses completely gets the diagnosis matrix, and the run's log and report are kept", async t => {
     const env = await setup(t);
     const input = path.join(env.dir, "bp.txt");
