@@ -3,12 +3,14 @@ title: Testing Utils
 authors: []
 version: "1"
 posted: 2026-11-12
-status: draft
+status: public
 entities: 9360
 tiles: 9252
 blueprints: 10
-factorio_version: "2.1.24.1"
+factorio_version: 2.1.24.1
 ---
+
+![Testing Utils](https://blueprints.abucnasty.dev/utilities/testing-utils/cover.jpg)
 
 - [Blueprint (slot 0)](https://blueprints.abucnasty.dev/utilities/testing-utils/0.txt)
 - [Remove Loaders](https://blueprints.abucnasty.dev/utilities/testing-utils/1.txt)
