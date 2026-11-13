@@ -1,0 +1,40 @@
+# Run the render tool's unit tests. They drive a fake Factorio
+# (test/fake-factorio.js), so no game install is needed.
+name: test render
+
+on:
+  pull_request:
+    paths:
+      - "_tools/render/**"
+      - ".github/workflows/test-render.yml"
+  push:
+    branches: [main]
+    paths:
+      - "_tools/render/**"
+      - ".github/workflows/test-render.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: _tools/render
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: _tools/render/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
