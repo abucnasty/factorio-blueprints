@@ -162,10 +162,15 @@ end
 ---@param ghosts LuaEntity[]
 ---@return MapPosition|nil
 local function blueprint_offset(blueprint_entities, ghosts)
-    local by_name = {}
+    -- positions are fixed point (1/256 tile), so a position rounded to that is an exact key
+    local function key(name, x, y)
+        return name .. "@" .. math.floor(x * 256 + 0.5) .. "," .. math.floor(y * 256 + 0.5)
+    end
+    local by_name, at_key = {}, {}
     for _, entity in pairs(blueprint_entities) do
         by_name[entity.name] = by_name[entity.name] or {}
         table.insert(by_name[entity.name], entity.position)
+        at_key[key(entity.name, entity.position.x, entity.position.y)] = true
     end
     local built = {}
     for _, ghost in pairs(ghosts) do
@@ -177,12 +182,7 @@ local function blueprint_offset(blueprint_entities, ghosts)
         return nil
     end
     local function on_blueprint(ghost, dx, dy)
-        for _, at in pairs(by_name[ghost.ghost_name] or {}) do
-            if math.abs(at.x + dx - ghost.position.x) < 0.01 and math.abs(at.y + dy - ghost.position.y) < 0.01 then
-                return true
-            end
-        end
-        return false
+        return at_key[key(ghost.ghost_name, ghost.position.x - dx, ghost.position.y - dy)] == true
     end
     for _, at in pairs(by_name[built[1].ghost_name] or {}) do
         local dx, dy = built[1].position.x - at.x, built[1].position.y - at.y
@@ -279,38 +279,6 @@ end
 local function fulfil_item_requests(entity, proxy)
     insert_items(entity, proxy.insert_plan)
     proxy.destroy()
-end
-
----Create a vehicle whose ghost would not revive (it overlaps other entities, as a car parked between inserters as a
----chest does): create_entity does not check collisions as revive does. The ghost's items are put in, and the ghost
----is removed.
----@param ghost LuaEntity entity-ghost of a car or spider-vehicle
----@return LuaEntity|nil entity, string|nil problem
-local function place_vehicle(surface, ghost)
-    local name, position, force = ghost.ghost_name, ghost.position, ghost.force
-    local problems = {}
-    local function read(field)
-        local ok, value = pcall(function() return ghost[field] end)
-        if not ok then
-            table.insert(problems, "could not read the " .. field .. " of the ghost of " .. name)
-        end
-        return ok and value or nil
-    end
-    local quality, orientation, insert_plan = read("quality"), read("orientation"), read("insert_plan")
-    ghost.destroy()
-    local ok, entity = pcall(surface.create_entity, {
-        name = name, position = position, force = force, quality = quality and quality.name, raise_built = true,
-    })
-    if not ok or not entity then
-        return nil, not ok and ("create_entity failed for " .. name .. ": " .. tostring(entity)) or nil
-    end
-    if orientation and not pcall(function() entity.orientation = orientation end) then
-        table.insert(problems, "could not turn " .. name .. " to orientation " .. orientation)
-    end
-    if insert_plan and not pcall(insert_items, entity, insert_plan) then
-        table.insert(problems, "could not insert the items requested for " .. name)
-    end
-    return entity, problems[1] and table.concat(problems, "; ") or nil
 end
 
 ---@param ghosts LuaEntity[]
@@ -475,7 +443,8 @@ function build.inspect(blueprint)
 end
 
 ---Revive ghosts: tiles first (entities may stand on them), then entities, rolling stock (it needs its rails), vehicles
----last: a vehicle that will not revive is created over what it overlaps (place_vehicle), after everything else stands
+---last. A vehicle that is not built here (no ghost, a ghost destroyed by reviving what is under it, or a ghost that
+---will not revive) is created after this from the blueprint (create_missing_vehicles).
 ---@return LuaEntity[] entities, table<string, integer> built, table<string, integer> failed, string[] problems
 local function revive_all(surface, ghosts)
     local tiles, entities_first, rolling, vehicles = {}, {}, {}, {}
@@ -499,7 +468,7 @@ local function revive_all(surface, ghosts)
         surface.set_tiles(laid, true, false)
         destroy_all(tiles)
     end
-    local entities, built, failed, problems, placed = {}, {}, {}, {}, {}
+    local entities, built, failed, problems = {}, {}, {}, {}
     for _, list in ipairs({ entities_first, rolling, vehicles }) do
         for _, ghost in ipairs(list) do
             if ghost.valid then
@@ -512,27 +481,14 @@ local function revive_all(surface, ghosts)
                             table.insert(problems, "could not insert the items requested for " .. name)
                         end
                     end
-                elseif list == vehicles and ghost.valid then
-                    local problem
-                    entity, problem = place_vehicle(surface, ghost)
-                    if problem then
-                        table.insert(problems, problem)
-                    end
-                    if entity then
-                        count(placed, name)
-                    end
-                end
-                if entity then
                     table.insert(entities, entity)
                     count(built, name)
-                else
+                elseif list ~= vehicles then
+                    -- a vehicle that will not revive is created after this (create_missing_vehicles)
                     count(failed, name)
                 end
             end
         end
-    end
-    for name, n in pairs(placed) do
-        table.insert(problems, "placed " .. n .. " " .. name .. " with create_entity: the ghost would not revive (it overlaps other entities)")
     end
     -- what could not be revived would otherwise be drawn as ghosts
     destroy_all(ghosts)
@@ -774,6 +730,96 @@ local function centre_on_hub(stack, entities, tiles, hub_entity)
     return stack.get_blueprint_entities() or {}, stack.get_blueprint_tiles() or {}
 end
 
+-- How far (tiles) a built vehicle may be from its blueprint position + offset and still count as built from it
+local VEHICLE_MATCH_TOLERANCE = 0.1
+
+---The blueprint's cars and spidertrons that were not built. Measured in 2.1.24: build_blueprint in forced mode makes
+---no ghost for some vehicles over other entities (the 22 cars of Quantum Blade), and reviving an entity under a
+---vehicle's ghost destroys that ghost (a spidertron over a heat pipe). Each built vehicle is matched to one blueprint
+---vehicle of the same name at blueprint position + offset.
+---@param entities LuaEntity[] what revive_all built
+---@param offset MapPosition|nil world = blueprint + offset, from the ghosts of the build (blueprint_offset)
+---@return BlueprintEntity[] not built (empty without an offset), table<string, integer> not built, by name
+local function missing_vehicles(blueprint_entities, entities, offset)
+    local built = {}
+    for _, entity in pairs(entities) do
+        if entity.valid and VEHICLE_TYPES[entity.type] then
+            table.insert(built, entity)
+        end
+    end
+    local unbuilt, counts, built_by_name = {}, {}, {}
+    for _, entity in ipairs(built) do
+        count(built_by_name, entity.name)
+    end
+    for _, entity in pairs(blueprint_entities) do
+        local prototype = prototypes.entity[entity.name]
+        if prototype and VEHICLE_TYPES[prototype.type] then
+            if offset then
+                local x, y = entity.position.x + offset.x, entity.position.y + offset.y
+                local found
+                for index, vehicle in ipairs(built) do
+                    if vehicle.name == entity.name and math.abs(vehicle.position.x - x) < VEHICLE_MATCH_TOLERANCE
+                        and math.abs(vehicle.position.y - y) < VEHICLE_MATCH_TOLERANCE then
+                        found = index
+                        break
+                    end
+                end
+                if found then
+                    table.remove(built, found)
+                else
+                    table.insert(unbuilt, entity)
+                    count(counts, entity.name)
+                end
+            elseif (built_by_name[entity.name] or 0) > 0 then
+                -- without an offset only the number per name can be told
+                built_by_name[entity.name] = built_by_name[entity.name] - 1
+            else
+                count(counts, entity.name)
+            end
+        end
+    end
+    return unbuilt, counts
+end
+
+---Create the blueprint's vehicles that were not built, at blueprint position + offset, once everything else stands.
+---create_entity does not check collisions, so a car parked over other entities (used as a chest) stands where the
+---editor's forced placement puts it. A car is turned to its orientation (a spidertron's blueprint has none) and every
+---vehicle gets its items. Vehicles the surface refuses by its surface conditions (cars on a platform) are left out:
+---they stay missing and the report says why.
+---@param unbuilt BlueprintEntity[]
+---@return LuaEntity[] entities, table<string, integer> created, string[] problems
+local function create_missing_vehicles(surface, unbuilt, offset)
+    local entities, created, problems = {}, {}, {}
+    for _, blueprint_entity in ipairs(unbuilt) do
+        local name = blueprint_entity.name
+        local position = { x = blueprint_entity.position.x + offset.x, y = blueprint_entity.position.y + offset.y }
+        if not surface_refusal(name, surface) then
+            local ok, entity = pcall(surface.create_entity, {
+                name = name, position = position, force = game.forces.player, quality = blueprint_entity.quality,
+                raise_built = true,
+            })
+            if ok and entity then
+                if blueprint_entity.orientation and entity.type == "car" then
+                    entity.orientation = blueprint_entity.orientation
+                end
+                if blueprint_entity.items and not pcall(insert_items, entity, blueprint_entity.items) then
+                    table.insert(problems, "could not insert the items requested for " .. name)
+                end
+                table.insert(entities, entity)
+                count(created, name)
+            else
+                table.insert(problems, "create_entity " .. (ok and "made nothing" or ("failed: " .. tostring(entity)))
+                    .. " for " .. name .. " at " .. position.x .. ", " .. position.y)
+            end
+        end
+    end
+    for name, n in pairs(created) do
+        table.insert(problems, "created " .. n .. " " .. name .. " directly with create_entity: the game built none from the"
+            .. " blueprint (no ghost, or its ghost would not revive)")
+    end
+    return entities, created, problems
+end
+
 ---Build a blueprint string on a new surface.
 ---
 ---Ordinary blueprints (no tiles, or tiles that go on lab tiles such as concrete): build_blueprint on a lab-tile
@@ -895,7 +941,8 @@ function build.run(blueprint, surface_name, strategy, backdrop)
             build_mode = defines.build_mode.forced, skip_fog_of_war = false,
         })
     end
-    local ghosts
+    -- where the blueprint actually landed (world = blueprint + landed), from the ghosts of the real build
+    local ghosts, landed
     if strategy == "platform" or special_tiles then
         diagnostics.method = "built once at a computed position"
         if starfield then
@@ -936,7 +983,7 @@ function build.run(blueprint, surface_name, strategy, backdrop)
         end
         -- a blueprint with a hub stays at its own coordinates for any position within 127 tiles of (0, 0)
         ghosts = build_ghosts(blueprint_hub and (hub and hub.position or { x = 0, y = 0 }) or at)
-        local landed = blueprint_offset(blueprint_entities, ghosts)
+        landed = blueprint_offset(blueprint_entities, ghosts)
         if landed and (math.abs(landed.x - offset.x) > 0.01 or math.abs(landed.y - offset.y) > 0.01) then
             table.insert(problems, "the blueprint landed at offset " .. landed.x .. ", " .. landed.y .. " instead of "
                 .. offset.x .. ", " .. offset.y)
@@ -959,16 +1006,39 @@ function build.run(blueprint, surface_name, strategy, backdrop)
             end
         end
         ghosts = build_ghosts(at)
+        landed = blueprint_offset(blueprint_entities, ghosts)
     end
     inventory.destroy()
     diagnostics.ghosts = #ghosts
     if #ghosts == 0 and #blueprint_entities > 0 then
         table.insert(problems, "build_blueprint placed no ghosts at all on a " .. diagnostics.surface_kind)
     end
-
+    if landed then
+        diagnostics.offset = { x = landed.x + 0, y = landed.y + 0 }
+    end
     local entities, built, failed, revive_problems = revive_all(surface, ghosts)
     for _, problem in ipairs(revive_problems) do
         table.insert(problems, problem)
+    end
+    -- vehicles last of all: the blueprint's cars and spidertrons that nothing was built for are created directly
+    local unbuilt, unbuilt_counts = missing_vehicles(blueprint_entities, entities, landed)
+    if landed then
+        local created, created_counts, vehicle_problems = create_missing_vehicles(surface, unbuilt, landed)
+        for _, vehicle in ipairs(created) do
+            table.insert(entities, vehicle)
+        end
+        for name, n in pairs(created_counts) do
+            built[name] = (built[name] or 0) + n
+        end
+        for _, problem in ipairs(vehicle_problems) do
+            table.insert(problems, problem)
+        end
+    elseif #ghosts > 0 then
+        -- with no ghosts at all the build failed as a whole, which is reported above
+        for name, n in pairs(unbuilt_counts) do
+            table.insert(problems, "could not create " .. n .. " " .. name .. " that the game did not build: where the"
+                .. " blueprint landed is unknown (no ghosts matched the blueprint)")
+        end
     end
     if hub and blueprint_hub then
         -- the platform's own hub stands in for the blueprint's
