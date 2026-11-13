@@ -135,15 +135,16 @@ function startServer() {
         for (const entity of placed) if (--missing[entity.name] === 0) delete missing[entity.name];
         const problems = refused ? ["build_blueprint placed no ghosts at all on a lab-tile surface"] : [];
         if (!refused) for (const name of Object.keys(missing)) if (!inSpace({ name })) problems.push(`${name} cannot be built here: it needs gravity 0.1–1.7976931348623157e+308 and this surface has 0 (surface conditions)`);
-        // as in the mod: a vehicle over another entity will not revive, so it is created directly (place_vehicle),
-        // counted as built, and the mod says so
-        const wedged = {};
+        // as in the game (2.1): build_blueprint in forced mode makes no ghost at all for a vehicle over another entity;
+        // as in the mod: it is created directly after everything else (create_missing_vehicles), counted as built,
+        // and the mod says so
+        const ghostless = {};
         for (const entity of placed) {
             const overlaps = other => other !== entity && Math.abs(other.position.x - entity.position.x) < 1 && Math.abs(other.position.y - entity.position.y) < 1.5;
-            if (VEHICLES.test(entity.name) && placed.some(overlaps)) wedged[entity.name] = (wedged[entity.name] ?? 0) + 1;
+            if (VEHICLES.test(entity.name) && placed.some(overlaps)) ghostless[entity.name] = (ghostless[entity.name] ?? 0) + 1;
         }
-        for (const [name, n] of Object.entries(wedged)) problems.push(`placed ${n} ${name} with create_entity: the ghost would not revive (it overlaps other entities)`);
-        const report = { strategy: job.strategy, surface, built: placed.length, tiles: 0, failed: [], missing: Object.keys(missing).length ? missing : [], problems, diagnostics: { surface_kind: job.strategy, ghosts: placed.length }, tick: tick() };
+        for (const [name, n] of Object.entries(ghostless)) problems.push(`created ${n} ${name} directly with create_entity: the game built none from the blueprint (no ghost, or its ghost would not revive)`);
+        const report = { strategy: job.strategy, surface, built: placed.length, tiles: 0, failed: [], missing: Object.keys(missing).length ? missing : [], problems, diagnostics: { surface_kind: job.strategy, ghosts: placed.length - Object.values(ghostless).reduce((a, b) => a + b, 0) }, tick: tick() };
         if (!placed.length) return report;
         const xs = placed.map(entity => entity.position.x), ys = placed.map(entity => entity.position.y);
         return { ...report, area: { left_top: { x: Math.min(...xs) - 0.5, y: Math.min(...ys) - 0.5 }, right_bottom: { x: Math.max(...xs) + 0.5, y: Math.max(...ys) + 0.5 } } };

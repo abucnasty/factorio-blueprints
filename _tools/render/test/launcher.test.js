@@ -153,7 +153,7 @@ test("without Space Age a platform blueprint gets an ordinary attempt that says 
     assert.ok(messages.some(line => line.startsWith("  [ordinary] diagnostics: ")));
 });
 
-test("a car wedged between other entities, whose ghost will not revive, is created directly and counted as built", async t => {
+test("a car over a heat pipe, which build_blueprint gives no ghost, is created directly and counted as built, not missing", async t => {
     const env = await setup(t);
     const input = path.join(env.dir, "bp.txt");
     // a car used as a chest: over a heat pipe and between two inserters, as in Quantum Blade
@@ -168,10 +168,15 @@ test("a car wedged between other entities, whose ghost will not revive, is creat
     const messages = [];
     const report = await render({ ...options(env), input }, message => messages.push(message));
     assert.deepEqual(report.images.map(image => [image.strategy, image.built, image.failed]), [["ordinary", 4, {}]]);
-    const fallback = "placed 1 car with create_entity: the ghost would not revive (it overlaps other entities)";
+    const fallback = "created 1 car directly with create_entity: the game built none from the blueprint (no ghost, or its ghost would not revive)";
     assert.deepEqual(report.images[0].problems, [fallback]);
     assert.ok(messages.includes("  [ordinary] built 4 entities, 0 tiles; failed: none; missing: none"), messages.join("\n"));
     assert.ok(messages.includes(`  [ordinary] problem: ${fallback}`));
+    assert.ok(messages.includes('  [ordinary] diagnostics: {"surface_kind":"ordinary","ghosts":3}'), messages.join("\n"));
+    // the line the owner looks for in render.log
+    const log = await fs.readFile(path.join(env.work, "render.log"), "utf8");
+    assert.ok(log.includes(`[ordinary] problem: ${fallback}`), log);
+    assert.match(log, /\[ordinary\] built 4 entities, 0 tiles; failed: none; missing: none/);
     await assertNothingRunning(env.work);
 });
 

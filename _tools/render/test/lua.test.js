@@ -34,10 +34,13 @@ test("the mod researches everything, lays the default backdrop and knows space p
     assert.match(build, /local function self_conflicts\(/);
     assert.match(build, /build_grid_size/);
     assert.doesNotMatch(build, /joined_to_starter/);
-    // a car or spidertron whose ghost will not revive is created directly, after everything else
+    // a car or spidertron the game did not build (no ghost, or a ghost lost or not revived) is created directly from
+    // the blueprint, after everything else, at blueprint position + where the blueprint landed
     assert.match(build, /VEHICLE_TYPES = \{ \["car"\] = true, \["spider-vehicle"\] = true \}/);
     assert.match(build, /\{ entities_first, rolling, vehicles \}/);
-    assert.match(build, /local function place_vehicle\(surface, ghost\)[\s\S]*?surface\.create_entity/);
+    assert.match(build, /local function create_missing_vehicles\(surface, unbuilt, offset\)[\s\S]*?surface_refusal\(name, surface\)[\s\S]*?pcall\(surface\.create_entity/);
+    assert.match(build, /revive_all\(surface, ghosts\)[\s\S]*?missing_vehicles\(blueprint_entities, entities, landed\)[\s\S]*?create_missing_vehicles\(surface, unbuilt, landed\)/);
+    assert.doesNotMatch(build, /place_vehicle/);
     const { DEFAULT_BACKDROP } = await import("../src/cli.js");
     assert.deepEqual([...DEFAULT_BACKDROP], ["lab-dark-1", "black-refined-concrete"]);
 });
