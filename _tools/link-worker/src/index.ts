@@ -2,8 +2,8 @@
  * Public vault links on vault.abucnasty.dev, served from R2. Read-only:
  * everything it serves is produced in CI by _tools/ci/catalog.ts; the
  * Worker encodes nothing. URLs mirror the vault: blueprints are under
- * /blueprints/ (other top-level folders, such as a future /blog/, are not
- * served yet).
+ * /blueprints/, blog posts under /blog/ (other top-level folders are not
+ * served).
  *
  *   GET /index.json                                 the catalog index
  *   GET /blueprints/<path>.txt                      latest blueprint string
@@ -13,6 +13,13 @@
  *   GET /blueprints/<path>/<slot>/...@<version>.txt one entry of a book at a version
  *   GET /blueprints/<path>/renders/<file path>      preview image, from the LFS bucket
  *   GET /blueprints/<path>/cover.jpg                the index's cover render
+ *   GET /blog/index.json                            the blog index (published posts)
+ *   GET /blog/<slug>/index.md                       a post's markdown, frontmatter removed
+ *   GET /blog/<slug>/<file path>                    a file of the post folder (images...)
+ *
+ * Blog objects are served only for posts in the blog index, and files only
+ * as it lists them, so a post that is a draft again (or deleted) is
+ * offline although its objects stay in R2.
  *
  * <path> is the index's path (relative to blueprints/): the longest
  * blueprint folder that prefixes the request (folders never nest, so there
@@ -25,6 +32,7 @@
  * (/<path>.txt and so on); it now redirects there (see LEGACY_HOST).
  */
 
+import { blogFileType, type BlogIndex, type BlogPost } from "../../ci/blog-index.ts";
 import type { CatalogEntry, CatalogIndex, CatalogNode } from "../../ci/catalog-index.ts";
 
 export interface Env {
@@ -35,6 +43,11 @@ export interface Env {
 }
 
 const INDEX_KEY = "index.json";
+/** The vault folder, URL prefix and R2 key prefix of blog posts. */
+const BLOG = "blog";
+const BLOG_INDEX_KEY = `${BLOG}/index.json`;
+/** A post's markdown, next to its files. */
+const BLOG_BODY = "index.md";
 /** The vault folder, URL prefix and R2 key prefix of blueprints. */
 const BLUEPRINTS = "blueprints";
 /** Where strings were stored before they moved under blueprints/ on 2026-11-14; never rewritten, so still read. */
@@ -58,9 +71,14 @@ const CACHE_SHORT = "public, max-age=60";
 const CACHE_IMMUTABLE = "public, max-age=31536000, immutable";
 const CACHE_VERSION = "public, max-age=86400";
 const CACHE_REDIRECT = "public, max-age=3600";
+/** Post files (images): their URL is not content-addressed, unless it carries ?v=<blob> from the blog index. */
+const CACHE_BLOG_FILE = "public, max-age=86400";
 
 const TEXT = "text/plain; charset=utf-8";
 const JSON_TYPE = "application/json; charset=utf-8";
+const MARKDOWN = "text/markdown; charset=utf-8";
+/** Post files are the author's own, but an SVG or HTML one must not run script on this origin. */
+const BLOG_FILE_CSP = "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox";
 const IMAGE_TYPES: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -76,6 +94,7 @@ const BASE_HEADERS = {
 
 const USAGE =
   "Links look like /blueprints/<path>.txt, /blueprints/<path>@<version>.txt, /blueprints/<path>/<slot>.txt, /blueprints/<path>/cover.jpg, /blueprints/<path>/renders/<file>; every blueprint is listed in /index.json.";
+const BLOG_USAGE = "Blog links look like /blog/<slug>/index.md and /blog/<slug>/<file>; every published post is listed in /blog/index.json.";
 const SLOT = /^(0|[1-9][0-9]*)$/;
 
 interface LoadedIndex {
@@ -127,6 +146,53 @@ export function createHandler(now: () => number = Date.now) {
     return (cached = { etag: obj.etag, checkedAt: now(), byPath, moved, slots });
   }
 
+  let blogCached: { etag: string; checkedAt: number; bySlug: Map<string, BlogPost> } | undefined;
+
+  /** The blog index by slug, cached like the catalog index; undefined while there is none. */
+  async function loadBlog(bucket: R2Bucket): Promise<Map<string, BlogPost> | undefined> {
+    if (blogCached && now() - blogCached.checkedAt < INDEX_TTL_MS) return blogCached.bySlug;
+    const obj = await bucket.get(BLOG_INDEX_KEY, blogCached ? { onlyIf: { etagDoesNotMatch: blogCached.etag } } : undefined);
+    if (obj === null) return (blogCached = undefined);
+    if (!("body" in obj)) {
+      blogCached!.checkedAt = now();
+      return blogCached!.bySlug;
+    }
+    const index = (await obj.json()) as BlogIndex;
+    blogCached = { etag: obj.etag, checkedAt: now(), bySlug: new Map(index.posts.map((p) => [p.slug, p])) };
+    return blogCached.bySlug;
+  }
+
+  /** /blog/...: `path` is what follows "blog/". */
+  async function blogRoute(path: string, url: URL, request: Request, env: Env): Promise<Response> {
+    if (path === "index.json") {
+      return (await serveObject(env.CATALOG, BLOG_INDEX_KEY, request, JSON_TYPE, CACHE_SHORT)) ?? unavailable("The blog is not published yet.");
+    }
+    const slash = path.indexOf("/");
+    const slug = slash === -1 ? path : path.slice(0, slash);
+    const file = slash === -1 ? "" : path.slice(slash + 1);
+    const posts = await loadBlog(env.CATALOG);
+    if (!posts) return unavailable("The blog is not published yet.");
+    const post = posts.get(slug);
+    if (!post) return notFound(`No blog post "${slug}". ${BLOG_USAGE}`);
+    if (file === BLOG_BODY) {
+      return (
+        (await serveObject(env.CATALOG, `${BLOG}/${slug}/${BLOG_BODY}`, request, MARKDOWN, CACHE_SHORT)) ??
+        unavailable(`The markdown of "${slug}" is missing from storage.`)
+      );
+    }
+    const f = post.files.find((x) => x.path === file);
+    if (!f) return notFound(`The post "${slug}" has no file "${file}". ${BLOG_USAGE}`);
+    const cache = url.searchParams.get("v") === f.blob ? CACHE_IMMUTABLE : CACHE_BLOG_FILE;
+    const extra = { "Content-Security-Policy": BLOG_FILE_CSP };
+    const type = blogFileType(f.path);
+    return (
+      (f.oid !== undefined
+        ? await serveObject(env.LFS, lfsKey(f.oid), request, type, cache, extra)
+        : await serveObject(env.CATALOG, `${BLOG}/${slug}/${f.path}`, request, type, cache, extra)) ??
+      unavailable(`The file "${f.path}" of "${slug}" is missing from storage.`)
+    );
+  }
+
   async function route(request: Request, env: Env): Promise<Response> {
     if (request.method === "OPTIONS") {
       return new Response(null, {
@@ -157,7 +223,8 @@ export function createHandler(now: () => number = Date.now) {
     if (path === INDEX_KEY) {
       return (await serveObject(env.CATALOG, INDEX_KEY, request, JSON_TYPE, CACHE_SHORT)) ?? unavailable();
     }
-    if (!path.startsWith(BLUEPRINTS + "/")) return notFound(`Not found. ${USAGE}`);
+    if (path.startsWith(BLOG + "/") && path.length > BLOG.length + 1) return blogRoute(path.slice(BLOG.length + 1), url, request, env);
+    if (!path.startsWith(BLUEPRINTS + "/")) return notFound(`Not found. ${USAGE} ${BLOG_USAGE}`);
     path = path.slice(BLUEPRINTS.length + 1);
 
     const index = await loadIndex(env.CATALOG);
