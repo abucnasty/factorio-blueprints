@@ -3,22 +3,25 @@
     "0": {
       "file": "0.jpg",
       "height": 3712,
+      "render_version": 1,
       "sha256": "9c5d1b5a3607036fce965fe31b2c14b49d385a545a2eedf9f3ba2eb7778d4937",
       "width": 3712
     },
     "1": {
       "file": "1.jpg",
       "height": 3712,
+      "render_version": 1,
       "sha256": "ca77e660ea2bea0da28a9fb8025669e27110cefe45feb13a0110d4d3549709b3",
       "width": 3712
     },
     "2": {
       "file": "2.jpg",
       "height": 3712,
+      "render_version": 1,
       "sha256": "3a998bf9b727d1c9ef28caa8de6a89818713dbfdb80b61cba85f3112a2f394cb",
       "width": 3712
     }
   },
-  "rendered_at": "2026-11-14T01:20:49.153Z",
+  "rendered_at": "2026-11-14T02:36:41.173Z",
   "schema": 1
 }
