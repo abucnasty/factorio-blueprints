@@ -7,6 +7,7 @@ import { Session, resolveFactorioExecutable } from "./factorio.js";
 import { planCapture } from "./framing.js";
 import { convertToJpeg, stitchToJpeg } from "./image.js";
 import { blueprintHash, manifestKey, nextManifest, readManifest, writeManifest } from "./manifest.js";
+import { RENDER_VERSION } from "./version.js";
 
 /** Ticks the game runs after a build before its screenshot, so the client has caught up and drawn it */
 export const SETTLE_TICKS = 120;
@@ -143,6 +144,7 @@ export async function publishImages(out, images, inScope = () => true) {
  * @property {string} file             render file relative to `out`, "/"-separated ("3/1.jpg", "0.jpg")
  * @property {string} label
  * @property {string} sha256           blueprintHash of the blueprint the image shows (as in the manifest)
+ * @property {number} render_version   RENDER_VERSION of the tool that made it (as in the manifest)
  * @property {number} width
  * @property {number} height
  * @property {number} bytes
@@ -288,7 +290,7 @@ async function capture(session, entry, workDir, options, log, { attempt, attempt
         return {
             file: jpeg,
             image: {
-                ...about, sha256: blueprintHash(entry.blueprint), strategy: attempt.strategy,
+                ...about, sha256: blueprintHash(entry.blueprint), render_version: RENDER_VERSION, strategy: attempt.strategy,
                 width: written.width, height: written.height, bytes: written.bytes,
                 pixels_per_tile: plan.pixelsPerTile, screenshots: shots.length, built: attempt.built, tiles: attempt.tiles,
                 failed: attempt.failed, missing: attempt.missing, problems: attempt.problems, import_errors: attempt.import_errors,
@@ -393,7 +395,7 @@ export async function render(options, print) {
     // the manifest says which images are current; it is not a render image and cleanup never touches it
     const { manifest: previous, problem: manifestProblem } = only ? await readManifest(options.out) : { manifest: null, problem: null };
     if (manifestProblem) log(`Render manifest: ${manifestProblem}`);
-    const produced = report.images.map(image => ({ key: manifestKey(image.path), file: image.file, sha256: image.sha256, width: image.width, height: image.height }));
+    const produced = report.images.map(image => ({ key: manifestKey(image.path), file: image.file, sha256: image.sha256, render_version: image.render_version, width: image.width, height: image.height }));
     report.manifest = await writeManifest(options.out, nextManifest(previous, produced, report.removed, Boolean(only)));
     for (const image of report.images) log(`Wrote ${path.join(options.out, ...image.file.split("/"))} (${image.width}×${image.height})`);
     for (const file of report.removed) log(`Removed stale ${path.join(options.out, ...file.split("/"))}`);

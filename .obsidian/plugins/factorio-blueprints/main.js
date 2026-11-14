@@ -7921,6 +7921,7 @@ function rotr(x2, n) {
 
 // src/core/render-state.ts
 var RENDER_MANIFEST = "render.json";
+var UNSTAMPED_RENDER_VERSION = 1;
 function blueprintHash(blueprint) {
   return sha256Hex(new TextEncoder().encode(writeCompactSortedJson(blueprint)));
 }
@@ -7964,14 +7965,29 @@ function parseRenderManifest(text) {
     return void 0;
   }
 }
-function renderState(value, manifest, images) {
+function parseRenderVersion(text) {
+  if (text === void 0) return UNSTAMPED_RENDER_VERSION;
+  try {
+    const v = JSON.parse(text);
+    const version = isObject4(v) ? v["render_version"] : void 0;
+    return typeof version === "number" && Number.isInteger(version) && version >= 1 ? version : UNSTAMPED_RENDER_VERSION;
+  } catch {
+    return UNSTAMPED_RENDER_VERSION;
+  }
+}
+function recordedRenderVersion(entry) {
+  const v = entry.render_version;
+  return typeof v === "number" && Number.isInteger(v) ? v : UNSTAMPED_RENDER_VERSION;
+}
+function renderState(value, manifest, images, renderVersion) {
   const present = new Set(images);
   const claimed = /* @__PURE__ */ new Set();
   const entries = renderTargets(value).map((t) => {
     const recorded = manifest?.entries[t.key];
     const image = present.has(t.file) ? t.file : void 0;
     if (image !== void 0) claimed.add(image);
-    const state = image === void 0 ? "none" : recorded !== void 0 && recorded.sha256 === t.hash ? "current" : "outdated";
+    const current = recorded !== void 0 && recorded.sha256 === t.hash && recordedRenderVersion(recorded) >= renderVersion;
+    const state = image === void 0 ? "none" : current ? "current" : "outdated";
     return { ...t, state, image };
   });
   const orphans = images.filter((f) => !claimed.has(f)).sort();
@@ -8972,19 +8988,27 @@ function errorText4(e) {
 }
 
 // src/commands/render-status.ts
-async function folderRenderState(host, folder) {
-  if (await host.files.exists(joinPath(folder, BOOK_FILE))) return bookRenderState(host, folder);
+async function readRenderVersion(host) {
+  try {
+    return parseRenderVersion(await host.files.exists(RENDER_VERSION_FILE) ? await host.files.read(RENDER_VERSION_FILE) : void 0);
+  } catch {
+    return parseRenderVersion(void 0);
+  }
+}
+async function folderRenderState(host, folder, renderVersion) {
+  renderVersion ??= await readRenderVersion(host);
+  if (await host.files.exists(joinPath(folder, BOOK_FILE))) return bookRenderState(host, folder, renderVersion);
   const value = readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE)));
   const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
   const manifest = await host.files.exists(manifestPath) ? parseRenderManifest(await host.files.read(manifestPath)) : void 0;
-  return renderState(value, manifest, await listRenderFiles(host, folder));
+  return renderState(value, manifest, await listRenderFiles(host, folder), renderVersion);
 }
-async function bookRenderState(host, folder) {
+async function bookRenderState(host, folder, renderVersion) {
   const entries = [];
   const orphans = [];
   for (const leaf of leaves(await readTree(host, folder, []))) {
     const prefix = leaf.slots.join("/");
-    const own = await folderRenderState(host, leaf.folder);
+    const own = await folderRenderState(host, leaf.folder, renderVersion);
     for (const e of own.entries) {
       const path = e.path === "" ? prefix : `${prefix}/${e.path}`;
       entries.push({ ...e, key: path, path, file: `${path}.jpg` });
@@ -8998,9 +9022,10 @@ async function bookRenderState(host, folder) {
 }
 async function foldersNeedingRender(host) {
   const out = [];
+  const renderVersion = await readRenderVersion(host);
   for (const folder of await findBlueprintFolders(host)) {
     try {
-      const state = await folderRenderState(host, folder);
+      const state = await folderRenderState(host, folder, renderVersion);
       if (state.counts.total > 0 && state.overall !== "current") out.push({ folder, state });
     } catch {
     }
@@ -9094,6 +9119,7 @@ async function renderAll(host, folders) {
 // src/commands/render-preview.ts
 var RENDER_SCRIPT = "_tools/render/bin/render.js";
 var RENDER_MODULES = "_tools/render/node_modules";
+var RENDER_VERSION_FILE = "_tools/render/render-version.json";
 var RENDER_SCRATCH = ".factorio-render";
 var active;
 function isRendering() {
@@ -9158,7 +9184,7 @@ then render again.`
     }
     const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
     const manifest = await files.exists(manifestPath) ? parseRenderManifest(await files.read(manifestPath)) : void 0;
-    const state = renderState(value, manifest, await listRenderFiles(host, folder));
+    const state = renderState(value, manifest, await listRenderFiles(host, folder), await readRenderVersion(host));
     const needed = state.entries.filter((e) => e.state !== "current").map((e) => e.path);
     if (needed.length === 0 && state.counts.total > 0) {
       ui.notice(`The render of ${folder} is already current.`);
@@ -9399,6 +9425,7 @@ async function renderExpandedBook(host, loc, signal, node2) {
       manifest.entries[inner] = {
         file: name,
         sha256: String(r["sha256"] ?? ""),
+        ...typeof r["render_version"] === "number" ? { render_version: r["render_version"] } : {},
         ...typeof r["width"] === "number" ? { width: r["width"] } : {},
         ...typeof r["height"] === "number" ? { height: r["height"] } : {}
       };
@@ -10580,6 +10607,7 @@ var FactorioBlueprintsPlugin = class extends import_obsidian4.Plugin {
       const key = [
         await stat(joinPath(folder, BLUEPRINT_FILE)),
         await stat(joinPath(rendersDir, RENDER_MANIFEST)),
+        await stat(RENDER_VERSION_FILE),
         await host.files.exists(rendersDir) ? JSON.stringify(await adapter.list(rendersDir)) : ""
       ].join("|");
       const isBook = await host.files.exists(joinPath(folder, BOOK_FILE));

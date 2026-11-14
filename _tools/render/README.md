@@ -38,8 +38,14 @@ from `--mods <dir>` or else the game's own mods folder; that folder's `mod-list.
   run did not produce are deleted, with the slot folders they leave empty. Other files are left alone. Nothing is
   written to `<out>` if the run fails. `--only 3/1` (repeatable or comma-separated; a book's slot selects everything
   in it) renders just those entries and leaves the rest of `<out>` alone.
-- **Manifest.** A successful run also writes `<out>/render.json`: per slot path the image file, size and a SHA-256 of
-  the blueprint it shows (`blueprintHash` in `src/manifest.js`), so other tools can tell which images are current.
+- **Manifest.** A successful run also writes `<out>/render.json`: per slot path the image file, size, a SHA-256 of
+  the blueprint it shows (`blueprintHash` in `src/manifest.js`) and the render version that made it, so other tools
+  can tell which images are current. An `--only` run leaves the other entries' records as they were.
+- **Render version.** `render-version.json` holds one integer, `render_version`, and the rule for it: bump it in any
+  change that alters what an existing blueprint's image looks like, and not for changes that cannot alter output. The
+  Obsidian plugin treats an image made by a lower version as outdated; a record without `render_version` (images
+  made before it existed) counts as 1. After a fix that changes output: bump the render version, then in Obsidian
+  run **Render all that need it**.
 - **Ordinary blueprints** are built on a fresh lab-tile surface, with all technologies researched and ore placed under
   mining drills. The floor is the backdrop: `--backdrop a,b` replaces `lab-dark-1` and `lab-dark-2` (default
   `lab-dark-1,black-refined-concrete`).

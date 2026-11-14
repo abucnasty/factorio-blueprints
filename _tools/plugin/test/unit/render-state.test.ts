@@ -6,6 +6,7 @@ import {
   blueprintHash,
   decodeBlueprintString,
   parseRenderManifest,
+  parseRenderVersion,
   renderState,
   renderStateLabel,
   renderTargets,
@@ -118,31 +119,48 @@ describe("render state", () => {
   const all = ["0.jpg", "1/0.jpg", "1/2.jpg"];
 
   test("none: no images", () => {
-    const s = renderState(value, undefined, []);
+    const s = renderState(value, undefined, [], 1);
     assert.equal(s.overall, "none");
     assert.deepStrictEqual(s.counts, { total: 3, current: 0, outdated: 0, none: 3, orphans: 0 });
     assert.equal(renderStateLabel(s), "Render: none");
   });
 
   test("current: every image with a matching hash", () => {
-    const s = renderState(value, manifestFor(value, ["0", "1/0", "1/2"]), all);
+    const s = renderState(value, manifestFor(value, ["0", "1/0", "1/2"]), all, 1);
     assert.equal(s.overall, "current");
     assert.equal(renderStateLabel(s), "Render: current");
   });
 
   test("outdated: changed hash, no manifest entry, or no manifest", () => {
-    const changed = renderState(value, manifestFor(value, ["0", "1/0", "1/2"], { "1/2": { sha256: "0".repeat(64) } }), all);
+    const changed = renderState(value, manifestFor(value, ["0", "1/0", "1/2"], { "1/2": { sha256: "0".repeat(64) } }), all, 1);
     assert.deepStrictEqual(changed.entries.map((e) => e.state), ["current", "current", "outdated"]);
     assert.equal(renderStateLabel(changed), "Render: 1 of 3 outdated");
-    const partial = renderState(value, manifestFor(value, ["0"]), all);
+    const partial = renderState(value, manifestFor(value, ["0"]), all, 1);
     assert.deepStrictEqual(partial.entries.map((e) => e.state), ["current", "outdated", "outdated"]);
-    const noManifest = renderState(value, undefined, all);
+    const noManifest = renderState(value, undefined, all, 1);
     assert.equal(noManifest.overall, "outdated");
     assert.equal(noManifest.counts.outdated, 3);
   });
 
+  test("render version: an older stamp is outdated, a missing stamp counts as 1", () => {
+    const one = bp("a");
+    const at = (stamp: number | undefined) => {
+      const m = manifestFor(one, ["0"]);
+      if (stamp !== undefined) m.entries["0"]!.render_version = stamp;
+      return m;
+    };
+    assert.equal(renderState(one, at(undefined), ["0.jpg"], 1).overall, "current");
+    assert.equal(renderState(one, at(undefined), ["0.jpg"], 2).overall, "outdated");
+    assert.equal(renderState(one, at(1), ["0.jpg"], 2).overall, "outdated");
+    assert.equal(renderState(one, at(2), ["0.jpg"], 2).overall, "current");
+    assert.equal(renderState(one, at(3), ["0.jpg"], 2).overall, "current");
+    assert.equal(parseRenderVersion('{"render_version": 2, "rule": "..."}'), 2);
+    assert.equal(parseRenderVersion(undefined), 1);
+    assert.equal(parseRenderVersion("{"), 1);
+  });
+
   test("mixed none and current is outdated overall; orphans are listed", () => {
-    const s = renderState(value, manifestFor(value, ["0"]), ["0.jpg", "7.jpg", "1/5.jpg"]);
+    const s = renderState(value, manifestFor(value, ["0"]), ["0.jpg", "7.jpg", "1/5.jpg"], 1);
     assert.deepStrictEqual(s.entries.map((e) => e.state), ["current", "none", "none"]);
     assert.equal(s.overall, "outdated");
     assert.deepStrictEqual(s.orphans, ["1/5.jpg", "7.jpg"]);
@@ -152,12 +170,12 @@ describe("render state", () => {
   test("single blueprint: current, then outdated after a change", () => {
     const one = bp("a");
     const m = manifestFor(one, ["0"]);
-    assert.equal(renderState(one, m, ["0.jpg"]).overall, "current");
-    assert.equal(renderStateLabel(renderState(bp("a", 2), m, ["0.jpg"])), "Render: outdated");
+    assert.equal(renderState(one, m, ["0.jpg"], 1).overall, "current");
+    assert.equal(renderStateLabel(renderState(bp("a", 2), m, ["0.jpg"], 1)), "Render: outdated");
   });
 
   test("nothing to render", () => {
-    const s = renderState({ upgrade_planner: {} }, undefined, []);
+    const s = renderState({ upgrade_planner: {} }, undefined, [], 1);
     assert.equal(s.counts.total, 0);
     assert.equal(renderStateLabel(s), "Render: nothing to render");
   });
@@ -168,12 +186,12 @@ describe("manifest file", () => {
     const text = JSON.stringify({
       schema: 1,
       rendered_at: "t",
-      entries: { "2/1": { file: "2/1.jpg", sha256: "b", width: 3, height: 4 }, bad: { file: 1 } },
+      entries: { "2/1": { file: "2/1.jpg", sha256: "b", render_version: 2, width: 3, height: 4 }, bad: { file: 1 } },
     });
     assert.deepStrictEqual(parseRenderManifest(text), {
       schema: 1,
       rendered_at: "t",
-      entries: { "2/1": { file: "2/1.jpg", sha256: "b", width: 3, height: 4 } },
+      entries: { "2/1": { file: "2/1.jpg", sha256: "b", render_version: 2, width: 3, height: 4 } },
     });
     assert.equal(parseRenderManifest("{"), undefined);
     assert.equal(parseRenderManifest('{"schema":2,"entries":{}}'), undefined);
