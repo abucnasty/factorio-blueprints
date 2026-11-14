@@ -6,24 +6,29 @@
 //
 // R2 keys in factorio-blueprints-catalog:
 //   index.json                         this file
-//   strings/<path>/<sha>.txt           the blueprint string of <path> as of
-//                                      <sha>, for every sha in its history
-//   strings/<path>/<sha>/<slot>.txt    the string of one entry of a book as
-//                                      of <sha> (slot path such as "3/1"),
-//                                      for every version marked `entries`
+//   strings/<path>/<sha>.txt           the blueprint string of <path> at the
+//                                      version whose commit is <sha>, for
+//                                      every version in its history
+//   strings/<path>/<sha>/<slot>.txt    the string of one entry of a book at
+//                                      that version (slot path such as
+//                                      "3/1"), for every version marked
+//                                      `entries`
 //
 // Slot path: the slot numbers from the root book down to an entry, each
 // the entry's `index`, or its position in `blueprints` when it has none.
 
 export interface CatalogIndex {
   /**
-   * Bumped on any change a reader must know about. 2 added nodes, cover,
-   * entry strings (CatalogVersion.entries) and nested render paths; a
-   * schema 1 index has none of those and renders with a number `n`.
-   * (status was added within schema 2: an entry without one is public, or
-   * deprecated when `deprecated` is true.)
+   * Bumped on any change a reader must know about. 3: versions are the ones
+   * recorded in each blueprint's versions.json, named by `label` (links are
+   * <path>@<label>.txt, no longer @<sha>), with a content `hash`; `subject`
+   * is the label. 2 added nodes, cover, entry strings
+   * (CatalogVersion.entries) and nested render paths; a schema 1 index has
+   * none of those and renders with a number `n`. (status was added within
+   * schema 2: an entry without one is public, or deprecated when
+   * `deprecated` is true.)
    */
-  schema: 2;
+  schema: 3;
   /** When the index was built, ISO 8601. */
   generatedAt: string;
   /** The repo commit it was built from (full SHA). */
@@ -39,6 +44,7 @@ export interface CatalogEntry {
   // README.md frontmatter, normalized by the core's readNotesMeta; unknown keys are dropped.
   title: string;
   authors: string[];
+  /** The current version's label (history[0].label, from the ledger); always present once built in schema 3. */
   version?: string;
   posted?: string;
   video?: string;
@@ -47,25 +53,25 @@ export interface CatalogEntry {
    * The note's status. public: listed; deprecated: listed behind a "Show
    * deprecated" switch; unlisted: served and opened by its address, but
    * not listed or found by search. Drafts are not in the index: a draft
-   * that was published before keeps its entry as of then, with that
-   * status (history and all).
+   * that was published before keeps its live entry, with that status
+   * (history and all).
    */
   status: "public" | "deprecated" | "unlisted";
   /** status === "deprecated", for readers from before status. */
   deprecated: boolean;
-  /** Old folder paths; the Worker redirects them here. */
+  /** Old folder paths; the Worker redirects them here (versions are not followed across them). */
   previous_paths: string[];
 
   /** The current blueprint.json (for a root book, its assembled tree), as the core's describeBlueprint sees it. */
   blueprint: CatalogBlueprint;
 
-  /** Full SHA of the last commit that changed the blueprint; history[0].sha. */
+  /** The current version's commit; history[0].sha. */
   commit: string;
   /**
-   * Commits that changed blueprint.json at this path or a previous one, or
-   * (for a root book) any book.json or blueprint.json under it, newest first;
-   * only while the note published it. A commit that publishes it again after
-   * a draft is a version too when the string differs from the previous one.
+   * The versions recorded in the folder's versions.json, newest first. The
+   * current one is the folder's content. Labels are the ledger's: a new
+   * `version` in the note for the same content renames the current version
+   * once the plugin records that.
    */
   history: CatalogVersion[];
   /** Every image file under renders/ (for a root book, each leaf's renders/0.jpg as <slot path>.jpg), sorted by file path. */
@@ -75,9 +81,11 @@ export interface CatalogEntry {
   /** Render file used as the cover (/<path>/cover.jpg): the first blueprint with an image, depth first. */
   cover?: string;
   /**
-   * Present (true) when the folder's current files are invalid: this is the
-   * last valid entry published, carried over unchanged, and its links serve
-   * that version until the files are fixed.
+   * Present (true) when the folder's current files are invalid, or hold a
+   * change that is not a recorded version (changed without a new
+   * `version`): this is the last entry published, carried over unchanged,
+   * and its links serve that version until the folder is fixed or the
+   * change is recorded.
    */
   stale?: true;
 }
@@ -100,10 +108,15 @@ export interface CatalogBlueprint {
 }
 
 export interface CatalogVersion {
+  /** The version's name, the note's `version` when it was recorded; unique per blueprint. Links: <path>@<label>.txt. */
+  label: string;
+  /** Content hash: the render tool's blueprintHash of the blueprint value (for a root book, the assembled book). */
+  hash: string;
+  /** Full SHA of the commit that introduced this content (the R2 keys use it). */
   sha: string;
-  /** Author date, ISO 8601 with offset, UTC written as "Z" (the import back-dates it to when the blueprint was posted). Order is git log's, not re-sorted by date. */
+  /** That commit's author date, ISO 8601 with offset, UTC written as "Z". Order is the ledger's, not re-sorted by date. */
   date: string;
-  /** First line of the commit message. */
+  /** The label again, for readers from before labels (it was the commit's subject line). */
   subject: string;
   /**
    * True once the strings of this version's book entries

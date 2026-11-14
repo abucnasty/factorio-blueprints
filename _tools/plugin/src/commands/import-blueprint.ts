@@ -32,8 +32,8 @@ import { locate, locateBySlots } from "./expanded.ts";
 import { addEntryToBook, updateExpandedBook } from "./expanded-import.ts";
 import type { ExpandedImportOutcome } from "./expanded-import.ts";
 import { noteWithBlock, refreshExpandedBook } from "./generated-notes.ts";
-import { reportGit } from "./git-notice.ts";
 import type { Host } from "./host.ts";
+import { publishAndReport } from "./publish.ts";
 import { renderPreview } from "./render-preview.ts";
 import { describeState, folderRenderState } from "./render-status.ts";
 
@@ -238,8 +238,7 @@ export async function importFromClipboard(host: Host, contextFolder: string): Pr
   if (!commit) {
     ui.notice(`${verb} ${folder} with ${summary}${renderNote}.${blockWarning}`);
   } else {
-    git = await host.git!.commitAndSync(commitFolder, commitMessage);
-    reportGit(host, `${verb} ${folder} with ${summary}${renderNote}`, git, blockWarning);
+    git = await publishAndReport(host, commitFolder, commitMessage, `${verb} ${folder} with ${summary}${renderNote}`, blockWarning);
   }
 
   // 5. Optionally render previews (a separate commit).

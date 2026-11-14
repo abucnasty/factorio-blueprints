@@ -8,14 +8,15 @@ vault: blueprints are pasted in and copied out as normal blueprint strings.
 
 ## Status
 
-The catalog is imported: 28 blueprints, each with its version history.
-Every blueprint has a live link that returns its string, for the latest
-version or any earlier one. Each entry of a book has its own link, by its
-slot in the book:
+The catalog is imported: 28 blueprints, each with its recorded versions
+(`versions.json`, named by the note's `version`). Every blueprint has a
+live link that returns its string, for the latest version or any earlier
+one by its label. Each entry of a book has its own link, by its slot in the
+book:
 
 ```
 https://blueprints.abucnasty.dev/<folder path>.txt
-https://blueprints.abucnasty.dev/<folder path>@<commit>.txt
+https://blueprints.abucnasty.dev/<folder path>@<version>.txt
 https://blueprints.abucnasty.dev/<folder path>/<slot>/<slot>.txt
 https://blueprints.abucnasty.dev/index.json
 ```

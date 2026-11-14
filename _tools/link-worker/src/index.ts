@@ -4,10 +4,10 @@
  *
  *   GET /index.json                      the catalog index
  *   GET /<path>.txt                      latest blueprint string
- *   GET /<path>@<sha>.txt                string as of a commit that changed it
- *                                        (full SHA or unique prefix of 7+)
+ *   GET /<path>@<version>.txt            string of a recorded version, by its
+ *                                        label (URL-encoded as needed)
  *   GET /<path>/<slot>[/<slot>...].txt   one entry of a book, latest
- *   GET /<path>/<slot>/...@<sha>.txt     one entry of a book at a commit
+ *   GET /<path>/<slot>/...@<version>.txt one entry of a book at a version
  *   GET /<path>/renders/<file path>      preview image, from the LFS bucket
  *   GET /<path>/cover.jpg                the index's cover render
  *
@@ -21,7 +21,7 @@
 import type { CatalogEntry, CatalogIndex, CatalogNode } from "../../ci/catalog-index.ts";
 
 export interface Env {
-  /** factorio-blueprints-catalog: index.json and strings/<path>/<sha>.txt */
+  /** factorio-blueprints-catalog: index.json and strings/<path>/<commit>.txt */
   CATALOG: R2Bucket;
   /** factorio-blueprints-lfs: render images by LFS object id */
   LFS: R2Bucket;
@@ -33,7 +33,7 @@ const INDEX_TTL_MS = 5_000;
 
 const CACHE_SHORT = "public, max-age=60";
 const CACHE_IMMUTABLE = "public, max-age=31536000, immutable";
-const CACHE_PREFIX = "public, max-age=86400";
+const CACHE_VERSION = "public, max-age=86400";
 const CACHE_REDIRECT = "public, max-age=3600";
 
 const TEXT = "text/plain; charset=utf-8";
@@ -52,7 +52,7 @@ const BASE_HEADERS = {
 };
 
 const USAGE =
-  "Links look like /<path>.txt, /<path>@<commit>.txt, /<path>/<slot>.txt, /<path>/cover.jpg, /<path>/renders/<file>; every blueprint is listed in /index.json.";
+  "Links look like /<path>.txt, /<path>@<version>.txt, /<path>/<slot>.txt, /<path>/cover.jpg, /<path>/renders/<file>; every blueprint is listed in /index.json.";
 const SLOT = /^(0|[1-9][0-9]*)$/;
 
 interface LoadedIndex {
@@ -159,7 +159,8 @@ export function createHandler(now: () => number = Date.now) {
       found = find(folder);
       if (found) form = { kind: "cover" };
     }
-    const txt = !found ? /^([^@/]+)(?:@([^@/]*))?\.txt$/.exec(segs[segs.length - 1]!) : null;
+    // The version label is everything after the first "@" (it may hold another "@", never a "/").
+    const txt = !found ? /^([^@/]+)(?:@([^/]*))?\.txt$/.exec(segs[segs.length - 1]!) : null;
     if (txt) {
       const parts = [...segs.slice(0, -1), txt[1]!];
       // The longest folder followed only by slot numbers.
@@ -204,23 +205,16 @@ export function createHandler(now: () => number = Date.now) {
     let sha = entry.commit;
     let cache = CACHE_SHORT;
     if (ref !== undefined) {
-      const prefix = ref.toLowerCase();
-      if (!/^[0-9a-f]{7,40}$/.test(prefix)) {
-        return notFound(`"${ref}" is not a commit SHA (use the full SHA or at least its first 7 characters).`);
-      }
-      const matches = entry.history.filter((h) => h.sha.startsWith(prefix));
-      if (matches.length === 0) {
+      const version = entry.history.find((h) => h.label === ref);
+      if (version === undefined) {
+        const labels = entry.history.map((h) => h.label).filter((l) => l !== undefined);
         return notFound(
-          `"${entry.path}" has no version "${ref}". Its versions are the commits that changed its blueprint.json, listed in /index.json.`,
+          `"${entry.path}" has no version "${ref}". ${labels.length > 0 ? `Its versions are ${labels.map((l) => `"${l}"`).join(", ")}.` : "It has no named versions yet."}`,
         );
       }
-      if (matches.length > 1) {
-        return notFound(
-          `"${ref}" matches ${matches.length} versions of "${entry.path}" (${matches.map((m) => m.sha).join(", ")}); use a longer prefix.`,
-        );
-      }
-      sha = matches[0]!.sha;
-      cache = prefix.length === 40 ? CACHE_IMMUTABLE : CACHE_PREFIX;
+      sha = version.sha;
+      // A label names one content for good, but the latest one can be renamed: cache it for a day, not forever.
+      cache = CACHE_VERSION;
     }
     const headers = { "X-Blueprint-Commit": sha };
     if (slot === "") {
@@ -246,7 +240,7 @@ export function createHandler(now: () => number = Date.now) {
     if (res) return res;
     return ref === undefined
       ? unavailable(`The string for "${entry.path}" slot ${slot} at ${sha} is not published yet.`)
-      : notFound(`"${entry.path}" has no entry at slot ${slot} in version ${sha}.`);
+      : notFound(`"${entry.path}" has no entry at slot ${slot} in version "${ref}".`);
   }
 
   return async function handle(request: Request, env: Env): Promise<Response> {

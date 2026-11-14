@@ -25,9 +25,11 @@ _tools/                    everything that is not a blueprint
 <category>/<sub-category>/<blueprint-slug>/
   README.md                notes + frontmatter
   blueprint.json           the decoded blueprint
+  versions.json            its recorded versions, once published
   renders/<slot path>.jpg  one image per blueprint: 0.jpg, or 3/1.jpg in a book
 <category>/<book-slug>/    an expanded book
   README.md  book.json     the book without its entries
+  versions.json            the whole book's recorded versions, once published
   0-<slug>/                slot folder: a blueprint folder or expanded book
 ```
 
@@ -77,7 +79,7 @@ The keys, required and optional:
 ---
 title: Military Science (240/s)     # required, display name
 authors: [abucnasty]                # required, list, may be empty
-version: "3"                        # optional, always a string
+version: "3"                        # required to publish; a label read as typed (1.10 stays "1.10"), unique per blueprint
 posted: 2026-03-10                  # optional, ISO date
 video: https://youtu.be/...         # optional
 factoriobin: https://factoriobin.com/post/...   # optional
@@ -96,13 +98,50 @@ previous_paths: [old/folder/path]   # optional, old folder paths, for link redir
 | `unlisted` | opens by its address only, not listed or searched | works |
 
 A draft is not in `index.json`, except one that was published before: it
-keeps its entry exactly as at the last commit before it became a draft
-(string, notes, renders, history), and changes saved as a draft never
-become versions. Making it public again makes its current string a new
-version. In an expanded book only the root book's note has a status; slot
-folders' notes have none. `status` replaced the `deprecated: true`
-checkbox: a note may not have `deprecated`. Commits from before any note
-had a `status` key count as published (`deprecated: true` as deprecated).
+keeps its live entry (string, notes, renders, versions), and changes saved
+as a draft never become versions. Making it public again publishes its
+current content under its `version` (see Versions). In an expanded book
+only the root book's note has a status; slot folders' notes have none.
+`status` replaced the `deprecated: true` checkbox: a note may not have
+`deprecated`.
+
+### Versions
+
+A version is made on purpose: the root note's `version` is its label (free
+text such as `1.0`, `1.2` or `MK3`, no `/`, unique per blueprint), and a
+published blueprint must have one. Each published blueprint has a ledger,
+`versions.json`, next to its note (for an expanded book, in the root
+book's folder): every version recorded, oldest first.
+
+```json
+[
+  {
+    "label": "1.0",
+    "date": "2025-08-15T05:10:57Z",
+    "hash": "efdbf8fa…",
+    "commit": "0afbbf04…"
+  }
+]
+```
+
+`hash` is the content hash: the render tool's `blueprintHash` (SHA-256 of
+compact JSON with sorted keys) of the whole `blueprint.json` value, or of
+the assembled expanded book. `commit` is the full SHA of the commit that
+brought that content in, and `date` its author date.
+
+The plugin writes the ledger whenever it commits a published blueprint
+(and with **Publish version**); CI only reads it. The rules:
+
+- The same content as the latest version never makes a new version, so
+  re-saving, reformatting or expanding a book changes nothing. A new
+  `version` for the same content renames the latest version.
+- New content under a `version` the ledger does not have is a new version,
+  recorded with the commit that brought the content in (the plugin adds it
+  in a second commit, pushed together).
+- New content under a `version` the ledger already has (the latest's or an
+  older one's) is not published: the last recorded version stays live, the
+  plugin says "content changed, bump `version` to publish", and CI lists
+  it in its step summary without failing.
 
 Generated keys, written by the plugin from `blueprint.json` and
 overwritten each time (do not edit them; `index.json` has the same numbers
@@ -223,10 +262,9 @@ bytes. There is exactly one implementation of the writer, in
 `https://blueprints.abucnasty.dev/` serves, for a blueprint folder `<path>`:
 
 - `<path>.txt`: the latest blueprint string.
-- `<path>@<sha>.txt`: the string as of a commit that changed its
-  `blueprint.json` while published, or made it public again with a new
-  string (full SHA, or a unique prefix of at least 7).
-- `<path>/<slot path>.txt` and `<path>/<slot path>@<sha>.txt`: one entry
+- `<path>@<version>.txt`: the string of a recorded version, by its exact
+  label, URL-encoded as needed (`@1.2.txt`, `@MK%202.txt`).
+- `<path>/<slot path>.txt` and `<path>/<slot path>@<version>.txt`: one entry
   of a book (a blueprint, nested book or planner), alone.
 - `<path>/renders/<file path>`: a render image.
 - `<path>/cover.jpg`: the cover render.
@@ -248,15 +286,18 @@ depth first, slots ascending.
 An expanded book not inside another (a root book) is addressed like a
 `blueprint.json` book at its folder path, by slot path, never by folder
 name; a leaf's `renders/0.jpg` is `<path>/renders/<slot path>.jpg`. Its
-versions are the commits that changed `blueprint.json` at its path or any
-`book.json` or `blueprint.json` under it, so expanding a book keeps its
-history and links.
+content is the assembled book, so expanding a book is no new version and
+keeps its links.
 
 A path in some blueprint's `previous_paths` redirects to its current path.
-CI (`_tools/ci/catalog.ts`) writes the R2 bucket `factorio-blueprints-catalog`
-on every push to `main`: `strings/<path>/<sha>.txt` and
-`strings/<path>/<sha>/<slot path>.txt` for every version, then
-`index.json`. Renders are read from `factorio-blueprints-lfs` at
+CI (`_tools/ci/catalog.ts`) builds the index from the pushed commit's files
+and the ledgers, never from the git history, and writes the R2 bucket
+`factorio-blueprints-catalog` on every push to `main`:
+`strings/<path>/<commit>.txt` and `strings/<path>/<commit>/<slot path>.txt`
+for the current version (`<commit>` is the version's), then `index.json`.
+An older version's strings were uploaded while it was current and are
+never made again, so a moved folder's older versions are not served under
+its new path. Renders are read from `factorio-blueprints-lfs` at
 `<oid[0:2]>/<oid[2:4]>/<oid>`.
 
 ## Branches and commits

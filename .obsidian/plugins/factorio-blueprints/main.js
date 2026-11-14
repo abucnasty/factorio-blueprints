@@ -7429,6 +7429,7 @@ function readFrontmatter(text) {
 }
 function readNotesMeta(text) {
   const fm = readFrontmatter(text);
+  if (typeof fm["version"] === "number") fm["version"] = scalarSource(splitFrontmatter(text).yaml, "version") ?? fm["version"];
   const meta = {
     authors: stringList(fm["authors"]),
     previous_paths: stringList(fm["previous_paths"])
@@ -7522,6 +7523,10 @@ function renderPair(key, value) {
     node2.type = "QUOTE_DOUBLE";
   }
   return doc.toString({ lineWidth: 0, flowCollectionPadding: false }).replace(/\n$/, "").split("\n");
+}
+function scalarSource(yaml, key) {
+  const node2 = parseDocument(yaml).get(key, true);
+  return isScalar(node2) && node2.type === "PLAIN" && typeof node2.source === "string" ? node2.source : void 0;
 }
 function optionalString(v) {
   if (v === null || v === void 0) return void 0;
@@ -7791,148 +7796,6 @@ function isObject3(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-// src/core/links.ts
-var DEFAULT_LINK_BASE = "https://blueprints.abucnasty.dev";
-function stringUrl(base, folder, slots = [], sha) {
-  const entry = slots.map((s) => `/${checkSlot(s)}`).join("");
-  const at = sha === void 0 || sha === "" ? "" : `@${checkSha(sha)}`;
-  return `${folderUrl(base, folder)}${entry}${at}.txt`;
-}
-function coverUrl(base, folder) {
-  return `${folderUrl(base, folder)}/cover.jpg`;
-}
-function renderUrl(base, folder, file) {
-  return `${folderUrl(base, folder)}/renders/${encodePath(file)}`;
-}
-function folderUrl(base, folder) {
-  const path = encodePath(folder);
-  if (path === "") throw new Error("A link needs a blueprint folder path.");
-  return `${base.trim().replace(/\/+$/, "")}/${path}`;
-}
-function encodePath(path) {
-  return path.split("/").filter((s) => s !== "").map((s) => encodeURIComponent(s).replace(/\(/g, "%28").replace(/\)/g, "%29")).join("/");
-}
-function checkSlot(slot) {
-  if (!Number.isInteger(slot) || slot < 0) throw new Error(`Not a slot number: ${slot}`);
-  return slot;
-}
-function checkSha(sha) {
-  if (!/^[0-9a-f]{7,40}$/.test(sha)) throw new Error(`Not a commit SHA: ${sha}`);
-  return sha;
-}
-
-// src/core/generated-block.ts
-function generatedBlockLines(input) {
-  const inner = [];
-  if (input.hasRenders) {
-    inner.push(`![${escapeInline(input.title)}](${coverUrl(input.base, input.folder)})`);
-  }
-  if (input.tree.kind === "blueprint-book" && input.tree.children.length > 0) {
-    if (inner.length > 0) inner.push("");
-    const visit3 = (n, depth) => {
-      const indent = "  ".repeat(depth);
-      const label2 = escapeInline(displayLabel(n));
-      const url = stringUrl(input.base, input.folder, n.slots);
-      inner.push(n.kind === "blueprint-book" ? `${indent}- ${label2} ([book](${url}))` : `${indent}- [${label2}](${url})`);
-      for (const c of n.children) visit3(c, depth + 1);
-    };
-    for (const c of input.tree.children) visit3(c, 0);
-  }
-  return inner.length === 0 ? void 0 : inner;
-}
-function expandedBlockLines(input) {
-  const inner = [];
-  if (input.cover !== void 0) inner.push(`![${escapeInline(input.title)}](${input.cover})`);
-  if (input.nodes.length > 0) {
-    if (inner.length > 0) inner.push("");
-    const visit3 = (n, depth) => {
-      const note = "./" + [...n.relativeFolder.split("/").filter((x2) => x2 !== ""), "README.md"].map(encodeLinkSegment).join("/");
-      const kind = n.kind === "blueprint-book" ? "book" : "string";
-      const url = stringUrl(input.base, input.root, n.slots);
-      inner.push(`${"  ".repeat(depth)}- [${escapeInline(n.title)}](${note}) ([${kind}](${url}))`);
-      for (const c of n.children) visit3(c, depth + 1);
-    };
-    for (const n of input.nodes) visit3(n, 0);
-  }
-  return inner.length === 0 ? void 0 : inner;
-}
-function encodeLinkSegment(segment) {
-  return encodeURIComponent(segment).replace(/\(/g, "%28").replace(/\)/g, "%29");
-}
-var COVER_LINE = /^!\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\/(?:cover|renders\/\d+(?:\/\d+)*)\.jpg\)[ \t]*$/;
-var LIST_ITEM = /^[ \t]*- (?:\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\.txt\)|.*\(\[(?:book|string)\]\(https?:\/\/[^\s()]+\.txt\)\))[ \t]*$/;
-function lines(body) {
-  const out = [];
-  for (let start = 0; start < body.length; ) {
-    const nl = body.indexOf("\n", start);
-    const end = nl === -1 ? body.length : nl + 1;
-    out.push({ text: body.slice(start, nl === -1 ? end : nl).replace(/\r$/, ""), start, end });
-    start = end;
-  }
-  return out;
-}
-var blank = (l) => l.text.trim() === "";
-function findGeneratedBlock(body) {
-  const ls = lines(body);
-  let i2 = 0;
-  while (i2 < ls.length && blank(ls[i2])) i2++;
-  const first = i2;
-  let end;
-  if (i2 < ls.length && COVER_LINE.test(ls[i2].text)) {
-    end = ls[i2].end;
-    i2++;
-    while (i2 < ls.length && blank(ls[i2])) i2++;
-  }
-  while (i2 < ls.length && LIST_ITEM.test(ls[i2].text)) {
-    end = ls[i2].end;
-    i2++;
-  }
-  return end === void 0 ? void 0 : { start: ls[first].start, end };
-}
-function applyGeneratedBlock(note, blockLines) {
-  const split = splitFrontmatter(note);
-  const head = note.slice(0, note.length - split.body.length);
-  const eol = split.yaml !== void 0 ? split.eol : /\r\n/.test(note) ? "\r\n" : "\n";
-  const legacy = removeLegacyMarkedBlock(split.body);
-  if (legacy === "invalid") {
-    return {
-      status: "invalid",
-      text: note,
-      reason: "This note has an incomplete or repeated <!-- blueprint:generated --> marker; remove it by hand."
-    };
-  }
-  const body = legacy ?? split.body;
-  const found = findGeneratedBlock(body);
-  if (found === void 0 && legacy === void 0 && blockLines === void 0) return { status: "unchanged", text: note };
-  const rest = (found ? body.slice(found.end) : body).replace(/^(?:[ \t]*\r?\n)+/, "");
-  const lead = split.yaml !== void 0 ? eol : "";
-  const text = blockLines === void 0 ? head + (rest === "" ? "" : lead + rest) : head + lead + blockLines.join(eol) + eol + (rest === "" ? "" : eol + rest);
-  if (text === note) return { status: "unchanged", text };
-  const existed = found !== void 0 || legacy !== void 0;
-  return { status: blockLines === void 0 ? "removed" : existed ? "replaced" : "inserted", text };
-}
-var LEGACY_START = "<!-- blueprint:generated:start -->";
-var LEGACY_END = "<!-- blueprint:generated:end -->";
-function removeLegacyMarkedBlock(body) {
-  const count2 = (m) => body.split(m).length - 1;
-  if (count2(LEGACY_START) + count2(LEGACY_END) === 0) return void 0;
-  if (count2(LEGACY_START) !== 1 || count2(LEGACY_END) !== 1) return "invalid";
-  const ls = lines(body);
-  const s = ls.findIndex((l) => l.text.trim() === LEGACY_START);
-  const e = ls.findIndex((l) => l.text.trim() === LEGACY_END);
-  if (s === -1 || e === -1 || e < s) return "invalid";
-  const before = body.slice(0, ls[s].start);
-  let after = body.slice(ls[e].end);
-  if (/(?:^|\n)[ \t]*\r?\n$/.test(before) || before === "") after = after.replace(/^[ \t]*\r?\n/, "");
-  return before + after;
-}
-function escapeInline(text) {
-  const oneLine2 = text.replace(/\s+/g, " ").trim();
-  let out = oneLine2.replace(/[\\`*_[\]{}<>#!|~=$%^&]/g, "\\$&");
-  out = out.replace(/^([-+])/, "\\$1").replace(/^(\d+)([.)])/, "$1\\$2");
-  return out;
-}
-
 // src/core/sha256.ts
 var K = new Uint32Array([
   1116352408,
@@ -8129,6 +7992,234 @@ function arrayLength2(v) {
 }
 function isObject4(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// src/core/versions.ts
+var VERSIONS_FILE = "versions.json";
+var VersionsError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "VersionsError";
+  }
+};
+function contentHash(value) {
+  return blueprintHash(value);
+}
+function versionLabelProblem(label2) {
+  if (label2.trim() === "") return "is empty";
+  if (label2 !== label2.trim()) return "starts or ends with a space";
+  if (label2.includes("/")) return 'contains "/"';
+  if (/[\u0000-\u001f\u007f]/.test(label2)) return "contains a control character";
+  return void 0;
+}
+var HASH = /^[0-9a-f]{64}$/;
+var COMMIT = /^[0-9a-f]{40}$/;
+var DATE = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/;
+var KEYS = ["label", "date", "hash", "commit"];
+function readVersions(text) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new VersionsError("is not valid JSON");
+  }
+  if (!Array.isArray(data)) throw new VersionsError("must be a list of versions");
+  const out = [];
+  data.forEach((v, i2) => {
+    const at = `version ${i2 + 1}`;
+    if (typeof v !== "object" || v === null || Array.isArray(v)) throw new VersionsError(`${at} is not an object`);
+    const rec = v;
+    for (const k of Object.keys(rec)) if (!KEYS.includes(k)) throw new VersionsError(`${at} has an unknown key "${k}"`);
+    for (const k of KEYS) if (typeof rec[k] !== "string") throw new VersionsError(`${at} needs "${k}" as text`);
+    const e = rec;
+    const bad = versionLabelProblem(e.label);
+    if (bad) throw new VersionsError(`${at}: the label ${bad}`);
+    if (!DATE.test(e.date)) throw new VersionsError(`${at}: "${e.date}" is not an ISO date and time`);
+    if (!HASH.test(e.hash)) throw new VersionsError(`${at}: "${e.hash}" is not a content hash (64 lowercase hex digits)`);
+    if (!COMMIT.test(e.commit)) throw new VersionsError(`${at}: "${e.commit}" is not a full commit SHA`);
+    if (out.some((o) => o.label === e.label)) throw new VersionsError(`the label "${e.label}" is used twice`);
+    if (out.some((o) => o.commit === e.commit)) throw new VersionsError(`${at} ("${e.label}") has the commit of another version`);
+    if (out.at(-1)?.hash === e.hash) throw new VersionsError(`${at} ("${e.label}") has the same content as the version before it`);
+    out.push({ label: e.label, date: e.date, hash: e.hash, commit: e.commit });
+  });
+  return out;
+}
+function writeVersions(entries) {
+  return JSON.stringify(entries.map(({ label: label2, date, hash, commit }) => ({ label: label2, date, hash, commit })), null, 2) + "\n";
+}
+function decideVersion(ledger, hash, label2) {
+  const latest = ledger.at(-1);
+  if (latest === void 0) return { kind: "new", label: label2, hash };
+  const used = ledger.some((v) => v.label === label2);
+  if (latest.hash === hash) {
+    if (latest.label === label2) return { kind: "current", latest };
+    return used ? { kind: "label-taken", label: label2, latest } : { kind: "rename", latest, label: label2 };
+  }
+  return used ? { kind: "unbumped", label: label2, latest } : { kind: "new", label: label2, hash, latest };
+}
+function applyVersionDecision(ledger, d, at) {
+  if (d.kind === "rename") return ledger.map((v, i2) => i2 === ledger.length - 1 ? { ...v, label: d.label } : v);
+  if (d.kind === "new") {
+    if (!at) throw new Error("a new version needs its commit");
+    return [...ledger, { label: d.label, date: at.date, hash: d.hash, commit: at.commit }];
+  }
+  return [...ledger];
+}
+function versionHeldMessage(d) {
+  if (d.kind === "unbumped") {
+    const which = d.latest.label === d.label ? "is still" : "reuses the older version";
+    return `content changed, bump \`version\` to publish: the note ${which} "${d.label}", so version "${d.latest.label}" stays live`;
+  }
+  if (d.kind === "label-taken") {
+    return `\`version\` "${d.label}" is an older version's label; the content is that of version "${d.latest.label}", which stays live under its label`;
+  }
+  return void 0;
+}
+
+// src/core/links.ts
+var DEFAULT_LINK_BASE = "https://blueprints.abucnasty.dev";
+function stringUrl(base, folder, slots = [], version) {
+  const entry = slots.map((s) => `/${checkSlot(s)}`).join("");
+  const at = version === void 0 || version === "" ? "" : `@${encodeSegment(checkLabel(version))}`;
+  return `${folderUrl(base, folder)}${entry}${at}.txt`;
+}
+function coverUrl(base, folder) {
+  return `${folderUrl(base, folder)}/cover.jpg`;
+}
+function renderUrl(base, folder, file) {
+  return `${folderUrl(base, folder)}/renders/${encodePath(file)}`;
+}
+function folderUrl(base, folder) {
+  const path = encodePath(folder);
+  if (path === "") throw new Error("A link needs a blueprint folder path.");
+  return `${base.trim().replace(/\/+$/, "")}/${path}`;
+}
+function encodePath(path) {
+  return path.split("/").filter((s) => s !== "").map(encodeSegment).join("/");
+}
+function encodeSegment(s) {
+  return encodeURIComponent(s).replace(/\(/g, "%28").replace(/\)/g, "%29");
+}
+function checkSlot(slot) {
+  if (!Number.isInteger(slot) || slot < 0) throw new Error(`Not a slot number: ${slot}`);
+  return slot;
+}
+function checkLabel(label2) {
+  const problem = versionLabelProblem(label2);
+  if (problem !== void 0) throw new Error(`Not a version label (it ${problem}): ${JSON.stringify(label2)}`);
+  return label2;
+}
+
+// src/core/generated-block.ts
+function generatedBlockLines(input) {
+  const inner = [];
+  if (input.hasRenders) {
+    inner.push(`![${escapeInline(input.title)}](${coverUrl(input.base, input.folder)})`);
+  }
+  if (input.tree.kind === "blueprint-book" && input.tree.children.length > 0) {
+    if (inner.length > 0) inner.push("");
+    const visit3 = (n, depth) => {
+      const indent = "  ".repeat(depth);
+      const label2 = escapeInline(displayLabel(n));
+      const url = stringUrl(input.base, input.folder, n.slots);
+      inner.push(n.kind === "blueprint-book" ? `${indent}- ${label2} ([book](${url}))` : `${indent}- [${label2}](${url})`);
+      for (const c of n.children) visit3(c, depth + 1);
+    };
+    for (const c of input.tree.children) visit3(c, 0);
+  }
+  return inner.length === 0 ? void 0 : inner;
+}
+function expandedBlockLines(input) {
+  const inner = [];
+  if (input.cover !== void 0) inner.push(`![${escapeInline(input.title)}](${input.cover})`);
+  if (input.nodes.length > 0) {
+    if (inner.length > 0) inner.push("");
+    const visit3 = (n, depth) => {
+      const note = "./" + [...n.relativeFolder.split("/").filter((x2) => x2 !== ""), "README.md"].map(encodeLinkSegment).join("/");
+      const kind = n.kind === "blueprint-book" ? "book" : "string";
+      const url = stringUrl(input.base, input.root, n.slots);
+      inner.push(`${"  ".repeat(depth)}- [${escapeInline(n.title)}](${note}) ([${kind}](${url}))`);
+      for (const c of n.children) visit3(c, depth + 1);
+    };
+    for (const n of input.nodes) visit3(n, 0);
+  }
+  return inner.length === 0 ? void 0 : inner;
+}
+function encodeLinkSegment(segment) {
+  return encodeURIComponent(segment).replace(/\(/g, "%28").replace(/\)/g, "%29");
+}
+var COVER_LINE = /^!\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\/(?:cover|renders\/\d+(?:\/\d+)*)\.jpg\)[ \t]*$/;
+var LIST_ITEM = /^[ \t]*- (?:\[(?:[^\]\\]|\\.)*\]\(https?:\/\/[^\s()]+\.txt\)|.*\(\[(?:book|string)\]\(https?:\/\/[^\s()]+\.txt\)\))[ \t]*$/;
+function lines(body) {
+  const out = [];
+  for (let start = 0; start < body.length; ) {
+    const nl = body.indexOf("\n", start);
+    const end = nl === -1 ? body.length : nl + 1;
+    out.push({ text: body.slice(start, nl === -1 ? end : nl).replace(/\r$/, ""), start, end });
+    start = end;
+  }
+  return out;
+}
+var blank = (l) => l.text.trim() === "";
+function findGeneratedBlock(body) {
+  const ls = lines(body);
+  let i2 = 0;
+  while (i2 < ls.length && blank(ls[i2])) i2++;
+  const first = i2;
+  let end;
+  if (i2 < ls.length && COVER_LINE.test(ls[i2].text)) {
+    end = ls[i2].end;
+    i2++;
+    while (i2 < ls.length && blank(ls[i2])) i2++;
+  }
+  while (i2 < ls.length && LIST_ITEM.test(ls[i2].text)) {
+    end = ls[i2].end;
+    i2++;
+  }
+  return end === void 0 ? void 0 : { start: ls[first].start, end };
+}
+function applyGeneratedBlock(note, blockLines) {
+  const split = splitFrontmatter(note);
+  const head = note.slice(0, note.length - split.body.length);
+  const eol = split.yaml !== void 0 ? split.eol : /\r\n/.test(note) ? "\r\n" : "\n";
+  const legacy = removeLegacyMarkedBlock(split.body);
+  if (legacy === "invalid") {
+    return {
+      status: "invalid",
+      text: note,
+      reason: "This note has an incomplete or repeated <!-- blueprint:generated --> marker; remove it by hand."
+    };
+  }
+  const body = legacy ?? split.body;
+  const found = findGeneratedBlock(body);
+  if (found === void 0 && legacy === void 0 && blockLines === void 0) return { status: "unchanged", text: note };
+  const rest = (found ? body.slice(found.end) : body).replace(/^(?:[ \t]*\r?\n)+/, "");
+  const lead = split.yaml !== void 0 ? eol : "";
+  const text = blockLines === void 0 ? head + (rest === "" ? "" : lead + rest) : head + lead + blockLines.join(eol) + eol + (rest === "" ? "" : eol + rest);
+  if (text === note) return { status: "unchanged", text };
+  const existed = found !== void 0 || legacy !== void 0;
+  return { status: blockLines === void 0 ? "removed" : existed ? "replaced" : "inserted", text };
+}
+var LEGACY_START = "<!-- blueprint:generated:start -->";
+var LEGACY_END = "<!-- blueprint:generated:end -->";
+function removeLegacyMarkedBlock(body) {
+  const count2 = (m) => body.split(m).length - 1;
+  if (count2(LEGACY_START) + count2(LEGACY_END) === 0) return void 0;
+  if (count2(LEGACY_START) !== 1 || count2(LEGACY_END) !== 1) return "invalid";
+  const ls = lines(body);
+  const s = ls.findIndex((l) => l.text.trim() === LEGACY_START);
+  const e = ls.findIndex((l) => l.text.trim() === LEGACY_END);
+  if (s === -1 || e === -1 || e < s) return "invalid";
+  const before = body.slice(0, ls[s].start);
+  let after = body.slice(ls[e].end);
+  if (/(?:^|\n)[ \t]*\r?\n$/.test(before) || before === "") after = after.replace(/^[ \t]*\r?\n/, "");
+  return before + after;
+}
+function escapeInline(text) {
+  const oneLine2 = text.replace(/\s+/g, " ").trim();
+  let out = oneLine2.replace(/[\\`*_[\]{}<>#!|~=$%^&]/g, "\\$&");
+  out = out.replace(/^([-+])/, "\\$1").replace(/^(\d+)([.)])/, "$1\\$2");
+  return out;
 }
 
 // src/commands/expanded.ts
@@ -8437,6 +8528,106 @@ function reportGit(host, done, git, extra = "", warn2 = extra !== "") {
   }
 }
 
+// src/commands/publish.ts
+async function planVersion(host, folder) {
+  const loc = await locate(host, folder);
+  if (loc === void 0) return { kind: "unpublished" };
+  const root = loc.root;
+  const notesPath = joinPath(root, NOTES_FILE);
+  if (!await host.files.exists(notesPath)) return { kind: "unpublished" };
+  const problem = (message) => ({ kind: "problem", root, message });
+  let note;
+  try {
+    note = await host.files.read(notesPath);
+    const status = readFrontmatter(note)["status"];
+    if (!isBlueprintStatus(status) || status === "draft") return { kind: "unpublished" };
+  } catch (e) {
+    return problem(`${notesPath} cannot be read: ${errorText2(e)}`);
+  }
+  const meta = readNotesMeta(note);
+  const title = meta.title ?? baseName(root);
+  const label2 = meta.version;
+  if (label2 === void 0) return problem('set `version` in the note (a label such as "1.0") to publish');
+  const bad = versionLabelProblem(label2);
+  if (bad !== void 0) return problem(`\`version\` ${bad}; change it to publish`);
+  const ledgerPath = joinPath(root, VERSIONS_FILE);
+  let ledger = [];
+  try {
+    if (await host.files.exists(ledgerPath)) ledger = readVersions(await host.files.read(ledgerPath));
+  } catch (e) {
+    return problem(`${ledgerPath} ${errorText2(e)}; fix it to publish`);
+  }
+  let hash;
+  try {
+    hash = contentHash(await folderValue(host, { folder: root, kind: root === loc.folder ? loc.kind : "book" }));
+  } catch (e) {
+    return problem(`the blueprint cannot be read: ${errorText2(e)}`);
+  }
+  return { kind: "decided", root, title, ledger, decision: decideVersion(ledger, hash, label2) };
+}
+async function commitAndPublish(host, folder, message) {
+  const plan = await planVersion(host, folder);
+  if (plan.kind === "unpublished") return { git: await host.git.commitAndSync(folder, message), note: "", warn: false };
+  if (plan.kind === "problem") {
+    return { git: await host.git.commitAndSync(folder, message), note: ` Not published: ${plan.message}.`, warn: true };
+  }
+  const { root, title, ledger, decision: d } = plan;
+  const ledgerPath = joinPath(root, VERSIONS_FILE);
+  const held = versionHeldMessage(d);
+  if (held !== void 0) {
+    return { git: await host.git.commitAndSync(folder, message), note: ` Not published: ${held}.`, warn: true };
+  }
+  if (d.kind === "current") return { git: await host.git.commitAndSync(folder, message), note: "", warn: false };
+  if (d.kind === "rename") {
+    await host.files.write(ledgerPath, writeVersions(applyVersionDecision(ledger, d)));
+    const git2 = await host.git.commitAndSync(folder, message);
+    return { git: git2, note: ` Version "${d.latest.label}" is now "${d.label}".`, warn: false };
+  }
+  let recorded = false;
+  const git = await host.git.commitAndSync(folder, message, async (last) => {
+    await host.files.write(ledgerPath, writeVersions(applyVersionDecision(ledger, d, last)));
+    recorded = true;
+    return `record ${title} version ${d.label}`;
+  });
+  return recorded ? { git, note: ` Published version "${d.label}".`, warn: false } : { git, note: ` Version "${d.label}" was not recorded; run "Publish version" once the commit went through.`, warn: true };
+}
+async function publishAndReport(host, folder, message, done, extra = "", warn2 = extra !== "") {
+  const r = await commitAndPublish(host, folder, message);
+  reportGit(host, done, r.git, extra + r.note, warn2 || r.warn);
+  return r.git;
+}
+async function publishVersion(host, contextFolder) {
+  const plan = await planVersion(host, contextFolder);
+  if (plan.kind === "unpublished") {
+    host.ui.notice("This blueprint is not published: set its status (Set blueprint status) first.", "error");
+    return void 0;
+  }
+  if (plan.kind === "problem") {
+    host.ui.notice(`Not published: ${plan.message}.`, "error");
+    return void 0;
+  }
+  if (host.git === void 0) {
+    host.ui.notice("Publishing a version needs git, which is not available here.", "error");
+    return void 0;
+  }
+  const d = plan.decision;
+  if (d.kind === "current") {
+    host.ui.notice(`${plan.title} is published as version "${d.latest.label}"; nothing new to publish.`);
+    return void 0;
+  }
+  const held = versionHeldMessage(d);
+  if (held !== void 0) {
+    host.ui.notice(`${plan.title} was not published: ${held}.`, "error");
+    return void 0;
+  }
+  const r = await commitAndPublish(host, plan.root, `publish ${plan.title}`);
+  reportGit(host, `Published ${plan.title}`, r.git, r.note, r.warn);
+  return r;
+}
+function errorText2(e) {
+  return e instanceof Error ? e.message : String(e);
+}
+
 // src/commands/expand-book.ts
 var UNLABELED2 = {
   blueprint: "Blueprint",
@@ -8469,7 +8660,7 @@ async function expandBookIntoFolders(host, contextFolder) {
     value = readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE)));
     kind = describeBlueprint(value).kind;
   } catch (e) {
-    return reject3(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${errorText2(e)}`);
+    return reject3(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${errorText3(e)}`);
   }
   if (kind !== "blueprint-book") {
     return reject3(host, `${folder} holds a ${KIND_NAMES[kind]}, not a book: there is nothing to expand.`);
@@ -8478,7 +8669,7 @@ async function expandBookIntoFolders(host, contextFolder) {
   try {
     expanded = expandBook(value);
   } catch (e) {
-    return reject3(host, `${folder}/${BLUEPRINT_FILE}: ${errorText2(e)}`);
+    return reject3(host, `${folder}/${BLUEPRINT_FILE}: ${errorText3(e)}`);
   }
   const { book, entries, dropped } = expanded;
   const notePath = joinPath(folder, NOTES_FILE);
@@ -8548,7 +8739,7 @@ async function expandBookIntoFolders(host, contextFolder) {
     if (await host.files.exists(rendersDir)) await host.files.remove(rendersDir);
     await refreshExpandedBook(host, loc.root);
   } catch (e) {
-    return reject3(host, `Stopped while expanding ${folder}: ${errorText2(e)}. Nothing was committed; check the folder before trying again.`);
+    return reject3(host, `Stopped while expanding ${folder}: ${errorText3(e)}. Nothing was committed; check the folder before trying again.`);
   }
   const summary = `Expanded ${folder}: ${made} folder${made === 1 ? "" : "s"}` + (moves.length > 0 ? `, ${moves.length} render${moves.length === 1 ? "" : "s"} moved` : "") + (dropped.length > 0 ? `, ${dropped.length} duplicate-slot entr${dropped.length === 1 ? "y" : "ies"} left out` : "");
   const result = { action: "expanded", folder, folders: made, renders: moves.length };
@@ -8563,14 +8754,14 @@ async function expandBookIntoFolders(host, contextFolder) {
     );
     return result;
   }
-  reportGit(host, summary, await host.git.commitAndSync(loc.root, `expand ${title} into folders`));
+  await publishAndReport(host, loc.root, `expand ${title} into folders`, summary);
   return result;
 }
 function reject3(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "rejected", reason };
 }
-function errorText2(e) {
+function errorText3(e) {
   return e instanceof Error ? e.message : String(e);
 }
 
@@ -8587,7 +8778,7 @@ async function updateExpandedBook(host, loc, value) {
     current = await readTree(host, folder, []);
     currentBook = JSON.parse(await host.files.read(joinPath(folder, BOOK_FILE)));
   } catch (e) {
-    return reject4(host, errorText3(e));
+    return reject4(host, errorText4(e));
   }
   const now = /* @__PURE__ */ new Map();
   const walkNow = (nodes) => nodes.forEach((n) => (now.set(n.slots.join("/"), n), walkNow(n.children)));
@@ -8720,11 +8911,11 @@ async function updateExpandedBook(host, loc, value) {
     if (moveFrom.size > 0) await host.files.remove(staging);
     await refreshExpandedBook(host, loc.root);
   } catch (e) {
-    return reject4(host, `Stopped while updating ${folder}: ${errorText3(e)}. Nothing was committed; check the folder before trying again.`);
+    return reject4(host, `Stopped while updating ${folder}: ${errorText4(e)}. Nothing was committed; check the folder before trying again.`);
   }
   const summary = `Updated ${folder}: ${counts.changed} changed, ${counts.moved} moved, ${counts.new} new, ${counts.removed} removed`;
   if (!host.settings.commitAfterImport || host.git === void 0) host.ui.notice(`${summary}.`);
-  else reportGit(host, summary, await host.git.commitAndSync(loc.root, `update ${title}`));
+  else await publishAndReport(host, loc.root, `update ${title}`, summary);
   return { action: "updated", folder, counts };
 }
 async function addEntryToBook(host, loc, value) {
@@ -8738,18 +8929,18 @@ async function addEntryToBook(host, loc, value) {
     const l = plainLabel(d.label ?? "");
     entry = { slot, folder: slotFolderName(slot, l), kind: d.kind, label: l, value };
   } catch (e) {
-    return reject4(host, errorText3(e));
+    return reject4(host, errorText4(e));
   }
   const title = await noteTitle(host, folder);
   try {
     await writeEntryFolder(host, folder, entry, await noteDefaults(host, folder), await readTemplate(host));
     await refreshExpandedBook(host, loc.root);
   } catch (e) {
-    return reject4(host, `Could not add the entry to ${folder}: ${errorText3(e)}`);
+    return reject4(host, `Could not add the entry to ${folder}: ${errorText4(e)}`);
   }
   const summary = `Added "${entryTitle(entry)}" to ${folder} as slot ${slot}`;
   if (!host.settings.commitAfterImport || host.git === void 0) host.ui.notice(`${summary}.`);
-  else reportGit(host, summary, await host.git.commitAndSync(loc.root, `add ${entryTitle(entry)} to ${title}`));
+  else await publishAndReport(host, loc.root, `add ${entryTitle(entry)} to ${title}`, summary);
   return { action: "added", folder, slot };
 }
 function byPathOf(items, path) {
@@ -8776,7 +8967,7 @@ function reject4(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "rejected", reason };
 }
-function errorText3(e) {
+function errorText4(e) {
   return e instanceof Error ? e.message : String(e);
 }
 
@@ -9017,8 +9208,7 @@ then render again.`
     );
     return { action: "rendered", folder, images, problems, committed: false };
   }
-  const git = await host.git.commitAndSync(commitFolder, await commitMessage(host, folder));
-  reportGit(host, summary, git, blockNote, blockNote !== "" || problems.length > 0);
+  const git = await publishAndReport(host, commitFolder, await commitMessage(host, folder), summary, blockNote, blockNote !== "" || problems.length > 0);
   return {
     action: "rendered",
     folder,
@@ -9232,8 +9422,7 @@ async function renderExpandedBook(host, loc, signal, node2) {
       );
       return { action: "rendered", folder, images: moved, problems, committed: false };
     }
-    const git = await host.git.commitAndSync(loc.root, await commitMessage(host, folder));
-    reportGit(host, summary, git, "", problems.length > 0);
+    const git = await publishAndReport(host, loc.root, await commitMessage(host, folder), summary, "", problems.length > 0);
     return { action: "rendered", folder, images: moved, problems, committed: git.status === "pushed" || git.status === "failed" && git.committed };
   } finally {
     if (await files.exists(scratch)) await files.remove(scratch);
@@ -9261,7 +9450,7 @@ async function importFromClipboard(host, contextFolder) {
   try {
     text = await host.clipboard.readText();
   } catch (e) {
-    return reject6(host, `Could not read the clipboard: ${errorText4(e)}`);
+    return reject6(host, `Could not read the clipboard: ${errorText5(e)}`);
   }
   let value;
   let json;
@@ -9334,7 +9523,7 @@ async function importFromClipboard(host, contextFolder) {
         if (next !== notes) await host.files.write(notesPath, next);
       }
     } catch (e) {
-      return reject6(host, `Could not write ${folder}: ${errorText4(e)}`);
+      return reject6(host, `Could not write ${folder}: ${errorText5(e)}`);
     }
     commitMessage2 = oneLine(answer.changeNote) || `update ${title}`;
     action = "updated";
@@ -9374,7 +9563,7 @@ async function importFromClipboard(host, contextFolder) {
       if (block.status === "invalid") blockWarning = ` ${block.reason}`;
       await host.files.write(joinPath(folder, NOTES_FILE), block.text);
     } catch (e) {
-      return reject6(host, `Could not write ${folder}: ${errorText4(e)}`);
+      return reject6(host, `Could not write ${folder}: ${errorText5(e)}`);
     }
     commitMessage2 = oneLine(answer.changeNote) || `add ${newTitle}`;
     action = "created";
@@ -9386,7 +9575,7 @@ async function importFromClipboard(host, contextFolder) {
       await refreshExpandedBook(host, loc.root);
       folder = await locateBySlots(host, loc.root, loc.slots) ?? folder;
     } catch (e) {
-      blockWarning += ` The book's notes were not refreshed: ${errorText4(e)}`;
+      blockWarning += ` The book's notes were not refreshed: ${errorText5(e)}`;
     }
     commitFolder = loc.root;
   }
@@ -9405,8 +9594,7 @@ async function importFromClipboard(host, contextFolder) {
   if (!commit) {
     ui.notice(`${verb} ${folder} with ${summary}${renderNote}.${blockWarning}`);
   } else {
-    git = await host.git.commitAndSync(commitFolder, commitMessage2);
-    reportGit(host, `${verb} ${folder} with ${summary}${renderNote}`, git, blockWarning);
+    git = await publishAndReport(host, commitFolder, commitMessage2, `${verb} ${folder} with ${summary}${renderNote}`, blockWarning);
   }
   if (host.settings.render.afterImport) await renderPreview(host, folder);
   return { action, folder, git };
@@ -9445,7 +9633,7 @@ function clipboardErrorMessage(e) {
         return e.message;
     }
   }
-  return `Could not read the blueprint string: ${errorText4(e)}`;
+  return `Could not read the blueprint string: ${errorText5(e)}`;
 }
 function safeSummary(text) {
   try {
@@ -9464,7 +9652,7 @@ function oneLine(s) {
 function capitalize(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
-function errorText4(e) {
+function errorText5(e) {
   return e instanceof Error ? e.message : String(e);
 }
 
@@ -9487,7 +9675,7 @@ async function setBlueprintStatus(host, contextFolder) {
     note = await host.files.read(notesPath);
     fm = readFrontmatter(note);
   } catch (e) {
-    return reject7(host, `Could not read ${notesPath}: ${errorText5(e)}`);
+    return reject7(host, `Could not read ${notesPath}: ${errorText6(e)}`);
   }
   const current = fm["status"];
   const title = typeof fm["title"] === "string" && fm["title"].trim() !== "" ? fm["title"] : folder;
@@ -9503,7 +9691,7 @@ async function setBlueprintStatus(host, contextFolder) {
   try {
     next = setNoteStatus(note, status);
   } catch (e) {
-    return reject7(host, `Could not set the status in ${notesPath}: ${errorText5(e)}`);
+    return reject7(host, `Could not set the status in ${notesPath}: ${errorText6(e)}`);
   }
   if (next === note) {
     host.ui.notice(`${title} is already ${status}.`);
@@ -9512,15 +9700,14 @@ async function setBlueprintStatus(host, contextFolder) {
   try {
     await host.files.write(notesPath, next);
   } catch (e) {
-    return reject7(host, `Could not write ${notesPath}: ${errorText5(e)}`);
+    return reject7(host, `Could not write ${notesPath}: ${errorText6(e)}`);
   }
   const done = `Set ${title} to ${status}`;
   if (!host.settings.commitAfterImport || host.git === void 0) {
     host.ui.notice(`${done}.`);
     return { action: "set", folder, status, git: void 0 };
   }
-  const git = await host.git.commitAndSync(folder, `set ${title} to ${status}`);
-  reportGit(host, done, git);
+  const git = await publishAndReport(host, folder, `set ${title} to ${status}`, done);
   return { action: "set", folder, status, git };
 }
 function reject7(host, reason) {
@@ -9530,7 +9717,7 @@ function reject7(host, reason) {
 function capitalize2(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
-function errorText5(e) {
+function errorText6(e) {
   return e instanceof Error ? e.message : String(e);
 }
 
@@ -9547,7 +9734,7 @@ var BUSY_MARKERS = [
   ["index.lock", "another git command is running"]
 ];
 async function commitAndSync(opts) {
-  const { run: run2, pathExists, folder, message } = opts;
+  const { run: run2, pathExists, folder, message, record } = opts;
   const pathspec = ["--", folder === "" ? "." : folder];
   const lit = "--literal-pathspecs";
   const inside = await run2(["rev-parse", "--is-inside-work-tree"]);
@@ -9558,11 +9745,23 @@ async function commitAndSync(opts) {
   if (busy !== void 0) return fail2("check", false, `git is busy: ${busy}`);
   const add = await run2([lit, "add", "-A", ...pathspec]);
   if (add.code !== 0) return fail2("stage", false, "git add failed", add);
-  const staged = await run2([lit, "diff", "--cached", "--quiet", ...pathspec]);
-  if (staged.code === 0) return { status: "nothing-to-commit" };
-  if (staged.code !== 1) return fail2("stage", false, "git diff failed", staged);
-  const commitOut = await run2([lit, "commit", "--only", "-m", message, ...pathspec]);
-  if (commitOut.code !== 0) return fail2("commit", false, "git commit failed", commitOut);
+  let committed = await commitStaged(run2, pathspec, message);
+  if (typeof committed === "object") return committed;
+  if (record) {
+    const last = await run2([lit, "log", "-1", "--format=%H%x1f%aI", ...pathspec]);
+    const [sha, date] = last.stdout.trim().split("");
+    if (last.code === 0 && sha && date) {
+      const recordMessage = await record({ commit: sha, date: date.replace(/\+00:00$/, "Z") });
+      if (recordMessage !== void 0) {
+        const addRecord = await run2([lit, "add", "-A", ...pathspec]);
+        if (addRecord.code !== 0) return fail2("stage", committed, "git add failed", addRecord);
+        const second = await commitStaged(run2, pathspec, recordMessage);
+        if (typeof second === "object") return committed ? { ...second, committed: true } : second;
+        committed ||= second;
+      }
+    }
+  }
+  if (!committed) return { status: "nothing-to-commit" };
   const head = await run2(["rev-parse", "--short", "HEAD"]);
   const commit = head.stdout.trim();
   const pull = await run2(["pull", "--no-rebase", "--no-edit"]);
@@ -9577,6 +9776,15 @@ async function commitAndSync(opts) {
   const push = await run2(["push"]);
   if (push.code !== 0) return fail2("push", true, "git push failed", push, commit);
   return { status: "pushed", commit };
+}
+async function commitStaged(run2, pathspec, message) {
+  const lit = "--literal-pathspecs";
+  const staged = await run2([lit, "diff", "--cached", "--quiet", ...pathspec]);
+  if (staged.code === 0) return false;
+  if (staged.code !== 1) return fail2("stage", false, "git diff failed", staged);
+  const out = await run2([lit, "commit", "--only", "-m", message, ...pathspec]);
+  if (out.code !== 0) return fail2("commit", false, "git commit failed", out);
+  return true;
 }
 async function busyReason(run2, pathExists) {
   for (const [marker, reason] of BUSY_MARKERS) {
@@ -10122,12 +10330,13 @@ function createObsidianHost(app, settings, openSettings) {
     },
     git: vaultDir === void 0 ? void 0 : {
       lfsAvailable: () => lfsAvailable(gitRunner(vaultDir)),
-      commitAndSync(folder, message) {
+      commitAndSync(folder, message, record) {
         return commitAndSync({
           run: gitRunner(vaultDir),
           pathExists: nodePathExists(vaultDir),
           folder,
-          message
+          message,
+          ...record ? { record } : {}
         });
       }
     }
@@ -10184,6 +10393,15 @@ var FOLDER_COMMANDS = [
     menuOnlyInBlueprintFolder: true,
     exclusive: true,
     run: setBlueprintStatus
+  },
+  {
+    id: "publish-version",
+    name: "Publish version",
+    menuTitle: "Publish version",
+    icon: "upload",
+    menuOnlyInBlueprintFolder: true,
+    exclusive: true,
+    run: publishVersion
   },
   {
     id: "render-preview",

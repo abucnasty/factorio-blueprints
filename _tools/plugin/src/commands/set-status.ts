@@ -7,8 +7,8 @@ import { BLUEPRINT_STATUSES, joinPath, NOTES_FILE, readFrontmatter, setNoteStatu
 import type { BlueprintStatus } from "../core/index.ts";
 import type { GitResult } from "../git/commit-and-sync.ts";
 import { locate } from "./expanded.ts";
-import { reportGit } from "./git-notice.ts";
 import type { Host, PickItem } from "./host.ts";
+import { publishAndReport } from "./publish.ts";
 
 export type SetStatusOutcome =
   | { action: "set"; folder: string; status: BlueprintStatus; git: GitResult | undefined }
@@ -71,8 +71,7 @@ export async function setBlueprintStatus(host: Host, contextFolder: string): Pro
     host.ui.notice(`${done}.`);
     return { action: "set", folder, status, git: undefined };
   }
-  const git = await host.git.commitAndSync(folder, `set ${title} to ${status}`);
-  reportGit(host, done, git);
+  const git = await publishAndReport(host, folder, `set ${title} to ${status}`, done);
   return { action: "set", folder, status, git };
 }
 

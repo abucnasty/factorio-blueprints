@@ -90,12 +90,13 @@ export function createObsidianHost(app: App, settings: Settings, openSettings?: 
         ? undefined
         : {
             lfsAvailable: () => lfsAvailable(gitRunner(vaultDir)),
-            commitAndSync(folder, message) {
+            commitAndSync(folder, message, record) {
               return commitAndSync({
                 run: gitRunner(vaultDir),
                 pathExists: nodePathExists(vaultDir),
                 folder,
                 message,
+                ...(record ? { record } : {}),
               });
             },
           },

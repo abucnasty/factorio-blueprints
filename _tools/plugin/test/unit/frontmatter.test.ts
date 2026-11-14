@@ -39,6 +39,11 @@ The end.
 `;
 
 describe("readNotesMeta", () => {
+  test("an unquoted numeric version is the label as typed, not the number it parses to", () => {
+    const version = (v: string) => readNotesMeta(`---\ntitle: T\nauthors: []\nversion: ${v}\n---\n`).version;
+    assert.deepStrictEqual(["1.10", "1.0", "2", "1.20 # comment", '"1.10"', "MK2.2"].map(version), ["1.10", "1.0", "2", "1.20", "1.10", "MK2.2"]);
+  });
+
   test("known fields, normalized", () => {
     assert.deepStrictEqual(readNotesMeta(NOTE), {
       title: "Military Science (240/s)",

@@ -1,6 +1,7 @@
 ---
 title: Automation Science (480/s)
 authors: [The End]
+version: "1.0"
 posted: 2025-08-15
 video: https://www.youtube.com/watch?v=HdMcEn3b55c
 factoriobin: https://factoriobin.com/post/d26fun/16

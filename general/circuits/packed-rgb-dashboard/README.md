@@ -1,6 +1,7 @@
 ---
 title: Packed RGB Dashboard
 authors: [abucnasty]
+version: "1.0"
 posted: 2025-07-26
 video: https://youtu.be/XbROdpgXeXQ
 factoriobin: https://factoriobin.com/post/2fs995
