@@ -79,7 +79,7 @@ The keys, required and optional:
 ---
 title: Military Science (240/s)     # required, display name
 authors: [abucnasty]                # required, list, may be empty
-version: "3"                        # required to publish; always a string, unique per blueprint
+version: "3"                        # required to publish; a label read as typed (1.10 stays "1.10"), unique per blueprint
 posted: 2026-03-10                  # optional, ISO date
 video: https://youtu.be/...         # optional
 factoriobin: https://factoriobin.com/post/...   # optional

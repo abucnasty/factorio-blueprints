@@ -7429,6 +7429,7 @@ function readFrontmatter(text) {
 }
 function readNotesMeta(text) {
   const fm = readFrontmatter(text);
+  if (typeof fm["version"] === "number") fm["version"] = scalarSource(splitFrontmatter(text).yaml, "version") ?? fm["version"];
   const meta = {
     authors: stringList(fm["authors"]),
     previous_paths: stringList(fm["previous_paths"])
@@ -7522,6 +7523,10 @@ function renderPair(key, value) {
     node2.type = "QUOTE_DOUBLE";
   }
   return doc.toString({ lineWidth: 0, flowCollectionPadding: false }).replace(/\n$/, "").split("\n");
+}
+function scalarSource(yaml, key) {
+  const node2 = parseDocument(yaml).get(key, true);
+  return isScalar(node2) && node2.type === "PLAIN" && typeof node2.source === "string" ? node2.source : void 0;
 }
 function optionalString(v) {
   if (v === null || v === void 0) return void 0;
