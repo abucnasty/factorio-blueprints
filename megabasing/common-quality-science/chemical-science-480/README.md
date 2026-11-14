@@ -1,6 +1,7 @@
 ---
 title: Chemical Science (480/s)
 authors: [Thaeln, abucnasty]
+version: "1.0"
 posted: 2025-09-30
 video: https://youtu.be/ueV6b7eCEGY
 factoriobin: https://factoriobin.com/post/q9xxwq

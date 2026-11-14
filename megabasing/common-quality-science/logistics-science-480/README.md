@@ -1,6 +1,7 @@
 ---
 title: Logistics Science (480/s)
 authors: [The End]
+version: "1.0"
 posted: 2025-08-30
 video: https://www.youtube.com/watch?v=2ENY4AjjdqE
 factoriobin: https://factoriobin.com/post/bmvzi0
