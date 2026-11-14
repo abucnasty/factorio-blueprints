@@ -3,11 +3,13 @@ title: Nuclear Substation Grid
 authors: []
 version: "1"
 posted: 2026-11-13
-status: draft
+status: public
 entities: 5532
 blueprints: 5
 factorio_version: "2.1.24.1"
 ---
+
+![Nuclear Substation Grid](https://blueprints.abucnasty.dev/grids/substation/nuclear-substation-grid/cover.jpg)
 
 - [480 MW Reactor](https://blueprints.abucnasty.dev/grids/substation/nuclear-substation-grid/0.txt)
 - [480 MW Reactor](https://blueprints.abucnasty.dev/grids/substation/nuclear-substation-grid/1.txt)
