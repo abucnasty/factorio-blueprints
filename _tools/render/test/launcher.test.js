@@ -3,13 +3,14 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import sharp from "sharp";
 import { encodeBlueprintString } from "../src/codec.js";
 import { FRAMING_DEFAULTS } from "../src/framing.js";
 import { blueprintHash } from "../src/manifest.js";
-import { render } from "../src/render.js";
+import { defaultWorkRoot, render } from "../src/render.js";
 import { alive, fakeInstall, fakePids, row, sampleBook, tempDir } from "./helpers.js";
 
 const BIN = new URL("../bin/render.js", import.meta.url).pathname;
@@ -19,6 +20,13 @@ async function setup(t) {
     const dir = await tempDir("render-launch-");
     t.after(() => fs.rm(dir, { recursive: true, force: true }));
     const { root } = await fakeInstall(dir);
+    // a run without --work-dir makes its work directory here (on Linux), not in the real cache folder
+    const cache = process.env.XDG_CACHE_HOME;
+    process.env.XDG_CACHE_HOME = path.join(dir, "cache");
+    t.after(() => {
+        if (cache === undefined) delete process.env.XDG_CACHE_HOME;
+        else process.env.XDG_CACHE_HOME = cache;
+    });
     return { dir, root, work: path.join(dir, "work"), out: path.join(dir, "renders") };
 }
 
@@ -263,11 +271,15 @@ test("the render manifest: empty blueprints absent, --only drops removed images,
     assert.deepEqual((await fs.readdir(env.out)).sort(), ["0.jpg", "render.json"]);
 });
 
-test("without --work-dir, a temporary work directory is used and removed after success", async t => {
+test("without --work-dir, a work directory in the cache folder (Linux) is used and removed after success", async t => {
     const env = await setup(t);
     const input = path.join(env.dir, "bp.txt");
     await fs.writeFile(input, encodeBlueprintString({ blueprint: row("x", 2) }));
     const report = await render({ ...options(env), input, workDir: undefined }, () => {});
+    assert.equal(path.dirname(report.work_dir), defaultWorkRoot());
+    assert.equal(defaultWorkRoot("linux", { XDG_CACHE_HOME: "/c" }, "/h"), path.join("/c", "factorio-render"));
+    assert.equal(defaultWorkRoot("linux", {}, "/h"), path.join("/h", ".cache", "factorio-render"));
+    assert.equal(defaultWorkRoot("win32", {}, "/h"), os.tmpdir());
     assert.deepEqual((await fs.readdir(env.out)).sort(), ["0.jpg", "render.json"]);
     // a single blueprint's manifest key is "0"
     assert.deepEqual(Object.keys(JSON.parse(await fs.readFile(path.join(env.out, "render.json"), "utf8")).entries), ["0"]);

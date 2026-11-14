@@ -39,8 +39,24 @@ export const REPORT_SCHEMA = 2;
 /** The game's JSON writer turns an empty Lua table into [] */
 const asCounts = value => (value && !Array.isArray(value) ? value : {});
 
+/**
+ * Where a run's own work directory goes when --work-dir is not given. On Linux a disk-backed cache folder
+ * ($XDG_CACHE_HOME/factorio-render, else ~/.cache/factorio-render): /tmp is often tmpfs (RAM), and the work directory
+ * holds both game instances' write-data for the whole run and is kept after a run with a blueprint left without an
+ * image. Elsewhere the system's temporary folder.
+ */
+export function defaultWorkRoot(platform = process.platform, env = process.env, home = os.homedir()) {
+    if (platform !== "linux") return os.tmpdir();
+    const cache = env.XDG_CACHE_HOME && path.isAbsolute(env.XDG_CACHE_HOME) ? env.XDG_CACHE_HOME : path.join(home, ".cache");
+    return path.join(cache, "factorio-render");
+}
+
 async function makeWorkDir(requested) {
-    if (!requested) return { dir: await fsp.mkdtemp(path.join(os.tmpdir(), "factorio-render-")), chosen: false };
+    if (!requested) {
+        const root = defaultWorkRoot();
+        await fsp.mkdir(root, { recursive: true });
+        return { dir: await fsp.mkdtemp(path.join(root, "factorio-render-")), chosen: false };
+    }
     const dir = path.resolve(requested);
     const entries = await fsp.readdir(dir).catch(error => {
         if (error.code === "ENOENT") return [];
@@ -267,6 +283,8 @@ async function capture(session, entry, workDir, options, log, { attempt, attempt
         }
         const jpeg = path.join(workDir, "images", ...entry.file.split("/"));
         const written = shots.length === 1 ? await convertToJpeg(shots[0].file, jpeg) : await stitchToJpeg(plan, shots, jpeg);
+        // the raw screenshots (PNG, up to 4096 px square each) are the bulk of a work directory; the JPEG replaces them
+        for (const shot of shots) await fsp.rm(shot.file, { force: true });
         return {
             file: jpeg,
             image: {
@@ -370,6 +388,8 @@ export async function render(options, print) {
     report.images.sort(byBookOrder);
     report.without_image.sort(byBookOrder);
     report.removed = await publishImages(options.out, images, inScope);
+    // the JPEGs are in <out> now; a kept work directory does not need its copies
+    await fsp.rm(path.join(workDir, "images"), { recursive: true, force: true });
     // the manifest says which images are current; it is not a render image and cleanup never touches it
     const { manifest: previous, problem: manifestProblem } = only ? await readManifest(options.out) : { manifest: null, problem: null };
     if (manifestProblem) log(`Render manifest: ${manifestProblem}`);
