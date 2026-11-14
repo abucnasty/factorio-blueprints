@@ -1,6 +1,7 @@
 ---
 title: Pollution Control
 authors: [abucnasty]
+version: "1.0"
 posted: 2025-06-21
 video: https://youtu.be/O9Il-vpOXNM
 factoriobin: https://factoriobin.com/post/ygmdig

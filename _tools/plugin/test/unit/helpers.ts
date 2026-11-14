@@ -24,6 +24,8 @@ import { nodeProcessRunner } from "../../src/process/node-process.ts";
 export { fixture } from "./fixtures.ts";
 
 export const BASE = "https://blueprints.abucnasty.dev";
+/** The full SHA the fake git reports for a commit. */
+export const FAKE_COMMIT = "abc1234".padEnd(40, "0");
 
 export interface FakeHost extends Host {
   confirms: ConfirmPrompt[];
@@ -175,8 +177,10 @@ export function fakeHost(opts: FakeOptions = {}): FakeHost {
         : opts.git !== undefined && "commitAndSync" in opts.git
           ? opts.git
           : {
-              commitAndSync: async (folder, message) => {
+              commitAndSync: async (folder, message, record) => {
                 host.commits.push({ folder, message });
+                const second = await record?.({ commit: FAKE_COMMIT, date: "2026-11-12T10:00:00Z" });
+                if (second !== undefined) host.commits.push({ folder, message: second });
                 return gitResult;
               },
               lfsAvailable: async () => opts.lfs ?? true,

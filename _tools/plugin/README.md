@@ -19,6 +19,13 @@ notes beside them, and back. The built plugin is committed in
 - **Set blueprint status**: draft, public, deprecated or unlisted, written
   to the note's `status` (the root book's, inside an expanded book), then
   committed and pushed. New blueprints start as drafts.
+- **Publish version**: every command that commits a published blueprint
+  also records its version in `versions.json` (see the conventions): new
+  content under a new `version` becomes a new version, recorded with the
+  commit that brought it in; a new `version` for the same content renames
+  the latest one. New content under a `version` that is already recorded is
+  committed but not published, and the notice says to bump `version`. This
+  command does the same on its own, for a `version` edited by hand.
 - **Render preview** (also: click the `Render: …` status bar item): runs
   `_tools/render` for the folder (with `--only` for just the outdated
   entries when clicked from the status bar), refreshes the notes' generated

@@ -1,0 +1,14 @@
+[
+  {
+    "label": "1.0",
+    "date": "2025-09-30T04:58:09Z",
+    "hash": "a90ee2e4f0bd2c5665b8e0aef7c449d8520bec2ec81d9e378598ee7591458d7b",
+    "commit": "474ca1769fd0ad926df2066e4e54aa8a9c039015"
+  },
+  {
+    "label": "1.2",
+    "date": "2026-02-03T12:00:00Z",
+    "hash": "56bde6e7a39dd5aaf263ce082872f50b7cac41ae6bc30896ede5ac9b53851659",
+    "commit": "040b97c31a3bb66539a1b673be8ed0db476ba41d"
+  }
+]

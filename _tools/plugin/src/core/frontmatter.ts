@@ -95,9 +95,12 @@ export function readFrontmatter(text: string): Record<string, unknown> {
 /**
  * The known fields, normalized: empty or null optional fields are absent,
  * numbers in string fields become strings, a single author becomes a list.
+ * An unquoted numeric `version` is taken as typed (`version: 1.10` is
+ * "1.10", not "1.1"): it is a label, not a number.
  */
 export function readNotesMeta(text: string): NotesMeta {
   const fm = readFrontmatter(text);
+  if (typeof fm["version"] === "number") fm["version"] = scalarSource(splitFrontmatter(text).yaml!, "version") ?? fm["version"];
   const meta: NotesMeta = {
     authors: stringList(fm["authors"]),
     previous_paths: stringList(fm["previous_paths"]),
@@ -219,6 +222,12 @@ function renderPair(key: string, value: unknown): string[] {
     .toString({ lineWidth: 0, flowCollectionPadding: false })
     .replace(/\n$/, "")
     .split("\n");
+}
+
+/** The text of a top-level plain scalar as written in the YAML, or undefined. */
+function scalarSource(yaml: string, key: string): string | undefined {
+  const node = parseDocument(yaml).get(key, true);
+  return isScalar(node) && node.type === "PLAIN" && typeof node.source === "string" ? node.source : undefined;
 }
 
 function optionalString(v: unknown): string | undefined {

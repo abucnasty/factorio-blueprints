@@ -1,10 +1,14 @@
 # Validates the blueprint catalog on every pull request. On pushes to main
 # (the vault pushes there directly) it publishes it for the link Worker:
 # the blueprint strings the live index.json lacks, then index.json, to the
-# factorio-blueprints-catalog R2 bucket. An invalid blueprint does not hold
+# factorio-blueprints-catalog R2 bucket. The versions are the ones each
+# blueprint's versions.json records (the plugin writes it; this job only
+# reads it), so no git history is needed. An invalid blueprint does not hold
 # up the others: it is listed in the step summary, keeps its last published
-# version, and the run fails after the valid ones are live. Run it by hand
-# on main with "backfill" to upload every string of every version again.
+# version, and the run fails after the valid ones are live. A blueprint whose
+# content changed without a new version is listed too and keeps its last
+# version, but does not fail the run. Run it by hand on main with "backfill"
+# to upload every string of every current version again.
 name: publish catalog
 
 # Changes that cannot affect the catalog (other tools, their workflows, vault
@@ -40,7 +44,7 @@ on:
   workflow_dispatch:
     inputs:
       backfill:
-        description: Upload every string of every version, not just the missing ones
+        description: Upload every string of every current version, not just the missing ones
         type: boolean
         default: false
 
@@ -68,10 +72,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Full history, with every blob, for each blueprint's versions.
-          # No sparse checkout: it makes the clone partial, and old versions
-          # of blueprint.json then cannot be read once credentials are gone.
-          fetch-depth: 0
+          # The pushed commit only: versions come from versions.json, not
+          # the history. No sparse checkout: it makes the clone partial, and
+          # blobs then cannot be read once credentials are gone.
+          fetch-depth: 1
           lfs: false
           persist-credentials: false
 

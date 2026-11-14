@@ -22,7 +22,7 @@ import type { Located } from "./expanded.ts";
 import { listRenderFiles, refreshExpandedBook, refreshGeneratedBlock } from "./generated-notes.ts";
 import type { Host, ProcessResult } from "./host.ts";
 import { folderRenderState } from "./render-status.ts";
-import { reportGit } from "./git-notice.ts";
+import { publishAndReport } from "./publish.ts";
 
 export const RENDER_SCRIPT = "_tools/render/bin/render.js";
 export const RENDER_MODULES = "_tools/render/node_modules";
@@ -169,8 +169,7 @@ async function run(host: Host, contextFolder: string, signal: AbortSignal, optio
     );
     return { action: "rendered", folder, images, problems, committed: false };
   }
-  const git = await host.git.commitAndSync(commitFolder, await commitMessage(host, folder));
-  reportGit(host, summary, git, blockNote, blockNote !== "" || problems.length > 0);
+  const git = await publishAndReport(host, commitFolder, await commitMessage(host, folder), summary, blockNote, blockNote !== "" || problems.length > 0);
   return {
     action: "rendered",
     folder,
@@ -424,8 +423,7 @@ async function renderExpandedBook(host: Host, loc: Located, signal: AbortSignal,
       );
       return { action: "rendered", folder, images: moved, problems, committed: false };
     }
-    const git = await host.git.commitAndSync(loc.root, await commitMessage(host, folder));
-    reportGit(host, summary, git, "", problems.length > 0);
+    const git = await publishAndReport(host, loc.root, await commitMessage(host, folder), summary, "", problems.length > 0);
     return { action: "rendered", folder, images: moved, problems, committed: git.status === "pushed" || (git.status === "failed" && git.committed) };
   } finally {
     if (await files.exists(scratch)) await files.remove(scratch);

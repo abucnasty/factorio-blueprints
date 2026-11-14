@@ -1,6 +1,7 @@
 ---
 title: Tank Orientations
 authors: [abucnasty]
+version: "1.0"
 posted: 2025-11-03
 factoriobin: https://factoriobin.com/post/vbniuv
 status: public

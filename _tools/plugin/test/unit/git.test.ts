@@ -65,6 +65,26 @@ const log = (dir: string, ref = "HEAD") => git(dir, "log", "--format=%s", ref).t
 const status = (dir: string) => git(dir, "status", "--porcelain").trimEnd();
 
 describe("commitAndSync", () => {
+  test("record: files written after the commit go in a second commit, told the first one's full SHA", async () => {
+    write(vault, "cat/mall/blueprint.json", '{"a":2}\n');
+    const seen: { commit: string; date: string }[] = [];
+    const record = async (last: { commit: string; date: string }) => {
+      seen.push(last);
+      write(vault, "cat/mall/versions.json", `[${JSON.stringify(last.commit)}]\n`);
+      return "record Mall version 2";
+    };
+    const run = createGitRunner("git", vault);
+    const result = await commitAndSync({ run, pathExists: nodePathExists(vault), folder: "cat/mall", message: "update Mall", record });
+    assert.equal(result.status, "pushed");
+    assert.deepEqual(log(remote, "main").slice(0, 2), ["record Mall version 2", "update Mall"]);
+    assert.equal(seen[0]!.commit, git(vault, "rev-parse", "HEAD~1").trim());
+    assert.match(seen[0]!.date, /^\d{4}-\d\d-\d\dT/);
+    // Nothing new to commit: told the commit that last changed the folder.
+    const again = await commitAndSync({ run, pathExists: nodePathExists(vault), folder: "cat/mall", message: "x", record: async (last) => (seen.push(last), undefined) });
+    assert.equal(again.status, "nothing-to-commit");
+    assert.equal(seen[1]!.commit, git(vault, "rev-parse", "HEAD").trim());
+  });
+
   test("commits only the blueprint folder, then pulls and pushes", async () => {
     write(vault, "cat/new-thing/blueprint.json", '{"a":1}\n');
     write(vault, "cat/new-thing/README.md", "---\ntitle: New\n---\n");

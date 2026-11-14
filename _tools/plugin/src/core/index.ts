@@ -103,6 +103,19 @@ export type {
   RenderTarget,
 } from "./render-state.ts";
 
+export {
+  applyVersionDecision,
+  contentHash,
+  decideVersion,
+  readVersions,
+  versionHeldMessage,
+  versionLabelProblem,
+  VERSIONS_FILE,
+  VersionsError,
+  writeVersions,
+} from "./versions.ts";
+export type { VersionDecision, VersionEntry } from "./versions.ts";
+
 export { applyStatsToNote, blueprintStats, STATS_KEYS } from "./stats.ts";
 export type { BlueprintStats } from "./stats.ts";
 

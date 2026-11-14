@@ -2,20 +2,29 @@
 
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
 
 import {
+  applyVersionDecision,
+  assembleBook,
+  contentHash,
+  decideVersion,
   decodeBlueprintString,
   encodeFactorioVersion,
   expandBook,
   type ExpandedEntry,
   plainLabel,
+  readCanonicalJson,
+  readFrontmatter,
+  readNotesMeta,
+  readVersions,
   writeCanonicalJson,
+  writeVersions,
 } from "../../plugin/src/core/index.ts";
-import { buildCatalog, carryOverStale, entryKey, type LiveIndex, produceStrings, selectStrings, stringKey } from "../build-catalog.ts";
+import { buildCatalog, carryOver, entryKey, type LiveIndex, produceStrings, selectStrings, stringKey } from "../build-catalog.ts";
 
 process.env["GIT_CONFIG_GLOBAL"] = "/dev/null";
 process.env["GIT_CONFIG_NOSYSTEM"] = "1";
@@ -56,11 +65,77 @@ const bp = (label: string, entities = 1) =>
 const bpBody = (label: string) => JSON.parse(bp(label)).blueprint;
 const book = (label: string, blueprints: object[]) =>
   writeCanonicalJson({ blueprint_book: { item: "blueprint-book", label, blueprints, version: encodeFactorioVersion("2.0.76") } });
-const notes = (fm: string) => `---\n${fm}\n---\n\nNotes.\n`;
+/** A root note: published (status: public) at version "1" unless `fm` says otherwise. */
+const notes = (fm: string) =>
+  plain(`${fm}${/^status:/m.test(fm) ? "" : "\nstatus: public"}${/^version:/m.test(fm) ? "" : '\nversion: "1"'}`);
+/** A note exactly as given (inside an expanded book, where only the root note has a status). */
+const plain = (fm: string) => `---\n${fm}\n---\n\nNotes.\n`;
 const pointer = (oid: string, size = 1234) => `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${size}\n`;
 const OID = "a".repeat(64);
 
-test("builds the index: history, renames via previous_paths, renders, frontmatter", async () => {
+
+type Repo = ReturnType<typeof repo>;
+
+/** The value a blueprint folder or expanded book holds in the working tree. */
+function valueOf(r: Repo, folder: string): Promise<unknown> {
+  const file = join(r.dir, folder, "blueprint.json");
+  if (existsSync(file)) return Promise.resolve(readCanonicalJson(readFileSync(file, "utf8")));
+  return assembleBook(folder, {
+    folders: async (f) => readdirSync(join(r.dir, f), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name),
+    read: async (p) => (existsSync(join(r.dir, p)) ? readFileSync(join(r.dir, p), "utf8") : undefined),
+  });
+}
+
+/** Root blueprint folders and expanded books in the working tree. */
+function roots(r: Repo, dir = ""): string[] {
+  const out: string[] = [];
+  for (const d of readdirSync(join(r.dir, dir), { withFileTypes: true })) {
+    if (!d.isDirectory() || d.name.startsWith(".") || d.name.startsWith("_")) continue;
+    const f = dir === "" ? d.name : `${dir}/${d.name}`;
+    if (existsSync(join(r.dir, f, "book.json")) || existsSync(join(r.dir, f, "blueprint.json"))) out.push(f);
+    else out.push(...roots(r, f));
+  }
+  return out;
+}
+
+/**
+ * Commit, then record the version of every published blueprint as the
+ * plugin does: a new label for new content is appended with that commit, a
+ * new label for the same content renames the latest. Commits the ledgers.
+ * Returns the content commit.
+ */
+async function publish(r: Repo, subject: string, only?: string[]): Promise<string> {
+  // Nothing to commit: the version is the commit that last changed things, as with the plugin.
+  const sha = r.git("status", "--porcelain") === "" ? r.git("rev-parse", "HEAD") : r.commit(subject);
+  const date = r.git("log", "-1", "--format=%aI", sha).replace(/\+00:00$/, "Z");
+  for (const folder of only ?? roots(r)) {
+    const notePath = join(r.dir, folder, "README.md");
+    if (!existsSync(notePath)) continue;
+    const note = readFileSync(notePath, "utf8");
+    let fm: Record<string, unknown>;
+    try {
+      fm = readFrontmatter(note);
+    } catch {
+      continue;
+    }
+    const label = readNotesMeta(note).version;
+    if (!["public", "deprecated", "unlisted"].includes(fm["status"] as string) || label === undefined) continue;
+    const ledgerPath = join(r.dir, folder, "versions.json");
+    const ledger = existsSync(ledgerPath) ? readVersions(readFileSync(ledgerPath, "utf8")) : [];
+    let value: unknown;
+    try {
+      value = await valueOf(r, folder);
+    } catch {
+      continue;
+    }
+    const d = decideVersion(ledger, contentHash(value), label);
+    if (d.kind === "new" || d.kind === "rename") writeFileSync(ledgerPath, writeVersions(applyVersionDecision(ledger, d, { commit: sha, date })));
+  }
+  if (r.git("status", "--porcelain") !== "") r.commit(`record versions of ${subject}`);
+  return sha;
+}
+
+test("builds the index from the files and the ledgers: frontmatter, renders, versions newest first", async () => {
   const r = repo();
   r.write("cat/a/blueprint.json", bp("A"));
   r.write("cat/a/README.md", notes("title: A\nauthors: [me]\nversion: 1\nposted: 2026-03-10\ncustom: dropped"));
@@ -68,30 +143,37 @@ test("builds the index: history, renames via previous_paths, renders, frontmatte
   r.write("cat/b/README.md", notes("title: B\nauthors: []"));
   r.write("_tools/x/blueprint.json", "not scanned");
   r.write(".hidden/blueprint.json", "not scanned");
-  const c1 = r.commit("add a and b");
+  const c1 = await publish(r, "add a and b");
   r.write("cat/a/blueprint.json", bp("A", 3));
+  r.write("cat/a/README.md", notes("title: A\nauthors: [me]\nversion: 1.1\nposted: 2026-03-10"));
   r.write("cat/a/renders/0.jpg", pointer(OID, 99));
   r.write("cat/a/renders/1.png", pointer("b".repeat(64)));
-  const c2 = r.commit("grow a");
-  mkdirSync(join(r.dir, "new"));
-  r.git("mv", "cat/b", "new/b");
-  r.write("new/b/README.md", notes("title: B\nauthors: []\nprevious_paths: [cat/b]"));
-  const c3 = r.commit("move b");
-  r.write("cat/a/README.md", notes("title: A2\nauthors: [me]"));
-  const c4 = r.commit("retitle a");
+  const c2 = await publish(r, "grow a");
+  r.write("cat/a/README.md", notes("title: A2\nauthors: [me]\nversion: 1.1"));
+  const c3 = r.commit("retitle a");
 
-  const { index, problems } = await buildCatalog(r.dir, { now: new Date("2026-01-01T00:00:00Z") });
+  const { index, problems, held } = await buildCatalog(r.dir, { now: new Date("2026-01-01T00:00:00Z") });
   assert.deepEqual(problems, []);
-  assert.equal(index.commit, c4);
+  assert.deepEqual(held, []);
+  assert.equal(index.schema, 3);
+  assert.equal(index.commit, c3);
   assert.equal(index.generatedAt, "2026-01-01T00:00:00.000Z");
-  assert.deepEqual(index.blueprints.map((e) => e.path), ["cat/a", "new/b"]);
+  assert.deepEqual(index.blueprints.map((e) => e.path), ["cat/a", "cat/b"]);
 
   const [a, b] = index.blueprints as [(typeof index.blueprints)[0], (typeof index.blueprints)[0]];
   assert.equal(a.title, "A2");
+  assert.equal(a.version, "1.1");
   assert.equal("custom" in a, false);
   assert.equal(a.commit, c2, "a notes-only commit is not a version");
-  assert.deepEqual(a.history.map((h) => [h.sha, h.subject]), [[c2, "grow a"], [c1, "add a and b"]]);
-  assert.match(a.history[0]!.date, /^\d{4}-\d\d-\d\dT/);
+  const hashOf = async (label: string, entities = 1) => contentHash(readCanonicalJson(bp(label, entities)));
+  assert.deepEqual(
+    a.history.map(({ label, sha, hash, subject, entries }) => ({ label, sha, hash, subject, entries })),
+    [
+      { label: "1.1", sha: c2, hash: await hashOf("A", 3), subject: "1.1", entries: true },
+      { label: "1", sha: c1, hash: await hashOf("A"), subject: "1", entries: true },
+    ],
+  );
+  assert.equal(a.history[0]!.date, r.git("log", "-1", "--format=%aI", c2).replace(/\+00:00$/, "Z"));
   assert.equal(a.blueprint.kind, "blueprint");
   assert.equal(a.blueprint.counts.entities, 3);
   assert.equal(a.blueprint.factorioVersion, "2.0.76");
@@ -101,98 +183,54 @@ test("builds the index: history, renames via previous_paths, renders, frontmatte
   ]);
   assert.equal(a.cover, "0.jpg");
   assert.equal(a.nodes, undefined, "a single blueprint has no nodes");
-
-  assert.deepEqual(b.previous_paths, ["cat/b"]);
-  assert.equal(b.commit, c3);
-  assert.deepEqual(b.history.map((h) => h.sha), [c3, c1], "history follows the old path");
+  assert.deepEqual(b.history.map((h) => [h.label, h.sha]), [["1", c1]]);
 });
 
-test("history dates are author dates, in git log order", async () => {
+test("a moved blueprint keeps its ledger; previous_paths only redirect, and older versions are not made again under the new path", async () => {
   const r = repo();
-  r.write("cat/a/blueprint.json", bp("A1"));
-  r.write("cat/a/README.md", notes("title: A\nauthors: []"));
-  r.git("add", "-A");
-  r.git("commit", "-q", "-m", "posted long ago", "--date", "2024-03-10T12:00:00+01:00");
-  const old = r.git("rev-parse", "HEAD");
-  r.write("cat/a/blueprint.json", bp("A2"));
-  r.git("add", "-A");
-  // Authored earlier than the first commit, committed later: order stays git log's.
-  r.git("commit", "-q", "-m", "back-dated", "--date", "2023-01-01T00:00:00Z");
-  const newer = r.git("rev-parse", "HEAD");
-  assert.notEqual(r.git("log", "-1", "--format=%cI", newer).slice(0, 4), "2023");
-
-  const [a] = (await buildCatalog(r.dir)).index.blueprints;
-  assert.deepEqual(
-    a!.history.map((h) => [h.sha, h.date]),
-    [
-      [newer, "2023-01-01T00:00:00Z"],
-      [old, "2024-03-10T12:00:00+01:00"],
-    ],
-  );
-});
-
-test("produces each version's string from that commit, under the current path", async () => {
-  const r = repo();
-  r.write("cat/a/blueprint.json", bp("A1"));
-  r.write("cat/a/README.md", notes("title: A\nauthors: []"));
-  const c1 = r.commit("one");
-  r.write("cat/a/blueprint.json", bp("A2"));
-  const c2 = r.commit("two");
-  r.git("mv", "cat/a", "cat/z");
-  r.write("cat/z/README.md", notes("title: A\nauthors: []\nprevious_paths: [cat/a]"));
-  const c3 = r.commit("rename");
+  r.write("cat/b/blueprint.json", bp("B"));
+  r.write("cat/b/README.md", notes("title: B\nauthors: []"));
+  const c1 = await publish(r, "add b");
+  r.write("cat/b/blueprint.json", bp("B", 2));
+  r.write("cat/b/README.md", notes('title: B\nauthors: []\nversion: "2"'));
+  const c2 = await publish(r, "grow b");
+  const live = (await buildCatalog(r.dir)).index;
+  mkdirSync(join(r.dir, "new"));
+  r.git("mv", "cat/b", "new/b");
+  r.write("new/b/README.md", notes('title: B\nauthors: []\nversion: "2"\nprevious_paths: [cat/b]'));
+  r.commit("move b");
 
   const catalog = await buildCatalog(r.dir);
+  const b = catalog.index.blueprints[0]!;
+  assert.deepEqual([b.path, b.previous_paths, b.history.map((h) => [h.label, h.sha])], ["new/b", ["cat/b"], [["2", c2], ["1", c1]]]);
+  const jobs = selectStrings(catalog.index, live);
+  assert.deepEqual(jobs.map((j) => j.key), [stringKey("new/b", c2), stringKey("new/b", c1)]);
   const out = new Map<string, string>();
-  await produceStrings(r.dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
-  assert.deepEqual([...out.keys()].sort(), [c1, c2, c3].map((s) => stringKey("cat/z", s)).sort());
-  const label = (sha: string) => (decodeBlueprintString(out.get(stringKey("cat/z", sha))!).value as any).blueprint.label;
-  assert.equal(label(c1), "A1");
-  assert.equal(label(c2), "A2");
-  assert.equal(label(c3), "A2");
+  const { warnings } = await produceStrings(r.dir, catalog, jobs, (k, t) => out.set(k, t));
+  assert.deepEqual([...out.keys()], [stringKey("new/b", c2)], "the current version is made from the files");
+  assert.match(warnings.join("\n"), /^new\/b@1: not in the live index, and only the current version's strings can be made/);
 });
 
-test("an old version that was not a valid blueprint is dropped from the history", async () => {
-  const r = repo();
-  r.write("cat/a/blueprint.json", "{ broken");
-  r.write("cat/a/README.md", notes("title: A\nauthors: []"));
-  const bad = r.commit("broken");
-  r.write("cat/a/blueprint.json", bp("A"));
-  const good = r.commit("fixed");
-  const catalog = await buildCatalog(r.dir);
-  assert.deepEqual(catalog.index.blueprints[0]!.history.map((h) => h.sha), [good, bad]);
-  const keys: string[] = [];
-  const { warnings } = await produceStrings(r.dir, catalog, selectStrings(catalog.index), (k) => keys.push(k));
-  assert.deepEqual(keys, [stringKey("cat/a", good)]);
-  assert.equal(warnings.length, 1);
-  assert.deepEqual(catalog.index.blueprints[0]!.history.map((h) => h.sha), [good]);
-});
-
-test("selects only strings the live index lacks", async () => {
+test("only the current version's strings are made, and only those the live index lacks", async () => {
   const r = repo();
   r.write("cat/a/blueprint.json", bp("A"));
   r.write("cat/a/README.md", notes("title: A\nauthors: []"));
   r.write("cat/b/blueprint.json", bp("B"));
   r.write("cat/b/README.md", notes("title: B\nauthors: []"));
-  const c1 = r.commit("one");
+  const c1 = await publish(r, "one");
   const live = (await buildCatalog(r.dir)).index;
   assert.equal(selectStrings(live).length, 2, "no live index: everything");
   assert.deepEqual(selectStrings(live, live), []);
 
-  // Two pushes whose publish never ran: both are picked up.
   r.write("cat/a/blueprint.json", bp("A", 2));
-  const c2 = r.commit("two");
-  r.write("cat/a/blueprint.json", bp("A", 3));
-  const c3 = r.commit("three");
-  // A rename needs every old version again under the new path.
-  r.git("mv", "cat/b", "cat/c");
-  r.write("cat/c/README.md", notes("title: B\nauthors: []\nprevious_paths: [cat/b]"));
-  const c4 = r.commit("rename b");
-  const next = (await buildCatalog(r.dir)).index;
-  assert.deepEqual(
-    selectStrings(next, live).map((j) => j.key),
-    [stringKey("cat/a", c3), stringKey("cat/a", c2), stringKey("cat/c", c4), stringKey("cat/c", c1)],
-  );
+  r.write("cat/a/README.md", notes('title: A\nauthors: []\nversion: "2"'));
+  const c2 = await publish(r, "two");
+  const catalog = await buildCatalog(r.dir);
+  assert.deepEqual(selectStrings(catalog.index, live).map((j) => [j.key, j.label]), [[stringKey("cat/a", c2), "2"]]);
+  const out = new Map<string, string>();
+  await produceStrings(r.dir, catalog, selectStrings(catalog.index, live), (k, t) => out.set(k, t));
+  assert.equal((decodeBlueprintString(out.get(stringKey("cat/a", c2))!).value as any).blueprint.entities.length, 2);
+  void c1;
 });
 
 test("book nodes: slot paths with and without index, nested books, planners, renders and cover", async () => {
@@ -208,12 +246,11 @@ test("book nodes: slot paths with and without index, nested books, planners, ren
   r.write("cat/book/renders/0.jpg", pointer("0".repeat(64))); // slot 0 is a planner: no image
   r.write("cat/book/renders/3/4.jpg", pointer("4".repeat(64)));
   r.write("cat/book/renders/3/0.png", pointer("3".repeat(64)));
-  const sha = r.commit("book");
+  const sha = await publish(r, "book");
 
   const catalog = await buildCatalog(r.dir);
   assert.deepEqual(catalog.problems, []);
   const e = catalog.index.blueprints[0]!;
-  assert.equal(catalog.index.schema, 2);
   assert.deepEqual(e.nodes, [
     { slot: 0, path: "0", kind: "upgrade-planner", label: "Up" },
     { slot: 1, path: "1", kind: "blueprint", label: "Z" },
@@ -245,53 +282,30 @@ test("book nodes: slot paths with and without index, nested books, planners, ren
   assert.ok(out.has(stringKey("cat/book", sha)));
 });
 
-test("non-image files under renders/ are ignored; a shared slot goes to the first entry", async () => {
+test("non-image files under renders/ are ignored", async () => {
   const r = repo();
-  r.write("cat/book/blueprint.json", book("B", [{ index: 0, blueprint: bpBody("first") }, { index: 0, blueprint: bpBody("second") }]));
-  r.write("cat/book/README.md", notes("title: B\nauthors: []"));
-  const old = r.commit("two entries in slot 0");
   r.write("cat/book/blueprint.json", book("B", [{ index: 0, blueprint: bpBody("first") }]));
+  r.write("cat/book/README.md", notes("title: B\nauthors: []"));
   r.write("cat/book/renders/0.jpg", pointer(OID));
   r.write("cat/book/renders/render.json", '{"0": "current"}\n');
   r.write("cat/book/renders/notes.txt", "anything\n");
-  r.commit("fix the book, add a render and its manifest");
+  await publish(r, "a book with a render and its manifest");
 
   const catalog = await buildCatalog(r.dir);
   assert.deepEqual(catalog.problems, []);
   const e = catalog.index.blueprints[0]!;
   assert.deepEqual(e.renders.map((x) => x.file), ["0.jpg"]);
   assert.equal(e.cover, "0.jpg");
-
-  const out = new Map<string, string>();
-  const { warnings } = await produceStrings(r.dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
-  const label = (decodeBlueprintString(out.get(entryKey("cat/book", old, "0"))!).value as any).blueprint.label;
-  assert.equal(label, "first");
-  assert.match(warnings.join(), /second entry in slot 0/);
-});
-
-test("an entry that a later version removes keeps its string for the older version only", async () => {
-  const r = repo();
-  r.write("cat/book/blueprint.json", book("B", [{ index: 0, blueprint: bpBody("keep") }, { index: 1, blueprint: bpBody("gone") }]));
-  r.write("cat/book/README.md", notes("title: B\nauthors: []"));
-  const c1 = r.commit("two entries");
-  r.write("cat/book/blueprint.json", book("B", [{ index: 0, blueprint: bpBody("keep") }]));
-  const c2 = r.commit("one entry");
-  const catalog = await buildCatalog(r.dir);
-  const keys = new Set<string>();
-  await produceStrings(r.dir, catalog, selectStrings(catalog.index), (k) => keys.add(k));
-  assert.ok(keys.has(entryKey("cat/book", c1, "1")));
-  assert.ok(keys.has(entryKey("cat/book", c2, "0")));
-  assert.ok(!keys.has(entryKey("cat/book", c2, "1")));
-  assert.deepEqual(catalog.index.blueprints[0]!.nodes!.map((n) => n.path), ["0"]);
 });
 
 test("entry strings: a schema 1 live index gets all of them once, then a second run has nothing to do", async () => {
   const r = repo();
   r.write("cat/book/blueprint.json", book("B", [{ blueprint: bpBody("a") }, { blueprint: bpBody("b") }]));
   r.write("cat/book/README.md", notes("title: B\nauthors: []"));
-  r.commit("one");
+  await publish(r, "one");
   r.write("cat/book/blueprint.json", book("B", [{ blueprint: bpBody("a") }, { blueprint: bpBody("c") }]));
-  r.commit("two");
+  r.write("cat/book/README.md", notes('title: B\nauthors: []\nversion: "2"'));
+  await publish(r, "two");
   const index = (await buildCatalog(r.dir)).index;
   const v1: LiveIndex = JSON.parse(JSON.stringify(index));
   v1.schema = 1;
@@ -302,11 +316,12 @@ test("entry strings: a schema 1 live index gets all of them once, then a second 
   assert.ok(jobs.every((j) => !j.root && j.entries), "roots exist, entries do not");
   const catalog = await buildCatalog(r.dir);
   const keys: string[] = [];
-  await produceStrings(r.dir, catalog, jobs, (k) => keys.push(k));
-  assert.equal(keys.length, 4);
+  const { warnings } = await produceStrings(r.dir, catalog, jobs, (k) => keys.push(k));
+  assert.equal(keys.length, 2, "the current version's two entries");
+  assert.equal(warnings.length, 1, "the older version's cannot be made");
   assert.ok(keys.every((k) => /\/[0-9a-f]{40}\/[01]\.txt$/.test(k)));
 
-  assert.deepEqual(selectStrings(index, index), [], "the schema 2 index it published leaves nothing to do");
+  assert.deepEqual(selectStrings(index, index), [], "the index it published leaves nothing to do");
 });
 
 test("a blueprint folder inside another is rejected; the outer one is still published", async () => {
@@ -314,10 +329,10 @@ test("a blueprint folder inside another is rejected; the outer one is still publ
   r.write("cat/outer/blueprint.json", bp("Outer"));
   r.write("cat/outer/README.md", notes("title: O\nauthors: []"));
   r.write("cat/outer/3/blueprint.json", bp("Inner"));
-  r.write("cat/outer/3/README.md", notes("title: I\nauthors: []"));
+  r.write("cat/outer/3/README.md", plain("title: I\nauthors: []"));
   r.write("cat/dup/blueprint.json", book("D", [{ index: 1, blueprint: bpBody("a") }, { blueprint: bpBody("b") }]));
   r.write("cat/dup/README.md", notes("title: D\nauthors: []"));
-  r.commit("nested");
+  await publish(r, "nested", ["cat/outer"]);
   const { index, problems, invalid } = await buildCatalog(r.dir);
   assert.deepEqual(index.blueprints.map((e) => e.path), ["cat/outer"]);
   assert.deepEqual(invalid, ["cat/dup", "cat/outer/3"]);
@@ -348,7 +363,14 @@ test("lists validation failures and leaves those blueprints out", async () => {
   r.write("bad/render/README.md", notes("title: X\nauthors: []"));
   r.write("bad/render/renders/0.jpg", "real image bytes, not a pointer");
   r.write("bad/render/renders/cover.jpg", pointer(OID));
-  r.commit("mixed");
+  r.write("bad/no-version/blueprint.json", bp("X"));
+  r.write("bad/no-version/README.md", plain("title: X\nauthors: []\nstatus: public"));
+  r.write("bad/label/blueprint.json", bp("X"));
+  r.write("bad/label/README.md", notes('title: X\nauthors: []\nversion: "1/2"'));
+  r.write("bad/ledger/blueprint.json", bp("X"));
+  r.write("bad/ledger/README.md", notes("title: X\nauthors: []"));
+  r.write("bad/ledger/versions.json", '[{"label": "1", "date": "2026-01-01", "hash": "x", "commit": "y"}]\n');
+  await publish(r, "mixed", ["ok/a"]);
 
   const { index, problems } = await buildCatalog(r.dir);
   assert.deepEqual(index.blueprints.map((e) => e.path), ["ok/a"]);
@@ -365,25 +387,26 @@ test("lists validation failures and leaves those blueprints out", async () => {
     "bad/render/renders/0.jpg",
     "bad/render/renders/cover.jpg",
   ]);
+  assert.match(byPath("bad/no-version").join(), /frontmatter needs a version to be published/);
+  assert.match(byPath("bad/label").join(), /version contains "\/"/);
+  assert.match(byPath("bad/ledger").join(), /version 1: "2026-01-01" is not an ISO date and time/);
   assert.equal(byPath("ok/a").length, 0);
 });
 
 // Expanded books: a book stored as folders (book.json and slot folders).
-
-type Repo = ReturnType<typeof repo>;
 
 /** Write `value` (a book) as an expanded book at `folder`, with a README.md in every folder. */
 function writeExpanded(r: Repo, folder: string, value: unknown) {
   const { book, entries } = expandBook(value);
   const write = (dir: string, b: unknown, list: ExpandedEntry[]) => {
     r.write(`${dir}/book.json`, writeCanonicalJson(b));
-    r.write(`${dir}/README.md`, notes(`title: ${dir}\nauthors: []`));
+    r.write(`${dir}/README.md`, dir === folder ? notes(`title: ${dir}\nauthors: []`) : plain(`title: ${dir}\nauthors: []`));
     for (const e of list) {
       const path = `${dir}/${e.folder}`;
       if (e.entries) write(path, e.book, e.entries);
       else {
         r.write(`${path}/blueprint.json`, writeCanonicalJson(e.value));
-        r.write(`${path}/README.md`, notes(`title: ${e.label}\nauthors: []`));
+        r.write(`${path}/README.md`, plain(`title: ${e.label}\nauthors: []`));
       }
     }
   };
@@ -399,13 +422,16 @@ const nestedBook = () =>
     ]),
   );
 
-test("expanding a book keeps its path, history, root string and entry strings", async () => {
+test("expanding a book keeps its content, so it is no new version; a change to a leaf needs a new label", async () => {
   const r = repo();
   r.write("cat/book/blueprint.json", writeCanonicalJson(nestedBook()));
   r.write("cat/book/README.md", notes("title: Book\nauthors: []"));
   r.write("cat/book/renders/0.jpg", pointer("0".repeat(64)));
   r.write("cat/book/renders/1/3.jpg", pointer("3".repeat(64)));
-  const c1 = r.commit("add book");
+  const c1 = await publish(r, "add book");
+  const before = await buildCatalog(r.dir);
+  const strings1 = new Map<string, string>();
+  await produceStrings(r.dir, before, selectStrings(before.index), (k, t) => strings1.set(k, t));
 
   r.git("rm", "-r", "-q", "cat/book/blueprint.json", "cat/book/renders");
   writeExpanded(r, "cat/book", nestedBook());
@@ -413,17 +439,18 @@ test("expanding a book keeps its path, history, root string and entry strings", 
   r.write("cat/book/0-stone/renders/0.jpg", pointer("a".repeat(64), 10));
   r.write("cat/book/0-stone/renders/render.json", "{}\n");
   r.write("cat/book/1-inner/3-iron/renders/0.png", pointer("b".repeat(64), 20));
-  const c2 = r.commit("expand book");
-  r.write("cat/book/1-inner/README.md", notes("title: Inner book\nauthors: [me]"));
+  await publish(r, "expand book");
+  r.write("cat/book/1-inner/README.md", plain("title: Inner book\nauthors: [me]"));
   r.commit("notes only");
 
   const catalog = await buildCatalog(r.dir);
   assert.deepEqual(catalog.problems, []);
+  assert.deepEqual(catalog.held, []);
   assert.deepEqual(catalog.index.blueprints.map((e) => e.path), ["cat/book"], "slot folders are not entries");
   const e = catalog.index.blueprints[0]!;
   assert.equal(e.title, "Book");
-  assert.equal(e.commit, c2);
-  assert.deepEqual(e.history.map((h) => h.sha), [c2, c1], "a notes-only commit is not a version");
+  assert.equal(e.commit, c1);
+  assert.deepEqual(e.history.map((h) => h.sha), [c1], "the same content: still version 1");
   assert.equal(e.blueprint.kind, "blueprint-book");
   assert.equal(e.blueprint.counts.blueprints, 3);
   assert.deepEqual(e.renders, [
@@ -449,18 +476,18 @@ test("expanding a book keeps its path, history, root string and entry strings", 
 
   const out = new Map<string, string>();
   const stats = await produceStrings(r.dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
-  assert.deepEqual(stats, { warnings: [], roots: 2, entries: 10 });
-  assert.equal(out.get(stringKey("cat/book", c2)), out.get(stringKey("cat/book", c1)), "the same root string before and after");
-  for (const sha of [c1, c2]) {
-    for (const slot of ["0", "1", "1/0", "1/3", "2"]) assert.ok(out.has(entryKey("cat/book", sha, slot)), `${slot}@${sha}`);
-  }
-  assert.deepEqual(decodeBlueprintString(out.get(entryKey("cat/book", c2, "1/3"))!).value, { blueprint: bpBody("Iron") });
+  assert.deepEqual(stats, { warnings: [], roots: 1, entries: 5 });
+  assert.equal(out.get(stringKey("cat/book", c1)), strings1.get(stringKey("cat/book", c1)), "the same root string before and after");
+  assert.deepEqual(decodeBlueprintString(out.get(entryKey("cat/book", c1, "1/3"))!).value, { blueprint: bpBody("Iron") });
 
-  // A change to one leaf is a new version of the root book.
+  // A change to one leaf changes the root book: held until the root note's version is bumped.
   r.write("cat/book/1-inner/0-bricks/blueprint.json", bp("Bricks", 2));
-  const c3 = r.commit("grow bricks");
+  await publish(r, "grow bricks");
+  assert.match((await buildCatalog(r.dir)).held.map((h) => h.message).join(), /bump `version` to publish/);
+  r.write("cat/book/README.md", notes('title: Book\nauthors: []\nversion: "2"'));
+  const c3 = await publish(r, "version 2");
   const next = await buildCatalog(r.dir);
-  assert.deepEqual(next.index.blueprints[0]!.history.map((h) => h.sha), [c3, c2, c1]);
+  assert.deepEqual(next.index.blueprints[0]!.history.map((h) => [h.label, h.sha]), [["2", c3], ["1", c1]]);
   assert.deepEqual(selectStrings(next.index, catalog.index).map((j) => j.sha), [c3]);
 });
 
@@ -505,7 +532,7 @@ test("render pixel sizes come from render.json, matched by file; without a usabl
   r.write("cat/other/README.md", notes("title: Y\nauthors: []"));
   r.write("cat/other/renders/0.jpg", pointer("7".repeat(64)));
   r.write("cat/other/renders/render.json", JSON.stringify({ schema: 2, entries: { "0": { file: "0.jpg", sha256: "", width: 1, height: 1 } } }));
-  r.commit("renders with manifests");
+  await publish(r, "renders with manifests");
 
   const catalog = await buildCatalog(r.dir);
   assert.deepEqual(catalog.problems, [], "a manifest never makes a blueprint invalid");
@@ -532,7 +559,7 @@ test("render pixel sizes come from render.json, matched by file; without a usabl
   // A stale entry carried over from the live index keeps its sizes.
   const live = { ...catalog.index, blueprints: catalog.index.blueprints.filter((e) => e.path === "cat/single") };
   const next = { ...catalog, index: { ...catalog.index, blueprints: [] as typeof catalog.index.blueprints }, invalid: ["cat/single"] };
-  carryOverStale(next, live);
+  carryOver(next, live);
   assert.deepEqual(next.index.blueprints[0]!.renders, [{ file: "0.jpg", oid: "1".repeat(64), size: 1234, width: 260, height: 288 }]);
 });
 
@@ -545,14 +572,14 @@ test("expanded book rules: slot folders, both files, nesting, notes and renders"
   renameSync(join(r.dir, "bad/name/1-b"), join(r.dir, "bad/name/misc"));
   writeExpanded(r, "bad/holder", value());
   r.write("bad/holder/stuff/0-x/blueprint.json", bp("x"));
-  r.write("bad/holder/stuff/0-x/README.md", notes("title: x\nauthors: []"));
+  r.write("bad/holder/stuff/0-x/README.md", plain("title: x\nauthors: []"));
   writeExpanded(r, "bad/dup", value());
   r.write("bad/dup/1-other/blueprint.json", bp("c"));
-  r.write("bad/dup/1-other/README.md", notes("title: c\nauthors: []"));
+  r.write("bad/dup/1-other/README.md", plain("title: c\nauthors: []"));
   writeExpanded(r, "bad/both", value());
   r.write("bad/both/0-a/book.json", writeCanonicalJson({ blueprint_book: { item: "blueprint-book" } }));
   writeExpanded(r, "bad/notes", value());
-  r.write("bad/notes/1-b/README.md", notes("authors: []"));
+  r.write("bad/notes/1-b/README.md", plain("authors: []"));
   writeExpanded(r, "bad/renders", value());
   r.write("bad/renders/renders/0.jpg", pointer(OID));
   writeExpanded(r, "bad/leaf-render", value());
@@ -562,7 +589,7 @@ test("expanded book rules: slot folders, both files, nesting, notes and renders"
   r.write("bad/inside/blueprint.json", bp("outer"));
   r.write("bad/inside/README.md", notes("title: o\nauthors: []"));
   writeExpanded(r, "bad/inside/sub", value());
-  r.commit("books");
+  await publish(r, "books", ["ok/book", "bad/inside"]);
   // A README.md missing from a nested folder is found too.
   writeExpanded(r, "bad/nonotes", value());
   r.git("add", "-A");
@@ -619,10 +646,11 @@ function threeBlueprints() {
   return r;
 }
 
-test("publish: an invalid blueprint is reported and left out, the others are published, the run fails", () => {
+
+test("publish: an invalid blueprint is reported and left out, the others are published, the run fails", async () => {
   const r = threeBlueprints();
   r.write("cat/b/blueprint.json", "{ broken");
-  const sha = r.commit("one broken");
+  const sha = await publish(r, "one broken");
   const out = join(r.dir + "-r2");
   const res = cli("publish", r.dir, out);
   assert.equal(res.code, 1);
@@ -634,16 +662,17 @@ test("publish: an invalid blueprint is reported and left out, the others are pub
   assert.match(res.summary, /cat\/b\/blueprint\.json.*is not valid JSON/);
 });
 
-test("publish: an invalid blueprint keeps its live entry, marked stale; a deleted folder is removed", () => {
+test("publish: an invalid blueprint keeps its live entry, marked stale; a deleted folder is removed", async () => {
   const r = threeBlueprints();
-  const c1 = r.commit("three");
+  const c1 = await publish(r, "three");
   const out = join(r.dir + "-r2");
   assert.equal(cli("publish", r.dir, out).code, 0);
 
   r.write("cat/a/blueprint.json", bp("a2"));
+  r.write("cat/a/README.md", notes('title: a\nauthors: []\nversion: "2"'));
   r.write("cat/b/README.md", notes("authors: []"));
   r.write("cat/b/blueprint.json", bp("b2"));
-  const c2 = r.commit("update a, break b");
+  const c2 = await publish(r, "update a, break b");
   let res = cli("publish", r.dir, out);
   assert.equal(res.code, 1);
   const byPath = (p: string) => res.index.blueprints.find((e: any) => e.path === p);
@@ -661,10 +690,10 @@ test("publish: an invalid blueprint keeps its live entry, marked stale; a delete
   assert.deepEqual(res.index.blueprints.map((e: any) => e.path), ["cat/a", "cat/c"]);
 });
 
-test("validate (pull requests) still fails and publishes nothing", () => {
+test("validate (pull requests) still fails and publishes nothing", async () => {
   const r = threeBlueprints();
   r.write("cat/b/blueprint.json", "{ broken");
-  r.commit("one broken");
+  await publish(r, "one broken");
   const out = join(r.dir + "-r2");
   const res = cli("validate", r.dir, out);
   assert.equal(res.code, 1);
@@ -672,51 +701,67 @@ test("validate (pull requests) still fails and publishes nothing", () => {
   assert.match(res.log, /cat\/b\/blueprint\.json: is not valid JSON/);
 });
 
+// The version rules as CI applies them: it reads the ledgers and never writes them.
+
+test("publish: content changed without a new version is held: not published, not a failure, the last version stays live", async () => {
+  const r = threeBlueprints();
+  const c1 = await publish(r, "three");
+  const out = join(r.dir + "-r2");
+  assert.equal(cli("publish", r.dir, out).code, 0);
+
+  r.write("cat/a/blueprint.json", bp("a changed"));
+  r.write("cat/a/README.md", notes("title: a retitled\nauthors: []"));
+  await publish(r, "change a, keep version 1");
+  const res = cli("publish", r.dir, out);
+  assert.equal(res.code, 0, res.log);
+  const a = res.index.blueprints.find((e: any) => e.path === "cat/a");
+  assert.equal(a.commit, c1, "the last recorded version stays live");
+  assert.equal(a.title, "a", "as it was published");
+  assert.equal(a.stale, true);
+  assert.match(res.log, /cat\/a: content changed, bump `version` to publish: the note is still "1", so version "1" stays live/);
+  assert.match(res.summary, /1 blueprint\(s\) with an unpublished change[\s\S]*`cat\/a`/);
+  assert.equal(cli("validate", r.dir, out + "-v").code, 0, "nor does it fail validation");
+});
+
+test("CI never records: a hand-made rename is reported until recorded, a new version is held until recorded", async () => {
+  const r = repo();
+  r.write("cat/a/blueprint.json", bp("A"));
+  r.write("cat/a/README.md", notes('title: A\nauthors: []\nversion: "1.0"'));
+  const c1 = await publish(r, "one");
+  const live = (await buildCatalog(r.dir)).index;
+
+  r.write("cat/a/README.md", notes('title: A\nauthors: []\nversion: "1.0.1"'));
+  r.commit("relabel by hand, ledger not updated yet");
+  let catalog = await buildCatalog(r.dir);
+  assert.deepEqual(catalog.index.blueprints[0]!.history.map((h) => [h.label, h.sha]), [["1.0", c1]], "served under the ledger's label");
+  assert.equal(catalog.index.blueprints[0]!.version, "1.0");
+  assert.match(catalog.renames[0]!.message, /renames version "1.0" to "1.0.1", which versions.json does not record yet/);
+  assert.deepEqual(selectStrings(catalog.index, live), [], "the same string: nothing to upload");
+  await publish(r, "record the rename");
+  catalog = await buildCatalog(r.dir);
+  assert.deepEqual(catalog.index.blueprints[0]!.history.map((h) => [h.label, h.sha]), [["1.0.1", c1]]);
+  assert.deepEqual(catalog.renames, []);
+
+  r.write("cat/a/blueprint.json", bp("A", 2));
+  r.write("cat/a/README.md", notes('title: A\nauthors: []\nversion: "1.1"'));
+  r.commit("new content and label, not recorded");
+  catalog = await buildCatalog(r.dir);
+  assert.deepEqual(catalog.index.blueprints, []);
+  assert.deepEqual(catalog.problems, []);
+  assert.match(catalog.held[0]!.message, /content changed and version "1.1" is not recorded in versions.json yet .*version "1.0.1" stays live/);
+  await publish(r, "record it");
+  catalog = await buildCatalog(r.dir);
+  assert.deepEqual(catalog.index.blueprints[0]!.history.map((h) => h.label), ["1.1", "1.0.1"]);
+});
+
 // Statuses: the note's status says whether and how a blueprint is published.
 
 /** Notes with a status (none for undefined). */
-const noted = (title: string, status?: string, extra = "") => notes(`title: ${title}\nauthors: []${status === undefined ? "" : `\nstatus: ${status}`}${extra}`);
-const strings = async (dir: string) => {
-  const catalog = await buildCatalog(dir);
-  const out = new Map<string, string>();
-  await produceStrings(dir, catalog, selectStrings(catalog.index), (k, t) => out.set(k, t));
-  return { catalog, out };
-};
-const labelOf = (text: string | undefined) => (decodeBlueprintString(text!).value as any).blueprint.label;
+const noted = (title: string, status?: string, extra = "") =>
+  plain(`title: ${title}\nauthors: []${status === undefined ? "" : `\nstatus: ${status}`}${/^version:/m.test(extra.trim()) ? "" : '\nversion: "1"'}${extra}`);
 const entryOf = (catalog: { index: { blueprints: { path: string }[] } }, path: string) => catalog.index.blueprints.find((e) => e.path === path) as any;
 
-test("status era: starts at the first commit where a note has a status key, found by content", async () => {
-  const r = repo();
-  r.write("cat/a/blueprint.json", bp("A"));
-  r.write("cat/a/README.md", notes("title: A\nauthors: []") + "status: in the body is not a key\n");
-  const c1 = r.commit("one");
-  r.write("cat/b/blueprint.json", bp("B"));
-  r.write("cat/b/README.md", noted("B", "public"));
-  const c2 = r.commit("two");
-  r.write("cat/a/blueprint.json", bp("A2"));
-  const c3 = r.commit("three");
-  const { Git, statusEra } = await import("../build-catalog.ts");
-  assert.deepEqual([...statusEra(new Git(r.dir), c3)].sort(), [c2, c3].sort());
-  assert.deepEqual([...statusEra(new Git(r.dir), c1)], []);
-});
-
-test("before the status era every note is published; deprecated: true means deprecated", async () => {
-  const r = repo();
-  r.write("cat/a/blueprint.json", bp("A"));
-  r.write("cat/a/README.md", notes("title: A\nauthors: []\ndeprecated: true"));
-  r.write("cat/b/blueprint.json", bp("B"));
-  r.write("cat/b/README.md", notes("title: B\nauthors: []"));
-  r.commit("no statuses yet");
-  const { index, problems } = await buildCatalog(r.dir);
-  assert.deepEqual(problems, []);
-  assert.deepEqual(index.blueprints.map((e) => [e.path, e.status, e.deprecated]), [
-    ["cat/a", "deprecated", true],
-    ["cat/b", "public", false],
-  ]);
-  assert.deepEqual(Object.keys(index.blueprints[1]!).slice(3, 6), ["status", "deprecated", "previous_paths"]);
-});
-
-test("in the status era: no status is a draft, drafts never published are left out but validated, bad statuses are problems", async () => {
+test("no status is a draft; drafts are left out but validated; bad statuses are problems", async () => {
   const r = repo();
   r.write("cat/public/blueprint.json", bp("P"));
   r.write("cat/public/README.md", noted("P", "public"));
@@ -738,8 +783,8 @@ test("in the status era: no status is a draft, drafts never published are left o
   r.write("bad/leftover/README.md", noted("X", "public", "\ndeprecated: false"));
   writeExpanded(r, "bad/book", nestedBook());
   r.write("bad/book/README.md", noted("Book", "public"));
-  r.write("bad/book/0-stone/README.md", noted("Stone", "public"));
-  r.commit("statuses");
+  r.write("bad/book/0-stone/README.md", plain("title: Stone\nauthors: []\nstatus: public"));
+  await publish(r, "statuses");
 
   const catalog = await buildCatalog(r.dir);
   assert.deepEqual(catalog.index.blueprints.map((e) => [e.path, e.status, e.deprecated]), [
@@ -747,8 +792,7 @@ test("in the status era: no status is a draft, drafts never published are left o
     ["cat/public", "public", false],
     ["cat/unlisted", "unlisted", false],
   ]);
-  assert.deepEqual(catalog.drafts, ["bad/draft", "bad/value", "cat/draft", "cat/empty", "cat/none"]);
-  assert.deepEqual(catalog.frozen, []);
+  assert.deepEqual(catalog.drafts.map((d) => d.folder), ["bad/draft", "bad/value", "cat/draft", "cat/empty", "cat/none"]);
   const of = (folder: string) => catalog.problems.filter((p) => p.folder === folder).map((p) => `${p.path}: ${p.message}`).join("\n");
   assert.match(of("bad/draft"), /bad\/draft\/blueprint\.json: is not valid JSON/, "a draft is still validated");
   assert.equal(of("bad/value"), "bad/value/README.md: status must be draft, public, deprecated or unlisted (none means draft)");
@@ -756,202 +800,40 @@ test("in the status era: no status is a draft, drafts never published are left o
   assert.equal(of("bad/book"), "bad/book/0-stone/README.md: only the book's own note (bad/book/README.md) has a status; remove it here");
   assert.equal(of("cat/none") + of("cat/draft") + of("cat/empty"), "");
 
-  // A draft is never carried over from the live index, even when invalid.
+  // A draft keeps its live entry as it was (not marked stale), even when invalid.
   const live: LiveIndex = { ...catalog.index, blueprints: [{ ...entryOf(catalog, "cat/public"), path: "bad/draft" }] };
-  assert.deepEqual(carryOverStale(catalog, live), []);
-});
-
-test("a draft keeps its last published entry; saves made as a draft never become versions", async () => {
-  const r = repo();
-  r.write("cat/a/blueprint.json", bp("A1"));
-  r.write("cat/a/README.md", notes("title: A\nauthors: []\nversion: 1"));
-  r.write("cat/a/renders/0.jpg", pointer(OID));
-  r.write("cat/other/blueprint.json", bp("O"));
-  r.write("cat/other/README.md", notes("title: O\nauthors: []"));
-  const c1 = r.commit("before statuses");
-  r.write("cat/a/README.md", notes("title: A\nauthors: []\nversion: 1\nstatus: public"));
-  r.write("cat/other/README.md", noted("O", "public"));
-  const c2 = r.commit("set status on all blueprints");
-  const published = (await buildCatalog(r.dir)).index;
-  const at = (i: typeof published) => i.blueprints.find((e) => e.path === "cat/a")!;
-  assert.deepEqual(at(published).history.map((h) => h.sha), [c1], "the migration is not a version");
-
-  // A new version, saved as a draft: title, version, render and string all stay.
-  r.write("cat/a/blueprint.json", bp("A2", 2));
-  r.write("cat/a/README.md", notes("title: A new\nauthors: []\nversion: 2\nstatus: draft"));
-  r.write("cat/a/renders/0.jpg", pointer("b".repeat(64)));
-  r.commit("work in progress");
-  r.write("cat/a/blueprint.json", bp("A3", 3));
-  const c4 = r.commit("more work in progress");
-  let { catalog, out } = await strings(r.dir);
-  assert.deepEqual(catalog.problems, []);
-  assert.deepEqual(catalog.frozen, ["cat/a"]);
-  assert.deepEqual(at(catalog.index), at(published), "exactly the entry it had when last published");
-  assert.equal(labelOf(out.get(stringKey("cat/a", c1))), "A1", "and its string");
-  assert.deepEqual([...out.keys()].filter((k) => k.startsWith("strings/cat/a/")), [stringKey("cat/a", c1)]);
-  assert.deepEqual(selectStrings(catalog.index, published), [], "nothing new to upload");
-
-  // Public again: the current string is the one new version.
-  r.write("cat/a/README.md", notes("title: A new\nauthors: []\nversion: 2\nstatus: public"));
-  const c5 = r.commit("publish version 2");
-  ({ catalog, out } = await strings(r.dir));
-  let a = at(catalog.index);
-  assert.deepEqual(a.history.map((h) => h.sha), [c5, c1]);
-  assert.equal(a.commit, c5);
-  assert.equal(a.title, "A new");
-  assert.equal(a.renders[0]!.oid, "b".repeat(64));
-  assert.equal(a.blueprint.counts.entities, 3);
-  assert.equal(labelOf(out.get(stringKey("cat/a", c5))), "A3");
-  assert.deepEqual(selectStrings(catalog.index, published).map((j) => j.sha), [c5]);
-
-  // Draft and back without a change, or with a change undone: no new version.
-  r.write("cat/a/README.md", noted("A new", "draft"));
-  r.commit("hide");
-  r.write("cat/a/blueprint.json", bp("A4"));
-  r.commit("try something");
-  r.write("cat/a/blueprint.json", bp("A3", 3));
-  r.commit("undo it");
-  r.write("cat/a/README.md", noted("A new", "unlisted"));
-  r.commit("unlist");
-  a = at((await buildCatalog(r.dir)).index);
-  assert.deepEqual(a.history.map((h) => h.sha), [c5, c1]);
-  assert.equal(a.status, "unlisted");
-  // While published, every change is a version, as before.
-  r.write("cat/a/blueprint.json", bp("A5"));
-  const c10 = r.commit("tweak");
-  assert.deepEqual(at((await buildCatalog(r.dir)).index).history.map((h) => h.sha), [c10, c5, c1]);
-  assert.notEqual(c4, c10);
-  void c2;
-});
-
-test("a draft that changes and turns public in one commit, and a draft whose current files are invalid", async () => {
-  const r = repo();
-  r.write("cat/a/blueprint.json", bp("A1"));
-  r.write("cat/a/README.md", noted("A", "public"));
-  const c1 = r.commit("one");
-  r.write("cat/a/blueprint.json", "{ broken");
-  r.write("cat/a/README.md", noted("A", "draft"));
-  r.commit("broken draft");
-  let catalog = await buildCatalog(r.dir);
-  assert.match(catalog.problems.map((p) => p.message).join(), /not valid JSON/, "the problem is reported");
-  assert.deepEqual(catalog.invalid, ["cat/a"]);
-  const a = entryOf(catalog, "cat/a");
-  assert.equal(a.commit, c1, "the published version stays live");
-  assert.equal(a.stale, undefined, "built from the history, not carried over");
-  assert.deepEqual(carryOverStale(catalog, catalog.index), [], "and not doubled from the live index");
-
-  r.write("cat/a/blueprint.json", bp("A2"));
-  r.write("cat/a/README.md", noted("A", "public"));
-  const c3 = r.commit("fixed and public");
-  catalog = await buildCatalog(r.dir);
-  assert.deepEqual(catalog.problems, []);
-  assert.deepEqual(entryOf(catalog, "cat/a").history.map((h: any) => h.sha), [c3, c1]);
+  assert.deepEqual(carryOver(catalog, live), { stale: [], frozen: ["bad/draft"] });
+  assert.equal(entryOf(catalog, "bad/draft").stale, undefined);
 });
 
 test("a published blueprint that is invalid keeps its live entry, marked stale, with a status", async () => {
   const r = repo();
   r.write("cat/a/blueprint.json", bp("A1"));
   r.write("cat/a/README.md", noted("A", "deprecated"));
-  r.commit("one");
+  await publish(r, "one");
   const live = JSON.parse(JSON.stringify((await buildCatalog(r.dir)).index)) as LiveIndex;
   delete live.blueprints[0]!.status; // a live index from before status
   r.write("cat/a/blueprint.json", "{ broken");
   r.commit("broken");
   const catalog = await buildCatalog(r.dir);
-  assert.deepEqual(carryOverStale(catalog, live), ["cat/a"]);
+  assert.deepEqual(carryOver(catalog, live), { stale: ["cat/a"], frozen: [] });
   const a = entryOf(catalog, "cat/a");
   assert.equal(a.stale, true);
   assert.equal(a.status, "deprecated");
 });
 
-test("a draft moved to a new path keeps its last published entry at the old path until it is public", async () => {
-  const r = repo();
-  r.write("cat/a/blueprint.json", bp("A1"));
-  r.write("cat/a/README.md", noted("A", "public"));
-  const c1 = r.commit("one");
-  mkdirSync(join(r.dir, "new"));
-  r.git("mv", "cat/a", "new/a");
-  r.write("new/a/blueprint.json", bp("A2"));
-  r.write("new/a/README.md", noted("A", "draft", "\nprevious_paths: [cat/a]"));
-  r.commit("move and rework as a draft");
-  let catalog = await buildCatalog(r.dir);
-  assert.deepEqual(catalog.problems, []);
-  assert.deepEqual(catalog.index.blueprints.map((e) => [e.path, e.commit, e.previous_paths]), [["cat/a", c1, []]]);
-
-  r.write("new/a/README.md", noted("A", "public", "\nprevious_paths: [cat/a]"));
-  const c3 = r.commit("publish at the new path");
-  const { out, catalog: next } = await strings(r.dir);
-  catalog = next;
-  assert.deepEqual(catalog.index.blueprints.map((e) => [e.path, e.history.map((h) => h.sha), e.previous_paths]), [["new/a", [c3, c1], ["cat/a"]]]);
-  assert.equal(labelOf(out.get(stringKey("new/a", c1))), "A1");
-  assert.equal(labelOf(out.get(stringKey("new/a", c3))), "A2");
-
-  // Its old path taken by another folder: the frozen entry cannot be served there.
-  const s = repo();
-  s.write("cat/a/blueprint.json", bp("A1"));
-  s.write("cat/a/README.md", noted("A", "public"));
-  s.commit("one");
-  mkdirSync(join(s.dir, "new"));
-  s.git("mv", "cat/a", "new/a");
-  s.write("new/a/README.md", noted("A", "draft"));
-  s.write("cat/a/blueprint.json", bp("Other"));
-  s.write("cat/a/README.md", noted("Other", "public"));
-  s.commit("move a as a draft, another takes its place");
-  catalog = await buildCatalog(s.dir);
-  assert.deepEqual(catalog.index.blueprints.map((e) => [e.path, e.title]), [["cat/a", "Other"]]);
-  assert.deepEqual(catalog.problems, [], "without previous_paths the draft has no published history");
-  s.write("new/a/README.md", noted("A", "draft", "\nprevious_paths: [cat/a]"));
-  s.commit("claim the old path");
-  catalog = await buildCatalog(s.dir);
-  assert.deepEqual(catalog.index.blueprints.map((e) => [e.path, e.title]), [["cat/a", "Other"]]);
-  assert.deepEqual(catalog.problems.map((p) => p.message), [
-    'previous path "cat/a" is a current blueprint folder',
-    "its last published version was at cat/a, which is now another blueprint folder, so that version is no longer served",
-  ]);
-});
-
-test("an expanded book as a draft keeps its nodes, renders and strings; only the root note's status counts", async () => {
-  const r = repo();
-  writeExpanded(r, "cat/book", nestedBook());
-  r.write("cat/book/README.md", noted("Book", "public"));
-  r.write("cat/book/0-stone/renders/0.jpg", pointer("a".repeat(64)));
-  const c1 = r.commit("book");
-  const before = (await buildCatalog(r.dir)).index.blueprints[0]!;
-  assert.equal(before.status, "public", "entry notes have no status and need none");
-
-  r.write("cat/book/1-inner/0-bricks/blueprint.json", bp("Bricks", 5));
-  r.write("cat/book/1-inner/0-bricks/renders/0.jpg", pointer("c".repeat(64)));
-  r.write("cat/book/README.md", noted("Book", "draft"));
-  r.commit("rework as a draft");
-  r.write("cat/book/1-inner/3-iron/blueprint.json", bp("Iron", 4));
-  r.commit("more");
-  const { catalog, out } = await strings(r.dir);
-  assert.deepEqual(catalog.problems, []);
-  assert.deepEqual(catalog.index.blueprints[0], before);
-  assert.deepEqual(decodeBlueprintString(out.get(entryKey("cat/book", c1, "1/0"))!).value, { blueprint: bpBody("Bricks") });
-
-  r.write("cat/book/README.md", noted("Book", "public"));
-  const c4 = r.commit("publish");
-  const after = (await strings(r.dir));
-  const e = after.catalog.index.blueprints[0]!;
-  assert.deepEqual(e.history.map((h) => h.sha), [c4, c1]);
-  assert.equal(e.renders.length, 2);
-  assert.equal((decodeBlueprintString(after.out.get(entryKey("cat/book", c4, "1/3"))!).value as any).blueprint.entities.length, 4);
-});
-
-test("publish: a new draft gets no strings and no entry; a draft of a published blueprint keeps serving the old string", () => {
+test("publish: a new draft gets no strings and no entry; a draft of a published blueprint keeps its live entry", async () => {
   const r = threeBlueprints();
-  const c1 = r.commit("three");
+  const c1 = await publish(r, "three");
   const out = join(r.dir + "-r2");
   assert.equal(cli("publish", r.dir, out).code, 0);
-  for (const name of ["a", "b", "c"]) r.write(`cat/${name}/README.md`, noted(name, name === "c" ? "unlisted" : "public"));
-  r.commit("statuses");
   r.write("cat/a/blueprint.json", bp("a2"));
-  r.write("cat/a/README.md", noted("a", "draft"));
+  r.write("cat/a/README.md", noted("a", "draft", '\nversion: "2"'));
+  r.write("cat/c/README.md", noted("c", "unlisted", '\nversion: "1"'));
   r.write("cat/new/blueprint.json", bp("new"));
   r.write("cat/new/README.md", noted("new"));
-  const c3 = r.commit("draft a, add new");
-  const res = cli("publish", r.dir, out);
+  const c2 = await publish(r, "draft a, unlist c, add new");
+  let res = cli("publish", r.dir, out);
   assert.equal(res.code, 0, res.log);
   assert.deepEqual(res.index.blueprints.map((e: any) => [e.path, e.status, e.commit]), [
     ["cat/a", "public", c1],
@@ -959,6 +841,13 @@ test("publish: a new draft gets no strings and no entry; a draft of a published 
     ["cat/c", "unlisted", c1],
   ]);
   assert.ok(!existsSync(join(out, "strings/cat/new")));
-  assert.ok(!existsSync(join(out, stringKey("cat/a", c3))));
+  assert.ok(!existsSync(join(out, stringKey("cat/a", c2))));
   assert.match(res.log, /2 draft\(s\): 1 not published, 1 serving their last published version \(cat\/a\)/);
+
+  // Public again with the new version: recorded when published, then live.
+  r.write("cat/a/README.md", noted("a", "public", '\nversion: "2"'));
+  const c3 = await publish(r, "publish a");
+  res = cli("publish", r.dir, out);
+  assert.deepEqual(res.index.blueprints[0].history.map((h: any) => [h.label, h.sha]), [["2", c3], ["1", c1]]);
+  assert.ok(existsSync(join(out, stringKey("cat/a", c3))));
 });

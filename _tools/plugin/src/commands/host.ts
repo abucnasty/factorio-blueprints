@@ -130,8 +130,16 @@ export interface UI {
 }
 
 export interface GitSync {
-  /** Stage, commit, pull and push one vault folder. Never throws. */
-  commitAndSync(folder: string, message: string): Promise<GitResult>;
+  /**
+   * Stage, commit, pull and push one vault folder. Never throws. With
+   * `record`, files it writes after the commit go in a second commit (see
+   * the git module's commitAndSync).
+   */
+  commitAndSync(
+    folder: string,
+    message: string,
+    record?: (last: { commit: string; date: string }) => Promise<string | undefined>,
+  ): Promise<GitResult>;
   /** True if git-lfs is installed, so images are stored through LFS. */
   lfsAvailable(): Promise<boolean>;
 }

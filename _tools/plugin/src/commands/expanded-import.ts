@@ -21,8 +21,8 @@ import type { NoteDefaults } from "./expand-book.ts";
 import { readTree } from "./expanded.ts";
 import type { Located, TreeNode } from "./expanded.ts";
 import { refreshExpandedBook } from "./generated-notes.ts";
-import { reportGit } from "./git-notice.ts";
 import type { Host } from "./host.ts";
+import { publishAndReport } from "./publish.ts";
 import { readTemplate } from "./import-blueprint.ts";
 
 export type ExpandedImportOutcome =
@@ -211,7 +211,7 @@ export async function updateExpandedBook(host: Host, loc: Located, value: unknow
 
   const summary = `Updated ${folder}: ${counts.changed} changed, ${counts.moved} moved, ${counts.new} new, ${counts.removed} removed`;
   if (!host.settings.commitAfterImport || host.git === undefined) host.ui.notice(`${summary}.`);
-  else reportGit(host, summary, await host.git.commitAndSync(loc.root, `update ${title}`));
+  else await publishAndReport(host, loc.root, `update ${title}`, summary);
   return { action: "updated", folder, counts };
 }
 
@@ -238,7 +238,7 @@ export async function addEntryToBook(host: Host, loc: Located, value: unknown): 
   }
   const summary = `Added "${entryTitle(entry)}" to ${folder} as slot ${slot}`;
   if (!host.settings.commitAfterImport || host.git === undefined) host.ui.notice(`${summary}.`);
-  else reportGit(host, summary, await host.git.commitAndSync(loc.root, `add ${entryTitle(entry)} to ${title}`));
+  else await publishAndReport(host, loc.root, `add ${entryTitle(entry)} to ${title}`, summary);
   return { action: "added", folder, slot };
 }
 
