@@ -76,6 +76,9 @@ from `--mods <dir>` or else the game's own mods folder; that folder's `mod-list.
 - A car or spidertron the game does not build from the blueprint (one over other entities gets no ghost, or loses it)
   is created directly where the rest of the blueprint landed, with its items, and the report says so ("created N car
   directly"). One the surface refuses (a car on a platform) stays missing.
+- The open end of a tileable stretch of elevated rail has no support within reach (in the game it rests on the next
+  copy), so its ghost never revives; it is created directly where the game allows it, and the report says so
+  ("created N elevated-straight-rail directly").
 - Turrets without ammo still show their ammo icon.
 - Large builds are captured as a grid of screenshots and stitched; a one-pixel seam is possible.
 - Only Linux has been run for real; Windows and macOS share only the path handling.
