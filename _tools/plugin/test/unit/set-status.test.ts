@@ -28,8 +28,13 @@ test("offers the four statuses, marks the current one, writes the note and commi
   assert.deepStrictEqual(host.picks[0]!.map((i) => i.label), ["Draft", "Public (now)", "Deprecated", "Unlisted"]);
   assert.ok(host.picks[0]!.every((i) => i.detail));
   assert.equal(host.vault.get("cat/mall/README.md"), NOTE.replace("status: public", "status: deprecated"));
-  assert.deepStrictEqual(host.commits, [{ folder: "cat/mall", message: "set Mall to deprecated" }]);
-  assert.match(host.notices.at(-1)!.message, /^Set Mall to deprecated, committed and pushed/);
+  // Published for the first time: its version is recorded in a second commit.
+  assert.deepStrictEqual(host.commits, [
+    { folder: "cat/mall", message: "set Mall to deprecated" },
+    { folder: "cat/mall", message: "record Mall version 2" },
+  ]);
+  assert.match(host.vault.get("cat/mall/versions.json")!, /"label": "2"/);
+  assert.match(host.notices.at(-1)!.message, /^Set Mall to deprecated, committed and pushed \(abc1234\)\. Published version "2"\.$/);
 });
 
 test("a leftover deprecated key gives way to status", async () => {

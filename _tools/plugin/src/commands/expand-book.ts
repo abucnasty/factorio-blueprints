@@ -20,8 +20,8 @@ import {
 import type { ExpandedEntry, RenderManifest } from "../core/index.ts";
 import { locate } from "./expanded.ts";
 import { refreshExpandedBook } from "./generated-notes.ts";
-import { reportGit } from "./git-notice.ts";
 import type { Host } from "./host.ts";
+import { publishAndReport } from "./publish.ts";
 import { readTemplate } from "./import-blueprint.ts";
 
 export type ExpandOutcome =
@@ -183,7 +183,7 @@ export async function expandBookIntoFolders(host: Host, contextFolder: string): 
     );
     return result;
   }
-  reportGit(host, summary, await host.git.commitAndSync(loc.root, `expand ${title} into folders`));
+  await publishAndReport(host, loc.root, `expand ${title} into folders`, summary);
   return result;
 }
 

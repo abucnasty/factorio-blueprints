@@ -10,6 +10,7 @@ import { refreshAllGeneratedBlocks } from "./commands/generated-notes.ts";
 import type { Host } from "./commands/host.ts";
 import { importFromClipboard } from "./commands/import-blueprint.ts";
 import { expandBookIntoFolders } from "./commands/expand-book.ts";
+import { publishVersion } from "./commands/publish.ts";
 import { renderPreview } from "./commands/render-preview.ts";
 import { setBlueprintStatus } from "./commands/set-status.ts";
 import { cancelRenderAll, folderRenderState, renderAllNeeded, showFoldersNeedingRender } from "./commands/render-status.ts";
@@ -83,6 +84,15 @@ const FOLDER_COMMANDS: FolderCommand[] = [
     menuOnlyInBlueprintFolder: true,
     exclusive: true,
     run: setBlueprintStatus,
+  },
+  {
+    id: "publish-version",
+    name: "Publish version",
+    menuTitle: "Publish version",
+    icon: "upload",
+    menuOnlyInBlueprintFolder: true,
+    exclusive: true,
+    run: publishVersion,
   },
   {
     id: "render-preview",

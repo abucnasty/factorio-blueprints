@@ -82,11 +82,11 @@ describe("book tree", () => {
 });
 
 describe("links", () => {
-  test("root, entry, commit and cover", () => {
+  test("root, entry, version and cover", () => {
     assert.equal(stringUrl(BASE, F), `${BASE}/${F}.txt`);
     assert.equal(stringUrl(BASE + "/", F, [3, 1]), `${BASE}/${F}/3/1.txt`);
-    assert.equal(stringUrl(BASE, F, [], "3f9c2ab"), `${BASE}/${F}@3f9c2ab.txt`);
-    assert.equal(stringUrl(BASE, F, [0], "3f9c2ab"), `${BASE}/${F}/0@3f9c2ab.txt`);
+    assert.equal(stringUrl(BASE, F, [], "1.2"), `${BASE}/${F}@1.2.txt`);
+    assert.equal(stringUrl(BASE, F, [0], "MK 2 (beta)"), `${BASE}/${F}/0@MK%202%20%28beta%29.txt`);
     assert.equal(coverUrl(BASE, F), `${BASE}/${F}/cover.jpg`);
     assert.equal(renderUrl(BASE, F, "3/1.jpg"), `${BASE}/${F}/renders/3/1.jpg`);
   });
@@ -100,8 +100,8 @@ describe("links", () => {
     assert.throws(() => stringUrl(BASE, ""));
     assert.throws(() => stringUrl(BASE, F, [-1]));
     assert.throws(() => stringUrl(BASE, F, [1.5]));
-    assert.throws(() => stringUrl(BASE, F, [], "HEAD"));
-    assert.throws(() => stringUrl(BASE, F, [], "abc"));
+    assert.throws(() => stringUrl(BASE, F, [], "a/b"));
+    assert.throws(() => stringUrl(BASE, F, [], " 1.0"));
   });
 });
 
