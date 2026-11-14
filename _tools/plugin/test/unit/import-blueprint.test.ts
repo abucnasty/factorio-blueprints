@@ -34,10 +34,10 @@ function bookBlock(folder: string): string {
 }
 const TEMPLATE_PATH = "_tools/templates/blueprint-notes.md";
 const EXISTING = {
-  "megabasing/science/mall/blueprint.json": writeCanonicalJson(decodeBlueprintString(TILES).value),
-  "megabasing/science/mall/README.md": '---\ntitle: Mall\nauthors: []\nversion: "3"\nextra: kept\n---\n\nMy notes.\n',
-  "megabasing/science/mall/renders/notes.md": "x",
-  "megabasing/science/other.md": "x",
+  "blueprints/megabasing/science/mall/blueprint.json": writeCanonicalJson(decodeBlueprintString(TILES).value),
+  "blueprints/megabasing/science/mall/README.md": '---\ntitle: Mall\nauthors: []\nversion: "3"\nextra: kept\n---\n\nMy notes.\n',
+  "blueprints/megabasing/science/mall/renders/notes.md": "x",
+  "blueprints/megabasing/science/other.md": "x",
   // A vault template the owner changed, to tell it from the built-in copy.
   [TEMPLATE_PATH]: DEFAULT_NOTES_TEMPLATE.replace("posted:\n", "posted:\nfrom_vault: true\n"),
 };
@@ -45,12 +45,13 @@ const EXISTING = {
 describe("create or update", () => {
   test("decision", async () => {
     const host = fakeHost({ files: EXISTING });
-    assert.deepStrictEqual(await chooseImportTarget(host, "megabasing/science/mall"), { mode: "update", folder: "megabasing/science/mall" });
-    assert.deepStrictEqual(await chooseImportTarget(host, "megabasing/science/mall/renders"), { mode: "update", folder: "megabasing/science/mall" });
-    assert.deepStrictEqual(await chooseImportTarget(host, "megabasing/science"), { mode: "create", parent: "megabasing/science" });
-    assert.deepStrictEqual(await chooseImportTarget(host, ""), { mode: "create", parent: "" });
+    assert.deepStrictEqual(await chooseImportTarget(host, "blueprints/megabasing/science/mall"), { mode: "update", folder: "blueprints/megabasing/science/mall" });
+    assert.deepStrictEqual(await chooseImportTarget(host, "blueprints/megabasing/science/mall/renders"), { mode: "update", folder: "blueprints/megabasing/science/mall" });
+    assert.deepStrictEqual(await chooseImportTarget(host, "blueprints/megabasing/science"), { mode: "create", parent: "blueprints/megabasing/science" });
+    assert.deepStrictEqual(await chooseImportTarget(host, ""), { mode: "create", parent: "blueprints" });
     assert.equal((await chooseImportTarget(host, "_tools/templates")).mode, "refuse");
-    assert.equal((await chooseImportTarget(host, "megabasing/.hidden")).mode, "refuse");
+    assert.equal((await chooseImportTarget(host, "blog/posts")).mode, "refuse", "only blueprints/ holds blueprints");
+    assert.equal((await chooseImportTarget(host, "blueprints/megabasing/.hidden")).mode, "refuse");
   });
 
   test("a blueprint.json under an ignored folder does not count", async () => {
@@ -62,20 +63,20 @@ describe("create or update", () => {
 describe("import: create", () => {
   test("creates the folder, blueprint.json and notes, then commits", async () => {
     const host = fakeHost({ files: EXISTING, clipboard: BOOK });
-    const out = await importFromClipboard(host, "megabasing/science");
+    const out = await importFromClipboard(host, "blueprints/megabasing/science");
     assert.deepStrictEqual(out, {
       action: "created",
-      folder: "megabasing/science/military-science-pack-240-v3",
+      folder: "blueprints/megabasing/science/military-science-pack-240-v3",
       git: { status: "pushed", commit: "abc1234" },
     });
     const prompt = host.createPrompts[0]!;
     assert.equal(prompt.title, "Military Science Pack (240/s) V3");
     assert.equal(prompt.slug, "military-science-pack-240-v3");
-    assert.equal(prompt.parent, "megabasing/science");
+    assert.equal(prompt.parent, "blueprints/megabasing/science");
     assert.ok(prompt.askChangeNote);
     assert.match(prompt.summary, /^blueprint book /);
 
-    const folder = "megabasing/science/military-science-pack-240-v3";
+    const folder = "blueprints/megabasing/science/military-science-pack-240-v3";
     assert.equal(host.vault.get(`${folder}/blueprint.json`), BOOK_JSON);
     const notes = host.vault.get(`${folder}/README.md`)!;
     assert.equal(
@@ -106,26 +107,26 @@ describe("import: create", () => {
       clipboard: BOOK,
       create: () => ({ title: "  Military Science  ", slug: "military-science-240", changeNote: "  first\nversion " }),
     });
-    const out = await importFromClipboard(host, "megabasing");
+    const out = await importFromClipboard(host, "blueprints/megabasing");
     assert.equal(out.action, "created");
-    const notes = host.vault.get("megabasing/military-science-240/README.md")!;
+    const notes = host.vault.get("blueprints/megabasing/military-science-240/README.md")!;
     assert.equal(
       notes,
-      '---\ntitle: Military Science\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\nstatus: draft\n' + BOOK_STATS + '---\n\n' + bookBlock("megabasing/military-science-240") + "\n",
+      '---\ntitle: Military Science\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\nstatus: draft\n' + BOOK_STATS + '---\n\n' + bookBlock("blueprints/megabasing/military-science-240") + "\n",
     );
     const single = fakeHost({ files, clipboard: WIRES });
-    await importFromClipboard(single, "megabasing");
+    await importFromClipboard(single, "blueprints/megabasing");
     assert.equal(
-      single.vault.get("megabasing/wired-lamps/README.md"),
+      single.vault.get("blueprints/megabasing/wired-lamps/README.md"),
       '---\ntitle: Wired lamps\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\nstatus: draft\n' + WIRES_STATS + '---\n',
       "a single blueprint without renders gets no block: the body stays empty",
     );
-    assert.deepStrictEqual(host.commits, [{ folder: "megabasing/military-science-240", message: "first version" }]);
+    assert.deepStrictEqual(host.commits, [{ folder: "blueprints/megabasing/military-science-240", message: "first version" }]);
   });
 
   test("refuses to overwrite an existing folder", async () => {
     const host = fakeHost({ files: EXISTING, clipboard: BOOK, create: () => ({ title: "x", slug: "mall", changeNote: "" }) });
-    const prompt = await importFromClipboard(host, "megabasing/science");
+    const prompt = await importFromClipboard(host, "blueprints/megabasing/science");
     assert.equal(prompt.action, "rejected");
     assert.match(host.notices.at(-1)!.message, /already exists/);
     assert.equal(host.commits.length, 0);
@@ -137,51 +138,51 @@ describe("import: create", () => {
   test("cancel writes nothing", async () => {
     const host = fakeHost({ files: EXISTING, clipboard: BOOK, create: () => undefined });
     const before = new Map(host.vault);
-    assert.deepStrictEqual(await importFromClipboard(host, "megabasing"), { action: "cancelled" });
+    assert.deepStrictEqual(await importFromClipboard(host, "blueprints/megabasing"), { action: "cancelled" });
     assert.deepStrictEqual(host.vault, before);
   });
 
   test("label-less blueprint gets a title from its kind", async () => {
     const host = fakeHost({ clipboard: fixture("single-blueprint.txt") });
-    await importFromClipboard(host, "tests");
+    await importFromClipboard(host, "blueprints/tests");
     assert.equal(host.createPrompts[0]!.title, "Blueprint");
     assert.equal(host.createPrompts[0]!.slug, "blueprint");
   });
 
   test("commit switched off", async () => {
     const host = fakeHost({ clipboard: BOOK, settings: { commitAfterImport: false } });
-    const out = await importFromClipboard(host, "x");
+    const out = await importFromClipboard(host, "blueprints/x");
     assert.equal(out.action, "created");
     assert.equal(host.createPrompts[0]!.askChangeNote, false);
     assert.equal(host.commits.length, 0);
-    assert.match(host.notices.at(-1)!.message, /^Created x\/military-science-pack-240-v3 with blueprint book/);
+    assert.match(host.notices.at(-1)!.message, /^Created blueprints\/x\/military-science-pack-240-v3 with blueprint book/);
   });
 });
 
 describe("import: update", () => {
   test("overwrites blueprint.json, bumps the version, leaves the notes body", async () => {
     const host = fakeHost({ files: EXISTING, clipboard: BOOK });
-    const out = await importFromClipboard(host, "megabasing/science/mall");
+    const out = await importFromClipboard(host, "blueprints/megabasing/science/mall");
     assert.equal(out.action, "updated");
     const p = host.updatePrompts[0]!;
     assert.equal(p.currentVersion, "3");
     assert.equal(p.suggestedVersion, "4");
     assert.equal(p.title, "Mall");
     assert.match(p.previousSummary ?? "", /^blueprint "Concrete pad"/);
-    assert.equal(host.vault.get("megabasing/science/mall/blueprint.json"), BOOK_JSON);
+    assert.equal(host.vault.get("blueprints/megabasing/science/mall/blueprint.json"), BOOK_JSON);
     assert.equal(
-      host.vault.get("megabasing/science/mall/README.md"),
-      '---\ntitle: Mall\nauthors: []\nversion: "4"\nextra: kept\n' + BOOK_STATS + '---\n\n' + bookBlock("megabasing/science/mall") + "\n\nMy notes.\n",
+      host.vault.get("blueprints/megabasing/science/mall/README.md"),
+      '---\ntitle: Mall\nauthors: []\nversion: "4"\nextra: kept\n' + BOOK_STATS + '---\n\n' + bookBlock("blueprints/megabasing/science/mall") + "\n\nMy notes.\n",
       "version bumped, block added at the top of the body, notes kept",
     );
-    assert.deepStrictEqual(host.commits, [{ folder: "megabasing/science/mall", message: "update Mall" }]);
+    assert.deepStrictEqual(host.commits, [{ folder: "blueprints/megabasing/science/mall", message: "update Mall" }]);
   });
 
   test("keeping the version changes only the stats (single blueprint, no renders: no block)", async () => {
     const host = fakeHost({ files: EXISTING, clipboard: WIRES, update: () => ({ newVersion: undefined, changeNote: "tweak belts" }) });
-    await importFromClipboard(host, "megabasing/science/mall/renders");
-    assert.equal(host.vault.get("megabasing/science/mall/README.md"), withStats(EXISTING["megabasing/science/mall/README.md"], WIRES_STATS));
-    assert.deepStrictEqual(host.commits, [{ folder: "megabasing/science/mall", message: "tweak belts" }]);
+    await importFromClipboard(host, "blueprints/megabasing/science/mall/renders");
+    assert.equal(host.vault.get("blueprints/megabasing/science/mall/README.md"), withStats(EXISTING["blueprints/megabasing/science/mall/README.md"], WIRES_STATS));
+    assert.deepStrictEqual(host.commits, [{ folder: "blueprints/megabasing/science/mall", message: "tweak belts" }]);
   });
 
   const RICH_NOTE = [
@@ -205,87 +206,87 @@ describe("import: update", () => {
   ].join("\n");
 
   test("optional keys and a hand-written body survive an update with a bump", async () => {
-    const files = { ...EXISTING, "megabasing/science/mall/README.md": RICH_NOTE };
+    const files = { ...EXISTING, "blueprints/megabasing/science/mall/README.md": RICH_NOTE };
     const host = fakeHost({ files, clipboard: WIRES });
-    await importFromClipboard(host, "megabasing/science/mall");
+    await importFromClipboard(host, "blueprints/megabasing/science/mall");
     assert.equal(host.updatePrompts[0]!.suggestedVersion, "2.3");
-    assert.equal(host.vault.get("megabasing/science/mall/README.md"), withStats(RICH_NOTE.replace('version: "2.2"', 'version: "2.3"'), WIRES_STATS));
+    assert.equal(host.vault.get("blueprints/megabasing/science/mall/README.md"), withStats(RICH_NOTE.replace('version: "2.2"', 'version: "2.3"'), WIRES_STATS));
   });
 
   test("a book update adds the block above a hand-written body and keeps everything else", async () => {
-    const files = { ...EXISTING, "megabasing/science/mall/README.md": RICH_NOTE };
+    const files = { ...EXISTING, "blueprints/megabasing/science/mall/README.md": RICH_NOTE };
     const host = fakeHost({ files, clipboard: BOOK, update: () => ({ newVersion: undefined, changeNote: "" }) });
-    await importFromClipboard(host, "megabasing/science/mall");
+    await importFromClipboard(host, "blueprints/megabasing/science/mall");
     const [fm, body] = RICH_NOTE.split("custom: value\n---\n");
     assert.equal(
-      host.vault.get("megabasing/science/mall/README.md"),
-      `${fm}custom: value\n${BOOK_STATS}---\n\n${bookBlock("megabasing/science/mall")}\n${body}`,
+      host.vault.get("blueprints/megabasing/science/mall/README.md"),
+      `${fm}custom: value\n${BOOK_STATS}---\n\n${bookBlock("blueprints/megabasing/science/mall")}\n${body}`,
     );
     // Importing the same book into the note with its block again changes nothing.
     const again = fakeHost({
-      files: { ...files, "megabasing/science/mall/README.md": host.vault.get("megabasing/science/mall/README.md")!, "megabasing/science/mall/blueprint.json": "{}" },
+      files: { ...files, "blueprints/megabasing/science/mall/README.md": host.vault.get("blueprints/megabasing/science/mall/README.md")!, "blueprints/megabasing/science/mall/blueprint.json": "{}" },
       clipboard: BOOK,
       update: () => ({ newVersion: undefined, changeNote: "" }),
     });
-    await importFromClipboard(again, "megabasing/science/mall");
-    assert.equal(again.vault.get("megabasing/science/mall/README.md"), host.vault.get("megabasing/science/mall/README.md"));
+    await importFromClipboard(again, "blueprints/megabasing/science/mall");
+    assert.equal(again.vault.get("blueprints/megabasing/science/mall/README.md"), host.vault.get("blueprints/megabasing/science/mall/README.md"));
   });
 
   test("optional keys and a hand-written body survive an update without a bump", async () => {
-    const files = { ...EXISTING, "megabasing/science/mall/README.md": RICH_NOTE };
+    const files = { ...EXISTING, "blueprints/megabasing/science/mall/README.md": RICH_NOTE };
     const host = fakeHost({ files, clipboard: WIRES, update: () => ({ newVersion: undefined, changeNote: "" }) });
-    await importFromClipboard(host, "megabasing/science/mall");
-    assert.equal(host.vault.get("megabasing/science/mall/README.md"), withStats(RICH_NOTE, WIRES_STATS));
+    await importFromClipboard(host, "blueprints/megabasing/science/mall");
+    assert.equal(host.vault.get("blueprints/megabasing/science/mall/README.md"), withStats(RICH_NOTE, WIRES_STATS));
   });
 
   test("a note without a version key gets one when bumped", async () => {
     const note = "---\ntitle: Mall\nauthors: []\n---\n\nNotes.\n";
-    const files = { ...EXISTING, "megabasing/science/mall/README.md": note };
+    const files = { ...EXISTING, "blueprints/megabasing/science/mall/README.md": note };
     const host = fakeHost({ files, clipboard: WIRES });
-    await importFromClipboard(host, "megabasing/science/mall");
+    await importFromClipboard(host, "blueprints/megabasing/science/mall");
     const p = host.updatePrompts[0]!;
     assert.equal(p.currentVersion, undefined);
     assert.equal(p.suggestedVersion, "2");
     assert.ok(p.canBumpVersion);
-    assert.equal(host.vault.get("megabasing/science/mall/README.md"), '---\ntitle: Mall\nauthors: []\nversion: "2"\n' + WIRES_STATS + '---\n\nNotes.\n');
+    assert.equal(host.vault.get("blueprints/megabasing/science/mall/README.md"), '---\ntitle: Mall\nauthors: []\nversion: "2"\n' + WIRES_STATS + '---\n\nNotes.\n');
   });
 
   test("an empty-body note from the template is bumped in place", async () => {
     const note = '---\ntitle: Mall\nauthors: [abucnasty]\nversion: "1"\nposted: 2026-11-12\n---\n';
-    const files = { ...EXISTING, "megabasing/science/mall/README.md": note };
+    const files = { ...EXISTING, "blueprints/megabasing/science/mall/README.md": note };
     const host = fakeHost({ files, clipboard: WIRES });
-    await importFromClipboard(host, "megabasing/science/mall");
-    assert.equal(host.vault.get("megabasing/science/mall/README.md"), withStats(note.replace('"1"', '"2"'), WIRES_STATS));
+    await importFromClipboard(host, "blueprints/megabasing/science/mall");
+    assert.equal(host.vault.get("blueprints/megabasing/science/mall/README.md"), withStats(note.replace('"1"', '"2"'), WIRES_STATS));
   });
 
   test("a book replaced by a single blueprint loses the stats that no longer apply", async () => {
     const note = withStats('---\ntitle: Mall\nauthors: []\nversion: "3"\n---\n\nMine.\n', BOOK_STATS);
-    const files = { ...EXISTING, "megabasing/science/mall/README.md": note };
+    const files = { ...EXISTING, "blueprints/megabasing/science/mall/README.md": note };
     const host = fakeHost({ files, clipboard: WIRES, update: () => ({ newVersion: undefined, changeNote: "" }) });
-    await importFromClipboard(host, "megabasing/science/mall");
+    await importFromClipboard(host, "blueprints/megabasing/science/mall");
     assert.equal(
-      host.vault.get("megabasing/science/mall/README.md"),
+      host.vault.get("blueprints/megabasing/science/mall/README.md"),
       '---\ntitle: Mall\nauthors: []\nversion: "3"\nentities: 4\nfactorio_version: "2.0.76"\n---\n\nMine.\n',
     );
   });
 
   test("the same blueprint again changes nothing", async () => {
     const host = fakeHost({ files: EXISTING, clipboard: TILES });
-    assert.deepStrictEqual(await importFromClipboard(host, "megabasing/science/mall"), {
+    assert.deepStrictEqual(await importFromClipboard(host, "blueprints/megabasing/science/mall"), {
       action: "unchanged",
-      folder: "megabasing/science/mall",
+      folder: "blueprints/megabasing/science/mall",
     });
     assert.equal(host.updatePrompts.length, 0);
     assert.equal(host.commits.length, 0);
   });
 
   test("a folder without notes cannot bump a version", async () => {
-    const host = fakeHost({ files: { "a/b/blueprint.json": "{}" }, clipboard: BOOK });
-    await importFromClipboard(host, "a/b");
+    const host = fakeHost({ files: { "blueprints/a/b/blueprint.json": "{}" }, clipboard: BOOK });
+    await importFromClipboard(host, "blueprints/a/b");
     assert.equal(host.updatePrompts[0]!.canBumpVersion, false);
     assert.equal(host.updatePrompts[0]!.previousSummary, undefined);
-    assert.ok(!host.vault.has("a/b/README.md"));
-    assert.deepStrictEqual(host.commits, [{ folder: "a/b", message: "update b" }]);
+    assert.ok(!host.vault.has("blueprints/a/b/README.md"));
+    assert.deepStrictEqual(host.commits, [{ folder: "blueprints/a/b", message: "update b" }]);
   });
 });
 
@@ -300,7 +301,7 @@ describe("import: problems", () => {
     test(name, async () => {
       const host = fakeHost({ files: EXISTING, clipboard: clip });
       const before = new Map(host.vault);
-      const out = await importFromClipboard(host, "megabasing");
+      const out = await importFromClipboard(host, "blueprints/megabasing");
       assert.equal(out.action, "rejected");
       assert.equal(host.notices.length, 1);
       assert.equal(host.notices[0]!.kind, "error");
@@ -315,9 +316,9 @@ describe("import: problems", () => {
       clipboard: BOOK,
       git: { status: "failed", step: "push", committed: true, commit: "def5678", message: "git push failed: fatal: unable to access" },
     });
-    const out = await importFromClipboard(host, "x");
+    const out = await importFromClipboard(host, "blueprints/x");
     assert.equal(out.action, "created");
-    assert.ok(host.vault.has("x/military-science-pack-240-v3/blueprint.json"));
+    assert.ok(host.vault.has("blueprints/x/military-science-pack-240-v3/blueprint.json"));
     const last = host.notices.at(-1)!;
     assert.equal(last.kind, "error");
     assert.match(last.message, /committed def5678 locally, but git push failed: fatal: unable to access\. The Git plugin's timed sync will try again\./);
@@ -328,14 +329,14 @@ describe("import: problems", () => {
       clipboard: BOOK,
       git: { status: "failed", step: "check", committed: false, message: "git is busy: a merge is in progress" },
     });
-    await importFromClipboard(host, "x");
+    await importFromClipboard(host, "blueprints/x");
     assert.match(host.notices.at(-1)!.message, /but git is busy: a merge is in progress\. The files are saved/);
   });
 
   test("no git available skips the commit step", async () => {
     const host = fakeHost({ clipboard: BOOK, git: "none" });
-    const out = await importFromClipboard(host, "x");
-    assert.deepStrictEqual(out, { action: "created", folder: "x/military-science-pack-240-v3", git: undefined });
+    const out = await importFromClipboard(host, "blueprints/x");
+    assert.deepStrictEqual(out, { action: "created", folder: "blueprints/x/military-science-pack-240-v3", git: undefined });
     assert.equal(host.createPrompts[0]!.askChangeNote, false);
   });
 });

@@ -32,7 +32,7 @@ export interface Settings {
   commitAfterImport: boolean;
   /** Vault path of the notes template for new blueprints. */
   templatePath: string;
-  /** Link Worker base URL, e.g. https://blueprints.abucnasty.dev */
+  /** Link Worker base URL, e.g. https://vault.abucnasty.dev (links add the vault path) */
   linkBase: string;
   /** Render settings for this computer. */
   render: RenderSettings;

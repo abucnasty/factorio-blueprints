@@ -7,7 +7,7 @@ import { App, PluginSettingTab, Setting } from "obsidian";
 import type { Plugin } from "obsidian";
 
 import type { RenderSettings } from "../commands/host.ts";
-import { DEFAULT_LINK_BASE } from "../core/index.ts";
+import { DEFAULT_LINK_BASE, LEGACY_LINK_BASE } from "../core/index.ts";
 import { defaultNodeBinary } from "../process/node-process.ts";
 
 export interface StoredSettings {
@@ -24,6 +24,13 @@ export const DEFAULT_SETTINGS: StoredSettings = {
   templatePath: "_tools/templates/blueprint-notes.md",
   linkBase: DEFAULT_LINK_BASE,
 };
+
+/** Saved settings over the defaults; a link base saved before the move to blueprints/ becomes the new one. */
+export function readStoredSettings(saved: Partial<StoredSettings> | null): StoredSettings {
+  const s = { ...DEFAULT_SETTINGS, ...saved };
+  if (s.linkBase.trim().replace(/\/+$/, "") === LEGACY_LINK_BASE) s.linkBase = DEFAULT_LINK_BASE;
+  return s;
+}
 
 /** Local storage keys (this computer only). */
 export const LOCAL = {

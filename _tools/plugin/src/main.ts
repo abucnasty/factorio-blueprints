@@ -16,7 +16,7 @@ import { setBlueprintStatus } from "./commands/set-status.ts";
 import { cancelRenderAll, folderRenderState, renderAllNeeded, showFoldersNeedingRender } from "./commands/render-status.ts";
 import { BLUEPRINT_FILE, BOOK_FILE, isScannedPath, joinPath, RENDER_MANIFEST, renderStateLabel, selfAndAncestors } from "./core/index.ts";
 import { createObsidianHost } from "./obsidian/host.ts";
-import { BlueprintSettingTab, DEFAULT_SETTINGS, loadRenderSettings, parseAuthors } from "./obsidian/settings.ts";
+import { BlueprintSettingTab, DEFAULT_SETTINGS, loadRenderSettings, parseAuthors, readStoredSettings } from "./obsidian/settings.ts";
 import type { StoredSettings } from "./obsidian/settings.ts";
 
 /**
@@ -214,7 +214,7 @@ export default class FactorioBlueprintsPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = { ...DEFAULT_SETTINGS, ...((await this.loadData()) as Partial<StoredSettings> | null) };
+    this.settings = readStoredSettings((await this.loadData()) as Partial<StoredSettings> | null);
   }
 
   async saveSettings(): Promise<void> {

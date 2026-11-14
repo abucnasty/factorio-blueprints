@@ -4,6 +4,7 @@
 
 import {
   BLUEPRINT_FILE,
+  BLUEPRINTS_ROOT,
   BlueprintStringError,
   bumpVersion,
   decodeBlueprintString,
@@ -52,19 +53,22 @@ export type ImportTarget =
 /**
  * Where an import from `contextFolder` goes: the blueprint folder that
  * contains it (update), or a new folder inside it (create). New blueprints
- * cannot go under a folder starting with "_" or ".", as those are never
- * scanned.
+ * go under blueprints/ (from the vault root, straight into it), never under
+ * another top-level folder or one starting with "_" or ".", as those are
+ * never scanned.
  */
 export async function chooseImportTarget(host: Host, contextFolder: string): Promise<ImportTarget> {
   const loc = await locate(host, contextFolder);
   if (loc?.kind === "blueprint") return { mode: "update", folder: loc.folder };
-  if (!isScannedPath(contextFolder)) {
+  const parent = joinPath(contextFolder);
+  if (parent === "" || parent === BLUEPRINTS_ROOT) return { mode: "create", parent: BLUEPRINTS_ROOT };
+  if (!isScannedPath(parent)) {
     return {
       mode: "refuse",
-      reason: `Blueprints cannot be created in "${contextFolder}": folders starting with "_" or "." are never scanned.`,
+      reason: `Blueprints cannot be created in "${contextFolder}": they go in ${BLUEPRINTS_ROOT}/, outside folders starting with "_" or ".".`,
     };
   }
-  return { mode: "create", parent: joinPath(contextFolder) };
+  return { mode: "create", parent };
 }
 
 export async function importFromClipboard(host: Host, contextFolder: string): Promise<ImportOutcome> {

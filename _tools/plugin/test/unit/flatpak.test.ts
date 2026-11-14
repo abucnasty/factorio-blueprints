@@ -125,9 +125,9 @@ describe("render preview notices under Flatpak", () => {
   const vault = join(root, "vault");
   mkdirSync(join(vault, "_tools/render/bin"), { recursive: true });
   mkdirSync(join(vault, "_tools/render/node_modules"), { recursive: true });
-  mkdirSync(join(vault, "cat/lamps"), { recursive: true });
+  mkdirSync(join(vault, "blueprints/cat/lamps"), { recursive: true });
   writeFileSync(join(vault, "_tools/render/bin/render.js"), "process.exit(1)\n");
-  writeFileSync(join(vault, "cat/lamps/blueprint.json"), writeCanonicalJson({ blueprint: { item: "blueprint", entities: [{ entity_number: 1, name: "small-lamp" }] } }));
+  writeFileSync(join(vault, "blueprints/cat/lamps/blueprint.json"), writeCanonicalJson({ blueprint: { item: "blueprint", entities: [{ entity_number: 1, name: "small-lamp" }] } }));
 
   const host = (opts: { appId?: string; launcher?: string; node?: string } = {}) =>
     fakeHost({
@@ -139,7 +139,7 @@ describe("render preview notices under Flatpak", () => {
   test("no permission to start on the host: the override command, nothing committed", async () => {
     process.env["FAKE_FLATPAK"] = "deny";
     const h = host({ appId: "com.example.ObsidianBeta" });
-    const out = await renderPreview(h, "cat/lamps");
+    const out = await renderPreview(h, "blueprints/cat/lamps");
     delete process.env["FAKE_FLATPAK"];
     assert.equal(out.action, "failed");
     assert.equal(
@@ -153,7 +153,7 @@ describe("render preview notices under Flatpak", () => {
 
   test("node not found on the host: Node path, with the full-path hint", async () => {
     const h = host({ node: "/no/such/node" });
-    const out = await renderPreview(h, "cat/lamps");
+    const out = await renderPreview(h, "blueprints/cat/lamps");
     assert.equal(out.action, "failed");
     const message = h.notices.at(-1)!.message;
     assert.match(message, /^Could not start Node\.js \(\/no\/such\/node\): Failed to start command: .*No such file or directory.*\. Set "Node path" in the plugin settings\./);
@@ -163,7 +163,7 @@ describe("render preview notices under Flatpak", () => {
 
   test("flatpak-spawn missing in the sandbox", async () => {
     const h = host({ launcher: join(root, "missing-flatpak-spawn") });
-    const out = await renderPreview(h, "cat/lamps");
+    const out = await renderPreview(h, "blueprints/cat/lamps");
     assert.equal(out.action, "failed");
     assert.match(h.notices.at(-1)!.message, /^Obsidian runs as a Flatpak, but flatpak-spawn, .* is not available in it/);
   });

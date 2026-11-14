@@ -54,12 +54,15 @@ export type { NewNotesFields } from "./notes-template.ts";
 export {
   baseName,
   BLUEPRINT_FILE,
+  BLUEPRINTS_ROOT,
+  catalogPath,
   findBlueprintFolder,
   isScannedPath,
   joinPath,
   NOTES_FILE,
   parentFolder,
   selfAndAncestors,
+  vaultPath,
 } from "./blueprint-folder.ts";
 
 export { bookTree, displayLabel, findNode, flattenTree } from "./book-tree.ts";
@@ -75,7 +78,7 @@ export {
 } from "./expanded-book.ts";
 export type { ExpandedEntry, FolderReader } from "./expanded-book.ts";
 
-export { coverUrl, DEFAULT_LINK_BASE, encodePath, renderUrl, stringUrl } from "./links.ts";
+export { coverUrl, DEFAULT_LINK_BASE, encodePath, LEGACY_LINK_BASE, renderUrl, stringUrl } from "./links.ts";
 
 export {
   applyGeneratedBlock,

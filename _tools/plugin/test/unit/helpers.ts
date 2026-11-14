@@ -23,7 +23,7 @@ import { nodeProcessRunner } from "../../src/process/node-process.ts";
 
 export { fixture } from "./fixtures.ts";
 
-export const BASE = "https://blueprints.abucnasty.dev";
+export const BASE = "https://vault.abucnasty.dev";
 /** The full SHA the fake git reports for a commit. */
 export const FAKE_COMMIT = "abc1234".padEnd(40, "0");
 

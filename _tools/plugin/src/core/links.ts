@@ -1,4 +1,5 @@
-// Live links served by the link Worker, per _tools/docs/conventions.md:
+// Live links served by the link Worker, per _tools/docs/conventions.md.
+// <folder> is the vault path, so links start <base>/blueprints/:
 //
 //   <base>/<folder>.txt                 latest string of the whole folder
 //   <base>/<folder>@<version>.txt       a recorded version, by its label
@@ -8,7 +9,13 @@
 
 import { versionLabelProblem } from "./versions.ts";
 
-export const DEFAULT_LINK_BASE = "https://blueprints.abucnasty.dev";
+export const DEFAULT_LINK_BASE = "https://vault.abucnasty.dev";
+/**
+ * The link base before blueprints moved under blueprints/ (2026-11-14). It
+ * served catalog paths at its root, so it cannot take vault paths: a saved
+ * setting with it is read as DEFAULT_LINK_BASE.
+ */
+export const LEGACY_LINK_BASE = "https://blueprints.abucnasty.dev";
 
 /** Link to a folder's string, or to the entry at a slot path, optionally at a version (its label). */
 export function stringUrl(base: string, folder: string, slots: readonly number[] = [], version?: string): string {

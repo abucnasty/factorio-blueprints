@@ -17,7 +17,7 @@ import { commitAndSync } from "../../src/git/commit-and-sync.ts";
 import { createGitRunner, nodePathExists } from "../../src/git/node-runner.ts";
 import { decodeBlueprintString, parseRenderManifest, renderTargets, writeCanonicalJson } from "../../src/core/index.ts";
 
-import { fakeHost, fixture } from "./helpers.ts";
+import { BASE, fakeHost, fixture } from "./helpers.ts";
 import type { FakeOptions } from "./helpers.ts";
 
 process.env["GIT_CONFIG_GLOBAL"] = "/dev/null";
@@ -94,8 +94,8 @@ let n = 0;
 let vault: string;
 let remote: string;
 let log: string;
-const BOOK_DIR = "cat/book";
-const SINGLE_DIR = "cat/lamps";
+const BOOK_DIR = "blueprints/cat/book";
+const SINGLE_DIR = "blueprints/cat/lamps";
 
 beforeEach(() => {
   n++;
@@ -162,10 +162,10 @@ describe("render preview", () => {
     ]);
     const target = renderTargets(JSON.parse(read(`${SINGLE_DIR}/blueprint.json`)))[0]!;
     assert.equal(parseRenderManifest(read(`${SINGLE_DIR}/renders/render.json`))!.entries["0"]!.sha256, target.hash);
-    assert.ok(read(`${SINGLE_DIR}/README.md`).includes(`![Lamps](https://blueprints.abucnasty.dev/${SINGLE_DIR}/cover.jpg)`));
+    assert.ok(read(`${SINGLE_DIR}/README.md`).includes(`![Lamps](${BASE}/${SINGLE_DIR}/cover.jpg)`));
     assert.deepStrictEqual(remoteLog(), ["render Lamps", "initial"]);
     const last = h.notices.at(-1)!;
-    assert.match(last.message, /^Rendered 1 image for cat\/lamps, committed and pushed/);
+    assert.match(last.message, /^Rendered 1 image for blueprints\/cat\/lamps, committed and pushed/);
     assert.equal(last.kind, "info");
     assert.ok(h.progress.includes(`Rendering ${SINGLE_DIR}: Starting Factorio`));
     assert.equal(h.progress.at(-1), "(closed)");
@@ -214,7 +214,7 @@ describe("render preview", () => {
     const out = await renderPreview(h, BOOK_DIR);
     assert.ok(out.action === "rendered" && out.problems.length === 0);
     const last = h.notices.at(-1)!;
-    assert.match(last.message, /^Rendered 2 images for cat\/book, committed and pushed/);
+    assert.match(last.message, /^Rendered 2 images for blueprints\/cat\/book, committed and pushed/);
     assert.equal(last.kind, "info");
   });
 
@@ -246,7 +246,7 @@ describe("render preview", () => {
     const h = host("fail");
     const out = await renderPreview(h, SINGLE_DIR);
     assert.equal(out.action, "failed");
-    assert.equal(h.notices.at(-1)!.message, "Render of cat/lamps failed: render: Factorio did not start within 300 s. Nothing was committed.");
+    assert.equal(h.notices.at(-1)!.message, "Render of blueprints/cat/lamps failed: render: Factorio did not start within 300 s. Nothing was committed.");
     assert.ok(!existsSync(join(vault, SINGLE_DIR, "renders")));
     assert.deepStrictEqual(remoteLog(), ["initial"]);
   });
@@ -361,7 +361,7 @@ describe("render only what needs it", () => {
     ]);
     await renderAllNeeded(h);
     assert.match(h.notices.at(-1)!.message, /^Render all: 2 of 2 rendered\./);
-    assert.ok(h.progress.some((p) => p.startsWith("Rendering 2 of 2: cat/lamps")));
+    assert.ok(h.progress.some((p) => p.startsWith("Rendering 2 of 2: blueprints/cat/lamps")));
     assert.deepStrictEqual(await foldersNeedingRender(h), []);
   });
 
@@ -370,7 +370,7 @@ describe("render only what needs it", () => {
     await renderAllNeeded(h);
     const summary = h.notices.at(-1)!.message;
     assert.match(summary, /^Render all: 0 of 2 rendered, 2 failed\./);
-    assert.match(summary, /cat\/book: Render of cat\/book failed/);
+    assert.match(summary, /blueprints\/cat\/book: Render of blueprints\/cat\/book failed/);
   });
 
   test("import notice says when the render is now outdated", async () => {
@@ -382,10 +382,10 @@ describe("render only what needs it", () => {
 
   test("render after import, when switched on for this computer", async () => {
     const h = host("ok", { clipboard: fixture("non-ascii-label.txt"), settings: { render: { afterImport: true } } });
-    const out = await importFromClipboard(h, "cat");
+    const out = await importFromClipboard(h, "blueprints/cat");
     assert.equal(out.action, "created");
     assert.deepStrictEqual(remoteLog(), ["render Fußgänger-Brücke — 日本語 🚀 1", "add Fußgänger-Brücke — 日本語 🚀", "initial"]);
-    assert.ok(existsSync(join(vault, "cat/fussganger-brucke/renders/0.jpg")));
+    assert.ok(existsSync(join(vault, "blueprints/cat/fussganger-brucke/renders/0.jpg")));
   });
 });
 
