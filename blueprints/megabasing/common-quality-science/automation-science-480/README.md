@@ -11,10 +11,10 @@ blueprints: 2
 factorio_version: "2.0.73.1"
 ---
 
-![Automation Science (480/s)](https://blueprints.abucnasty.dev/megabasing/common-quality-science/automation-science-480/cover.jpg)
+![Automation Science (480/s)](https://vault.abucnasty.dev/blueprints/megabasing/common-quality-science/automation-science-480/cover.jpg)
 
-- [Lead (clocks)](https://blueprints.abucnasty.dev/megabasing/common-quality-science/automation-science-480/0.txt)
-- [Follower](https://blueprints.abucnasty.dev/megabasing/common-quality-science/automation-science-480/1.txt)
+- [Lead (clocks)](https://vault.abucnasty.dev/blueprints/megabasing/common-quality-science/automation-science-480/0.txt)
+- [Follower](https://vault.abucnasty.dev/blueprints/megabasing/common-quality-science/automation-science-480/1.txt)
 
 inspired by Syvkal & phlap
 

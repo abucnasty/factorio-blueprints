@@ -11,9 +11,9 @@ blueprints: 2
 factorio_version: "2.0.73.1"
 ---
 
-![Logistics Science (240/s)](https://blueprints.abucnasty.dev/megabasing/common-quality-science/logistics-science-240/cover.jpg)
+![Logistics Science (240/s)](https://vault.abucnasty.dev/blueprints/megabasing/common-quality-science/logistics-science-240/cover.jpg)
 
-- [Lead (clocks)](https://blueprints.abucnasty.dev/megabasing/common-quality-science/logistics-science-240/0.txt)
-- [Follower](https://blueprints.abucnasty.dev/megabasing/common-quality-science/logistics-science-240/1.txt)
+- [Lead (clocks)](https://vault.abucnasty.dev/blueprints/megabasing/common-quality-science/logistics-science-240/0.txt)
+- [Follower](https://vault.abucnasty.dev/blueprints/megabasing/common-quality-science/logistics-science-240/1.txt)
 
 - designed by Syvkal, modified by abucnasty, clocks by abucnasty

@@ -8,4 +8,4 @@ tiles: 7026
 factorio_version: "2.0.76"
 ---
 
-![Lead (Clocks)](https://blueprints.abucnasty.dev/megabasing/uncommon-science/cryogenic-science-240/renders/0.jpg)
+![Lead (Clocks)](https://vault.abucnasty.dev/blueprints/megabasing/uncommon-science/cryogenic-science-240/renders/0.jpg)

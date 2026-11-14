@@ -10,7 +10,7 @@ entities: 228
 factorio_version: "2.0.64.2"
 ---
 
-![Automation Science (240/s)](https://blueprints.abucnasty.dev/megabasing/common-quality-science/automation-science-240/cover.jpg)
+![Automation Science (240/s)](https://vault.abucnasty.dev/blueprints/megabasing/common-quality-science/automation-science-240/cover.jpg)
 
 480 molten iron / s
 480 molten copper / s

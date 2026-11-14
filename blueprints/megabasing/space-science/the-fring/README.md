@@ -11,7 +11,7 @@ tiles: 7473
 factorio_version: "2.0.76"
 ---
 
-![The Fring](https://blueprints.abucnasty.dev/megabasing/space-science/the-fring/cover.jpg)
+![The Fring](https://vault.abucnasty.dev/blueprints/megabasing/space-science/the-fring/cover.jpg)
 
 76800 SPM Q3 space science
 

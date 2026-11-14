@@ -12,18 +12,18 @@ blueprints: 10
 factorio_version: "2.0.55"
 ---
 
-![Lead Follower Furnaces](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/cover.jpg)
+![Lead Follower Furnaces](https://vault.abucnasty.dev/blueprints/megabasing/modules/lead-follower-furnaces/cover.jpg)
 
-- [Lead Furnace](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/0.txt)
-- [Iron Plate](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/6.txt)
-- [Iron Plate Mini](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/7.txt)
-- [Copper Plate](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/12.txt)
-- [Copper Plate Mini](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/13.txt)
-- [Stone Brick](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/18.txt)
-- [Stone Brick Mini](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/19.txt)
-- [Steel Plate](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/24.txt)
-- [Steel Plate V2](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/25.txt)
-- [Steel Plate V3](https://blueprints.abucnasty.dev/megabasing/modules/lead-follower-furnaces/26.txt)
+- [Lead Furnace](https://vault.abucnasty.dev/blueprints/megabasing/modules/lead-follower-furnaces/0.txt)
+- [Iron Plate](https://vault.abucnasty.dev/blueprints/megabasing/modules/lead-follower-furnaces/6.txt)
+- [Iron Plate Mini](https://vault.abucnasty.dev/blueprints/megabasing/modules/lead-follower-furnaces/7.txt)
+- [Copper Plate](https://vault.abucnasty.dev/blueprints/megabasing/modules/lead-follower-furnaces/12.txt)
+- [Copper Plate Mini](https://vault.abucnasty.dev/blueprints/megabasing/modules/lead-follower-furnaces/13.txt)
+- [Stone Brick](https://vault.abucnasty.dev/blueprints/megabasing/modules/lead-follower-furnaces/18.txt)
+- [Stone Brick Mini](https://vault.abucnasty.dev/blueprints/megabasing/modules/lead-follower-furnaces/19.txt)
+- [Steel Plate](https://vault.abucnasty.dev/blueprints/megabasing/modules/lead-follower-furnaces/24.txt)
+- [Steel Plate V2](https://vault.abucnasty.dev/blueprints/megabasing/modules/lead-follower-furnaces/25.txt)
+- [Steel Plate V3](https://vault.abucnasty.dev/blueprints/megabasing/modules/lead-follower-furnaces/26.txt)
 
 A collection of UPS optimized smelters (using lead / follower)
 

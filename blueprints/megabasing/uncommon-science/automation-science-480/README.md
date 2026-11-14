@@ -11,7 +11,7 @@ entities: 578
 factorio_version: "2.0.64.2"
 ---
 
-![Automation Science (480/s)](https://blueprints.abucnasty.dev/megabasing/uncommon-science/automation-science-480/cover.jpg)
+![Automation Science (480/s)](https://vault.abucnasty.dev/blueprints/megabasing/uncommon-science/automation-science-480/cover.jpg)
 
 480/s uncommon automation science
 

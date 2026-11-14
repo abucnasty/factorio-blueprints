@@ -10,7 +10,7 @@ entities: 1686
 factorio_version: "2.0.69"
 ---
 
-![Chemical Science (240/s)](https://blueprints.abucnasty.dev/megabasing/uncommon-science/chemical-science-240/cover.jpg)
+![Chemical Science (240/s)](https://vault.abucnasty.dev/blueprints/megabasing/uncommon-science/chemical-science-240/cover.jpg)
 
 trains, cars, and blades
 

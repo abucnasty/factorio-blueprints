@@ -10,7 +10,7 @@ tiles: 7790
 factorio_version: "2.0.76"
 ---
 
-![Q5 Space Casino](https://blueprints.abucnasty.dev/megabasing/generic-space-age/q5-space-casino/cover.jpg)
+![Q5 Space Casino](https://vault.abucnasty.dev/blueprints/megabasing/generic-space-age/q5-space-casino/cover.jpg)
 
 Only works in Factorio 2.0: 2.1 removed quality from asteroid reprocessing recipes.
 

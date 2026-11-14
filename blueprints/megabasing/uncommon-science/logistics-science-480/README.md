@@ -10,6 +10,6 @@ entities: 966
 factorio_version: "2.0.55"
 ---
 
-![Logistics Science (480/s)](https://blueprints.abucnasty.dev/megabasing/uncommon-science/logistics-science-480/cover.jpg)
+![Logistics Science (480/s)](https://vault.abucnasty.dev/blueprints/megabasing/uncommon-science/logistics-science-480/cover.jpg)
 
 - designed by abucnasty

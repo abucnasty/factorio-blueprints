@@ -7,4 +7,4 @@ entities: 2
 factorio_version: "2.0.60"
 ---
 
-![Expansion with \%](https://blueprints.abucnasty.dev/general/circuits/packed-rgb-dashboard/renders/1.jpg)
+![Expansion with \%](https://vault.abucnasty.dev/blueprints/general/circuits/packed-rgb-dashboard/renders/1.jpg)

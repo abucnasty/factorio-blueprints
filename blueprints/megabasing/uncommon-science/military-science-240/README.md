@@ -11,9 +11,9 @@ blueprints: 2
 factorio_version: "2.0.76"
 ---
 
-![Military Science (240/s)](https://blueprints.abucnasty.dev/megabasing/uncommon-science/military-science-240/cover.jpg)
+![Military Science (240/s)](https://vault.abucnasty.dev/blueprints/megabasing/uncommon-science/military-science-240/cover.jpg)
 
-- [Military Science Pack V3 Lead](https://blueprints.abucnasty.dev/megabasing/uncommon-science/military-science-240/0.txt)
-- [Military Science Pack V3 Follow](https://blueprints.abucnasty.dev/megabasing/uncommon-science/military-science-240/1.txt)
+- [Military Science Pack V3 Lead](https://vault.abucnasty.dev/blueprints/megabasing/uncommon-science/military-science-240/0.txt)
+- [Military Science Pack V3 Follow](https://vault.abucnasty.dev/blueprints/megabasing/uncommon-science/military-science-240/1.txt)
 
 - designed by abucnasty

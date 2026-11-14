@@ -11,11 +11,11 @@ blueprints: 3
 factorio_version: "2.0.64.2"
 ---
 
-![Automation Science (480/s)](https://blueprints.abucnasty.dev/megabasing/common-quality-science/automation-science-480-the-end/cover.jpg)
+![Automation Science (480/s)](https://vault.abucnasty.dev/blueprints/megabasing/common-quality-science/automation-science-480-the-end/cover.jpg)
 
-- [Stage1](https://blueprints.abucnasty.dev/megabasing/common-quality-science/automation-science-480-the-end/0.txt)
-- [Stage2](https://blueprints.abucnasty.dev/megabasing/common-quality-science/automation-science-480-the-end/1.txt)
-- [Final](https://blueprints.abucnasty.dev/megabasing/common-quality-science/automation-science-480-the-end/2.txt)
+- [Stage1](https://vault.abucnasty.dev/blueprints/megabasing/common-quality-science/automation-science-480-the-end/0.txt)
+- [Stage2](https://vault.abucnasty.dev/blueprints/megabasing/common-quality-science/automation-science-480-the-end/1.txt)
+- [Final](https://vault.abucnasty.dev/blueprints/megabasing/common-quality-science/automation-science-480-the-end/2.txt)
 
 Exactly 480 Automation Science Pack /s on 2 Turbo Transport Belt on 2 lanes each.
 Clocking based on leading assembler IO conditions.

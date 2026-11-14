@@ -11,7 +11,7 @@ tiles: 6992
 factorio_version: "2.1.11.1"
 ---
 
-![Heisenberg B](https://blueprints.abucnasty.dev/megabasing/space-science/heisenberg-b/cover.jpg)
+![Heisenberg B](https://vault.abucnasty.dev/blueprints/megabasing/space-science/heisenberg-b/cover.jpg)
 
 115200 SPM Q2 space science (2.1 compatible)
 

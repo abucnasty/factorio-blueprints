@@ -11,7 +11,7 @@ tiles: 6227
 factorio_version: "2.0.76"
 ---
 
-![Walt (Q5)](https://blueprints.abucnasty.dev/megabasing/space-science/walt-q5/cover.jpg)
+![Walt (Q5)](https://vault.abucnasty.dev/blueprints/megabasing/space-science/walt-q5/cover.jpg)
 
 19200 SPM Q5 space science
 

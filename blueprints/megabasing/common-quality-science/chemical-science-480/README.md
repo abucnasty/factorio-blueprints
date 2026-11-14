@@ -10,7 +10,7 @@ entities: 2550
 factorio_version: "2.0.66.1"
 ---
 
-![Chemical Science (480/s)](https://blueprints.abucnasty.dev/megabasing/common-quality-science/chemical-science-480/cover.jpg)
+![Chemical Science (480/s)](https://vault.abucnasty.dev/blueprints/megabasing/common-quality-science/chemical-science-480/cover.jpg)
 
 red circuits by thaeln, engine switching absurdity by abucnasty
 
