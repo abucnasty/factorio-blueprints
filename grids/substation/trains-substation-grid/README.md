@@ -1,13 +1,15 @@
 ---
 title: Trains Substation Grid
 authors: []
-version: "1"
+version: "0.1"
 posted: 2026-11-13
-status: draft
+status: public
 entities: 2994
 blueprints: 29
 factorio_version: "2.1.24.1"
 ---
+
+![Trains Substation Grid](https://blueprints.abucnasty.dev/grids/substation/trains-substation-grid/cover.jpg)
 
 - Elevated Rails ([book](https://blueprints.abucnasty.dev/grids/substation/trains-substation-grid/0.txt))
   - [Straight Segment](https://blueprints.abucnasty.dev/grids/substation/trains-substation-grid/0/0.txt)
