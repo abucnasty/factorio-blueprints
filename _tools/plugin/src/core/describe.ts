@@ -85,15 +85,16 @@ export function isBlueprintValue(value: unknown): boolean {
 /**
  * Factorio packs its version into one 64-bit number, 16 bits each for
  * major, minor, patch and build: 2.0.76 is 562949958664192.
- * The build part is shown only when it is not zero.
+ * The build part is left out, as the game does when it shows its version
+ * (a blueprint saved by 2.1.24 carries build 1).
  */
 export function decodeFactorioVersion(packed: number): string {
   if (!Number.isSafeInteger(packed) || packed < 0) {
     throw new RangeError(`Not a Factorio version number: ${packed}`);
   }
   const parts = [2 ** 48, 2 ** 32, 2 ** 16, 1].map((unit) => Math.floor(packed / unit) % 65536);
-  const [major, minor, patch, build] = parts as [number, number, number, number];
-  return build === 0 ? `${major}.${minor}.${patch}` : `${major}.${minor}.${patch}.${build}`;
+  const [major, minor, patch] = parts as [number, number, number, number];
+  return `${major}.${minor}.${patch}`;
 }
 
 /** Inverse of decodeFactorioVersion, for tests and fixtures. */

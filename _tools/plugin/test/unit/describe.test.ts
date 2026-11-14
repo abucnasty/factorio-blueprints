@@ -58,6 +58,7 @@ test("anything else is not a blueprint", () => {
 test("Factorio version numbers", () => {
   assert.equal(decodeFactorioVersion(562949958402048), "2.0.76");
   assert.equal(decodeFactorioVersion(encodeFactorioVersion("1.1.110")), "1.1.110");
-  assert.equal(decodeFactorioVersion(encodeFactorioVersion("2.0.66.1")), "2.0.66.1");
+  assert.equal(decodeFactorioVersion(encodeFactorioVersion("2.0.66.1")), "2.0.66");
+  assert.equal(decodeFactorioVersion(562954249961473), "2.1.24");
   assert.throws(() => decodeFactorioVersion(-1));
 });
