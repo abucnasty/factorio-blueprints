@@ -4,6 +4,7 @@
 
 import { Menu, Plugin, TAbstractFile, TFile, TFolder } from "obsidian";
 
+import { commitBlogPost } from "./commands/blog-post.ts";
 import { copyBlueprintString } from "./commands/copy-blueprint.ts";
 import { copyLiveLink } from "./commands/copy-link.ts";
 import { refreshAllGeneratedBlocks } from "./commands/generated-notes.ts";
@@ -14,7 +15,7 @@ import { publishVersion } from "./commands/publish.ts";
 import { RENDER_VERSION_FILE, renderPreview } from "./commands/render-preview.ts";
 import { setBlueprintStatus } from "./commands/set-status.ts";
 import { cancelRenderAll, folderRenderState, renderAllNeeded, showFoldersNeedingRender } from "./commands/render-status.ts";
-import { BLUEPRINT_FILE, BOOK_FILE, isScannedPath, joinPath, RENDER_MANIFEST, renderStateLabel, selfAndAncestors } from "./core/index.ts";
+import { blogPostFolderName, BLUEPRINT_FILE, BOOK_FILE, isScannedPath, joinPath, RENDER_MANIFEST, renderStateLabel, selfAndAncestors } from "./core/index.ts";
 import { createObsidianHost } from "./obsidian/host.ts";
 import { BlueprintSettingTab, DEFAULT_SETTINGS, loadRenderSettings, parseAuthors, readStoredSettings } from "./obsidian/settings.ts";
 import type { StoredSettings } from "./obsidian/settings.ts";
@@ -31,6 +32,8 @@ interface FolderCommand {
   icon: string;
   /** Show in the file explorer menu only for blueprint folders. */
   menuOnlyInBlueprintFolder: boolean;
+  /** Show in the file explorer menu only inside a blog post folder (blog/<slug>/). */
+  menuOnlyInBlogPost?: true;
   /**
    * Runs alone: no other exclusive command meanwhile. Render is not
    * exclusive (it takes long and allows one render at a time itself).
@@ -102,6 +105,16 @@ const FOLDER_COMMANDS: FolderCommand[] = [
     menuOnlyInBlueprintFolder: true,
     exclusive: false,
     run: (host, folder) => renderPreview(host, folder),
+  },
+  {
+    id: "commit-blog-post",
+    name: "Commit blog post",
+    menuTitle: "Commit blog post",
+    icon: "send",
+    menuOnlyInBlueprintFolder: false,
+    menuOnlyInBlogPost: true,
+    exclusive: true,
+    run: commitBlogPost,
   },
 ];
 
@@ -202,6 +215,7 @@ export default class FactorioBlueprintsPlugin extends Plugin {
         const inBlueprint = this.isInBlueprintFolder(folder);
         for (const cmd of FOLDER_COMMANDS) {
           if (cmd.menuOnlyInBlueprintFolder && !inBlueprint) continue;
+          if (cmd.menuOnlyInBlogPost && blogPostFolderName(folder) === undefined) continue;
           menu.addItem((item) =>
             item
               .setTitle(cmd.menuTitle)

@@ -32,10 +32,14 @@ blueprints/                every blueprint, and nothing else
     README.md  book.json     the book without its entries
     versions.json            the whole book's recorded versions, once published
     0-<slug>/                slot folder: a blueprint folder or expanded book
+blog/                      blog posts (see "Blog posts"), never blueprints
+  <slug>/
+    README.md                the post: frontmatter + markdown
+    screenshots/...          its images and other files, linked relatively
 ```
 
-Only `blueprints/` holds blueprints: other top-level folders (a future
-`blog/` or `wiki/`) are never scanned or published. A blueprint's **path**
+Only `blueprints/` holds blueprints: other top-level folders are never
+scanned for blueprints, and only `blueprints/` and `blog/` are published. A blueprint's **path**
 (in `index.json`, links and site addresses) is its folder path relative to
 `blueprints/`, e.g. `grids/substation/trains-substation-grid`.
 
@@ -277,6 +281,8 @@ root, and under `blueprints/`, for a blueprint at `<path>` (so the link is
 - `<path>/renders/<file path>`: a render image.
 - `<path>/cover.jpg`: the cover render.
 - `/index.json`: the catalog index (schema: `_tools/ci/catalog-index.ts`).
+- `/blog/index.json`, `/blog/<slug>/index.md` and `/blog/<slug>/<file path>`:
+  the blog (see "Blog posts").
 
 The old host `https://blueprints.abucnasty.dev/` served the same without
 `blueprints/` (`/<path>.txt`); from 2026-11-14 it redirects (301) every
@@ -314,14 +320,54 @@ never made again, so a moved folder's older versions are not served under
 its new path. Renders are read from `factorio-blueprints-lfs` at
 `<oid[0:2]>/<oid[2:4]>/<oid>`.
 
+## Blog posts
+
+A post is a folder `blog/<slug>/` with `README.md` (frontmatter, then the
+post's markdown) and its images and other files beside it. The folder name
+is the slug, the post's address on the site is `/blog/<slug>`, and it is
+lowercase letters and digits joined by single hyphens. Files and folders
+starting with `_` or `.` are left out, inside a post and in `blog/`.
+
+```yaml
+status: public        # as for blueprints: none or draft is not published
+title: Does Limiting FPS Affect Factorio UPS?
+date: 2026-05-13      # YYYY-MM-DD (or an ISO 8601 date and time); orders the posts
+description: One line for lists and link previews.
+tags: [performance, fps, ups]   # may be empty: []
+```
+
+`status` means what it means for blueprints: a draft never reaches
+Cloudflare; public is listed; deprecated is listed and marked outdated;
+unlisted opens by its address only. A published post needs every field
+above; a draft needs none. Turning a post back into a draft (or deleting
+it) takes it offline at the next publish.
+
+Link images and files relatively (`![Hub](./screenshots/hub.jpg)`, as
+Obsidian writes them); the site resolves them against
+`https://vault.abucnasty.dev/blog/<slug>/`. Commit images in plain git:
+`.gitattributes` stores only `renders/` images with LFS (a post file stored
+with LFS is served from the LFS bucket, but must have been pushed with
+git-lfs). A file named `index.md` at the top of a post is not allowed: the
+published markdown takes that name.
+
+CI (`_tools/ci/build-blog.ts`, run by `catalog.ts` with the catalog)
+writes, for each published post, its files to
+`factorio-blueprints-catalog` at `blog/<slug>/<file path>` (only new or
+changed ones), the markdown without frontmatter at `blog/<slug>/index.md`,
+then `blog/index.json` (schema: `_tools/ci/blog-index.ts`; posts newest
+first). The link Worker serves those under `https://vault.abucnasty.dev/blog/`
+for the posts in `blog/index.json` only, and only the files it lists. An
+invalid published post is reported, fails the run, and keeps its last
+published version.
+
 ## Branches and commits
 
 - One branch per unit of work, named for what it does (`vault-skeleton`,
   `in-game-render`). No generated or random names.
 - Tooling changes (anything under `_tools/`, `.github/`, `.obsidian/` or the
   LFS config) reach `main` only through a pull request the owner merges.
-- Blueprint and notes edits made in the vault are committed and pushed to
-  `main` directly by the vault's sync. `main` therefore has no branch
+- Blueprint, notes and blog post edits made in the vault are committed and
+  pushed to `main` directly by the vault's sync. `main` therefore has no branch
   protection that blocks direct pushes.
 - Commit messages say what changed and why, in lowercase imperative.
 

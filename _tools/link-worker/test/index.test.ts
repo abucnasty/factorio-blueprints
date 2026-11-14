@@ -137,7 +137,7 @@ test("renders stream from the LFS bucket by object id", async () => {
 
 test("404s are plain text and say what was not found", async () => {
   const { req } = setup();
-  for (const path of ["/", "/blueprints/cat/a", "/blueprints/nope.txt", "/blueprints/nope/renders/0.jpg", "/blueprints/%E0%A4%A.txt", "/cat/a.txt", "/blog/x.txt"]) {
+  for (const path of ["/", "/blueprints/cat/a", "/blueprints/nope.txt", "/blueprints/nope/renders/0.jpg", "/blueprints/%E0%A4%A.txt", "/cat/a.txt", "/notes/x.txt"]) {
     const res = await req(path);
     assert.equal(res.status, 404, path);
     assert.equal(res.headers.get("content-type"), "text/plain; charset=utf-8");
@@ -372,4 +372,89 @@ test("the old host redirects every link to the same thing on the new one, with C
   assert.equal(res.status, 204, "a preflight is answered, not redirected");
   // Following the redirect gets the string.
   assert.equal(await (await req(new URL((await req("/cat/a@1.0.txt", {}, OLD_HOST)).headers.get("location")!).pathname)).text(), "0older");
+});
+
+// The blog: blog/index.json, and a post's index.md and files, only for posts in it.
+
+function blogSetup() {
+  const t = setup();
+  const blob = "e".repeat(40);
+  const post = (slug: string, files: object[] = []) => ({ slug, title: slug, date: "2026-05-13", description: "d", tags: [], status: "public", files });
+  t.catalog.put(
+    "blog/index.json",
+    JSON.stringify({
+      schema: 1,
+      generatedAt: "2026-01-01T00:00:00Z",
+      commit: SHA2,
+      posts: [
+        post("fps", [
+          { path: "screenshots/a.jpg", size: 4, blob },
+          { path: "big.png", size: 5, blob: "f".repeat(40), oid: OID },
+        ]),
+      ],
+    }),
+  );
+  t.catalog.put("blog/fps/index.md", "## Hello\n\n![a](./screenshots/a.jpg)\n");
+  t.catalog.put("blog/fps/screenshots/a.jpg", "JPEG");
+  // A post that was published before and is a draft now: its objects remain.
+  t.catalog.put("blog/old/index.md", "gone");
+  t.catalog.put("blog/old/x.jpg", "gone");
+  return { ...t, blob };
+}
+
+test("blog: the index, a post's markdown and its files, with CORS and caching", async () => {
+  const { req, blob } = blogSetup();
+  let res = await req("/blog/index.json");
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("content-type"), "application/json; charset=utf-8");
+  assert.equal(res.headers.get("cache-control"), "public, max-age=60");
+  assert.equal(res.headers.get("access-control-allow-origin"), "*");
+  assert.equal(((await res.json()) as any).posts[0].slug, "fps");
+
+  res = await req("/blog/fps/index.md");
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("content-type"), "text/markdown; charset=utf-8");
+  assert.equal(res.headers.get("cache-control"), "public, max-age=60");
+  assert.match(await res.text(), /^## Hello/);
+
+  res = await req("/blog/fps/screenshots/a.jpg");
+  assert.equal(res.status, 200);
+  assert.equal(await res.text(), "JPEG");
+  assert.equal(res.headers.get("content-type"), "image/jpeg");
+  assert.equal(res.headers.get("cache-control"), "public, max-age=86400");
+  assert.equal(res.headers.get("access-control-allow-origin"), "*");
+  assert.match(res.headers.get("content-security-policy")!, /sandbox/);
+  res = await req(`/blog/fps/screenshots/a.jpg?v=${blob}`);
+  assert.equal(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
+  const etag = res.headers.get("etag")!;
+  assert.equal((await req("/blog/fps/screenshots/a.jpg", { headers: { "If-None-Match": etag } })).status, 304);
+
+  // A file stored with Git LFS comes from the LFS bucket, like renders.
+  res = await req("/blog/fps/big.png");
+  assert.equal(res.status, 200);
+  assert.equal(await res.text(), "JFIF!");
+  assert.equal(res.headers.get("content-type"), "image/png");
+});
+
+test("blog: posts not in the index, and files it does not list, are not served", async () => {
+  const { req } = blogSetup();
+  for (const path of ["/blog/old/index.md", "/blog/old/x.jpg", "/blog/nope/index.md", "/blog/fps/missing.jpg", "/blog/fps/README.md", "/blog/fps", "/blog/fps/"]) {
+    const res = await req(path);
+    assert.equal(res.status, 404, path);
+    assert.equal(res.headers.get("cache-control"), "no-store");
+    assert.equal(res.headers.get("access-control-allow-origin"), "*");
+  }
+  assert.match(await (await req("/blog/old/index.md")).text(), /No blog post "old"/);
+  // Without a blog index nothing is served.
+  const bare = setup();
+  assert.equal((await bare.req("/blog/index.json")).status, 503);
+  assert.equal((await bare.req("/blog/fps/index.md")).status, 503);
+});
+
+test("blog: a post taken out of the index goes offline once the cached index is checked again", async () => {
+  const { req, catalog, tick } = blogSetup();
+  assert.equal((await req("/blog/fps/index.md")).status, 200);
+  catalog.put("blog/index.json", JSON.stringify({ schema: 1, generatedAt: "", commit: SHA2, posts: [] }));
+  tick(10_000);
+  assert.equal((await req("/blog/fps/index.md")).status, 404);
 });

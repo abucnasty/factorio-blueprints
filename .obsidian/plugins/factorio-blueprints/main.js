@@ -8241,6 +8241,120 @@ function escapeInline(text) {
   return out;
 }
 
+// src/core/blog.ts
+var BLOG_ROOT = "blog";
+var SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+var DATE2 = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+function isBlogSlug(slug) {
+  return SLUG.test(slug);
+}
+function blogPostFolderName(path) {
+  const segs = joinPath(path).split("/");
+  if (segs.length < 2 || segs[0] !== BLOG_ROOT || /^[_.]/.test(segs[1])) return void 0;
+  return segs[1];
+}
+function blogNotePath(slug) {
+  return joinPath(BLOG_ROOT, slug, NOTES_FILE);
+}
+function readBlogPost(text) {
+  const body = splitFrontmatter(text).body.replace(/^(?:[ \t]*\r?\n)+/, "");
+  let fm;
+  try {
+    fm = readFrontmatter(text);
+  } catch (e) {
+    if (!(e instanceof FrontmatterError)) throw e;
+    return { meta: void 0, status: void 0, body, problems: [e.message] };
+  }
+  const problems = [];
+  const rawStatus = fm["status"];
+  let status = "draft";
+  if (rawStatus != null) {
+    status = isBlueprintStatus(rawStatus) ? rawStatus : void 0;
+    if (status === void 0) problems.push("status must be draft, public, deprecated or unlisted (none means draft)");
+  }
+  const str = (key) => typeof fm[key] === "string" ? fm[key].trim() : "";
+  const title = str("title");
+  const date = typeof fm["date"] === "string" ? fm["date"].trim() : "";
+  const description = str("description");
+  const rawTags = fm["tags"] ?? [];
+  const tags = Array.isArray(rawTags) ? rawTags.map((t) => typeof t === "string" ? t.trim() : "") : [];
+  if (status !== "draft") {
+    if (title === "") problems.push("frontmatter needs a title");
+    if (!isIsoDate(date)) {
+      problems.push(
+        fm["date"] instanceof Date || typeof fm["date"] === "number" ? 'date must be written as text, e.g. date: "2026-05-13"' : "frontmatter needs a date, as YYYY-MM-DD (or an ISO 8601 date and time)"
+      );
+    }
+    if (description === "") problems.push("frontmatter needs a description (one line, shown in lists and link previews)");
+    if (!Array.isArray(rawTags) || tags.some((t) => t === "")) problems.push("tags must be a list of words, e.g. tags: [performance, ups] (it may be empty: tags: [])");
+  }
+  const ok = problems.length === 0 && status !== void 0;
+  return {
+    meta: ok ? { status, title, date, description, tags: [...new Set(tags)] } : void 0,
+    status,
+    body,
+    problems
+  };
+}
+function isIsoDate(s) {
+  const m = DATE2.exec(s);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const day = new Date(Date.UTC(y, mo - 1, d));
+  return day.getUTCFullYear() === y && day.getUTCMonth() === mo - 1 && day.getUTCDate() === d && !Number.isNaN(Date.parse(s.replace(" ", "T")));
+}
+
+// src/commands/git-notice.ts
+function reportGit(host, done, git, extra = "", warn2 = extra !== "") {
+  switch (git.status) {
+    case "pushed":
+      host.ui.notice(`${done}, committed and pushed (${git.commit}).${extra}`, warn2 ? "error" : "info");
+      return;
+    case "nothing-to-commit":
+      host.ui.notice(`${done}. Git found nothing new to commit.${extra}`, warn2 ? "error" : "info");
+      return;
+    case "failed": {
+      const lfs = git.step === "push" && /\blfs\b|batch response/i.test(git.message) ? " Render images are uploaded with Git LFS: run _tools/setup/setup-machine.sh on this computer, then sync again." : "";
+      host.ui.notice(
+        (git.committed ? `${done} and committed ${git.commit ?? ""} locally, but ${git.message}.${lfs} The Git plugin's timed sync will try again.` : `${done}, but ${git.message}. The files are saved; the Git plugin's timed sync will commit them.`) + extra,
+        "error"
+      );
+      return;
+    }
+  }
+}
+
+// src/commands/blog-post.ts
+async function commitBlogPost(host, contextFolder) {
+  const slug = blogPostFolderName(contextFolder);
+  if (slug === void 0) return reject(host, `This is not inside a blog post folder (${BLOG_ROOT}/<slug>/ with a ${NOTES_FILE}).`);
+  const folder = joinPath(BLOG_ROOT, slug);
+  const notePath = blogNotePath(slug);
+  if (!await host.files.exists(notePath)) {
+    return reject(host, `${folder} has no ${NOTES_FILE}: insert the "blog-post" template into a new note named ${NOTES_FILE} there.`);
+  }
+  const post = readBlogPost(await host.files.read(notePath));
+  const published = post.status !== "draft";
+  const problems = [...post.problems];
+  if (published && !isBlogSlug(slug)) problems.push(`the folder name "${slug}" is the post's address: use lowercase letters, digits and single hyphens`);
+  if (published && problems.length > 0) return reject(host, `${notePath} is not ready to publish: ${problems.join("; ")}.`);
+  if (host.git === void 0) return reject(host, "Committing needs git, which is not available here.");
+  const title = post.meta?.title || slug;
+  const git = await host.git.commitAndSync(folder, published ? `publish post ${title}` : `save draft post ${title}`);
+  reportGit(
+    host,
+    published ? `Published post ${title}` : `Saved draft post ${title}`,
+    git,
+    published ? ` It is live at /blog/${slug} once the vault's publish run finishes (a few minutes).` : " It stays off the website until its status is public (or unlisted).",
+    false
+  );
+  return { action: "committed", folder, published, git };
+}
+function reject(host, reason) {
+  host.ui.notice(reason, "error");
+  return { action: "rejected", reason };
+}
+
 // src/commands/expanded.ts
 async function locate(host, contextFolder) {
   for (const f of selfAndAncestors(contextFolder)) {
@@ -8343,7 +8457,7 @@ async function locateBySlots(host, root, slots) {
 async function copyBlueprintString(host, contextFolder) {
   const loc = await locate(host, contextFolder);
   if (loc === void 0) {
-    return reject(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
+    return reject2(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
   }
   const folder = loc.folder;
   const path = joinPath(folder, loc.kind === "book" ? BOOK_FILE : BLUEPRINT_FILE);
@@ -8354,17 +8468,17 @@ async function copyBlueprintString(host, contextFolder) {
     summary = summarizeBlueprint(describeBlueprint(value));
     encoded = encodeBlueprintString(value);
   } catch (e) {
-    return reject(host, `Could not read ${path}: ${e instanceof Error ? e.message : String(e)}`);
+    return reject2(host, `Could not read ${path}: ${e instanceof Error ? e.message : String(e)}`);
   }
   try {
     await host.clipboard.writeText(encoded);
   } catch (e) {
-    return reject(host, `Could not write to the clipboard: ${e instanceof Error ? e.message : String(e)}`);
+    return reject2(host, `Could not write to the clipboard: ${e instanceof Error ? e.message : String(e)}`);
   }
   host.ui.notice(`Copied ${summary} from ${folder}. Paste it in Factorio with Import string.`);
   return { action: "copied", folder, string: encoded };
 }
-function reject(host, reason) {
+function reject2(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "rejected", reason };
 }
@@ -8372,15 +8486,15 @@ function reject(host, reason) {
 // src/commands/copy-link.ts
 async function copyLiveLink(host, contextFolder) {
   const loc = await locate(host, contextFolder);
-  if (loc === void 0) return reject2(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
+  if (loc === void 0) return reject3(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
   const folder = loc.folder;
   let tree;
   try {
     tree = bookTree(await folderValue(host, loc));
   } catch (e) {
-    return reject2(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${e instanceof Error ? e.message : String(e)}`);
+    return reject3(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${e instanceof Error ? e.message : String(e)}`);
   }
-  if (!tree) return reject2(host, `${folder}/${BLUEPRINT_FILE} is not a blueprint, book or planner.`);
+  if (!tree) return reject3(host, `${folder}/${BLUEPRINT_FILE} is not a blueprint, book or planner.`);
   let node2 = tree;
   if (tree.kind === "blueprint-book" && tree.children.length > 0) {
     const nodes = flattenTree(tree);
@@ -8392,7 +8506,7 @@ async function copyLiveLink(host, contextFolder) {
   try {
     await host.clipboard.writeText(url);
   } catch (e) {
-    return reject2(host, `Could not write to the clipboard: ${e instanceof Error ? e.message : String(e)}`);
+    return reject3(host, `Could not write to the clipboard: ${e instanceof Error ? e.message : String(e)}`);
   }
   const what = node2.slots.length === 0 ? `${KIND_NAMES[node2.kind]} ${folder}` : `"${displayLabel(node2)}" (slot ${node2.path}) of ${folder}`;
   host.ui.notice(`Copied the live link to ${what}: ${url}`);
@@ -8403,7 +8517,7 @@ function pickItem(n) {
   const indent = " ".repeat(n.slots.length - 1);
   return { label: `${indent}${displayLabel(n)}`, detail: `slot ${n.path} · ${KIND_NAMES[n.kind]}` };
 }
-function reject2(host, reason) {
+function reject3(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "rejected", reason };
 }
@@ -8526,26 +8640,6 @@ async function refreshAllGeneratedBlocks(host) {
 async function refreshExpandedBook(host, root) {
   await renameSlotFolders(host, root);
   for (const folder of await bookNoteFolders(host, root)) await refreshGeneratedBlock(host, folder);
-}
-
-// src/commands/git-notice.ts
-function reportGit(host, done, git, extra = "", warn2 = extra !== "") {
-  switch (git.status) {
-    case "pushed":
-      host.ui.notice(`${done}, committed and pushed (${git.commit}).${extra}`, warn2 ? "error" : "info");
-      return;
-    case "nothing-to-commit":
-      host.ui.notice(`${done}. Git found nothing new to commit.${extra}`, warn2 ? "error" : "info");
-      return;
-    case "failed": {
-      const lfs = git.step === "push" && /\blfs\b|batch response/i.test(git.message) ? " Render images are uploaded with Git LFS: run _tools/setup/setup-machine.sh on this computer, then sync again." : "";
-      host.ui.notice(
-        (git.committed ? `${done} and committed ${git.commit ?? ""} locally, but ${git.message}.${lfs} The Git plugin's timed sync will try again.` : `${done}, but ${git.message}. The files are saved; the Git plugin's timed sync will commit them.`) + extra,
-        "error"
-      );
-      return;
-    }
-  }
 }
 
 // src/commands/publish.ts
@@ -8671,8 +8765,8 @@ async function writeEntryFolder(host, parent, entry, notes, template) {
 }
 async function expandBookIntoFolders(host, contextFolder) {
   const loc = await locate(host, contextFolder);
-  if (!loc) return reject3(host, "Run this in a blueprint folder whose blueprint.json is a book.");
-  if (loc.kind === "book") return reject3(host, `${loc.folder} is already an expanded book.`);
+  if (!loc) return reject4(host, "Run this in a blueprint folder whose blueprint.json is a book.");
+  if (loc.kind === "book") return reject4(host, `${loc.folder} is already an expanded book.`);
   const folder = loc.folder;
   let value;
   let kind;
@@ -8680,16 +8774,16 @@ async function expandBookIntoFolders(host, contextFolder) {
     value = readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE)));
     kind = describeBlueprint(value).kind;
   } catch (e) {
-    return reject3(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${errorText3(e)}`);
+    return reject4(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${errorText3(e)}`);
   }
   if (kind !== "blueprint-book") {
-    return reject3(host, `${folder} holds a ${KIND_NAMES[kind]}, not a book: there is nothing to expand.`);
+    return reject4(host, `${folder} holds a ${KIND_NAMES[kind]}, not a book: there is nothing to expand.`);
   }
   let expanded;
   try {
     expanded = expandBook(value);
   } catch (e) {
-    return reject3(host, `${folder}/${BLUEPRINT_FILE}: ${errorText3(e)}`);
+    return reject4(host, `${folder}/${BLUEPRINT_FILE}: ${errorText3(e)}`);
   }
   const { book, entries, dropped } = expanded;
   const notePath = joinPath(folder, NOTES_FILE);
@@ -8759,7 +8853,7 @@ async function expandBookIntoFolders(host, contextFolder) {
     if (await host.files.exists(rendersDir)) await host.files.remove(rendersDir);
     await refreshExpandedBook(host, loc.root);
   } catch (e) {
-    return reject3(host, `Stopped while expanding ${folder}: ${errorText3(e)}. Nothing was committed; check the folder before trying again.`);
+    return reject4(host, `Stopped while expanding ${folder}: ${errorText3(e)}. Nothing was committed; check the folder before trying again.`);
   }
   const summary = `Expanded ${folder}: ${made} folder${made === 1 ? "" : "s"}` + (moves.length > 0 ? `, ${moves.length} render${moves.length === 1 ? "" : "s"} moved` : "") + (dropped.length > 0 ? `, ${dropped.length} duplicate-slot entr${dropped.length === 1 ? "y" : "ies"} left out` : "");
   const result = { action: "expanded", folder, folders: made, renders: moves.length };
@@ -8777,7 +8871,7 @@ async function expandBookIntoFolders(host, contextFolder) {
   await publishAndReport(host, loc.root, `expand ${title} into folders`, summary);
   return result;
 }
-function reject3(host, reason) {
+function reject4(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "rejected", reason };
 }
@@ -8798,7 +8892,7 @@ async function updateExpandedBook(host, loc, value) {
     current = await readTree(host, folder, []);
     currentBook = JSON.parse(await host.files.read(joinPath(folder, BOOK_FILE)));
   } catch (e) {
-    return reject4(host, errorText4(e));
+    return reject5(host, errorText4(e));
   }
   const now = /* @__PURE__ */ new Map();
   const walkNow = (nodes) => nodes.forEach((n) => (now.set(n.slots.join("/"), n), walkNow(n.children)));
@@ -8931,7 +9025,7 @@ async function updateExpandedBook(host, loc, value) {
     if (moveFrom.size > 0) await host.files.remove(staging);
     await refreshExpandedBook(host, loc.root);
   } catch (e) {
-    return reject4(host, `Stopped while updating ${folder}: ${errorText4(e)}. Nothing was committed; check the folder before trying again.`);
+    return reject5(host, `Stopped while updating ${folder}: ${errorText4(e)}. Nothing was committed; check the folder before trying again.`);
   }
   const summary = `Updated ${folder}: ${counts.changed} changed, ${counts.moved} moved, ${counts.new} new, ${counts.removed} removed`;
   if (!host.settings.commitAfterImport || host.git === void 0) host.ui.notice(`${summary}.`);
@@ -8949,14 +9043,14 @@ async function addEntryToBook(host, loc, value) {
     const l = plainLabel(d.label ?? "");
     entry = { slot, folder: slotFolderName(slot, l), kind: d.kind, label: l, value };
   } catch (e) {
-    return reject4(host, errorText4(e));
+    return reject5(host, errorText4(e));
   }
   const title = await noteTitle(host, folder);
   try {
     await writeEntryFolder(host, folder, entry, await noteDefaults(host, folder), await readTemplate(host));
     await refreshExpandedBook(host, loc.root);
   } catch (e) {
-    return reject4(host, `Could not add the entry to ${folder}: ${errorText4(e)}`);
+    return reject5(host, `Could not add the entry to ${folder}: ${errorText4(e)}`);
   }
   const summary = `Added "${entryTitle(entry)}" to ${folder} as slot ${slot}`;
   if (!host.settings.commitAfterImport || host.git === void 0) host.ui.notice(`${summary}.`);
@@ -8983,7 +9077,7 @@ async function noteDefaults(host, folder) {
     return { authors: host.settings.authors, posted: host.today() };
   }
 }
-function reject4(host, reason) {
+function reject5(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "rejected", reason };
 }
@@ -9150,10 +9244,10 @@ async function renderPreview(host, contextFolder, options = {}) {
 async function run(host, contextFolder, signal, options) {
   const { files, ui } = host;
   const loc = await locate(host, contextFolder);
-  if (loc === void 0) return reject5(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
+  if (loc === void 0) return reject6(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
   const folder = loc.folder;
   if (host.processes === void 0 || host.vaultPath === void 0) {
-    return reject5(host, "Rendering needs the desktop app with the vault on this computer's disk.");
+    return reject6(host, "Rendering needs the desktop app with the vault on this computer's disk.");
   }
   const settings = host.settings.render;
   if (settings.factorioPath.trim() === "") {
@@ -9165,10 +9259,10 @@ async function run(host, contextFolder, signal, options) {
     return { action: "needs-settings" };
   }
   if (!await files.exists(RENDER_SCRIPT)) {
-    return reject5(host, `The render tool is missing (${RENDER_SCRIPT}). Pull the latest vault and try again.`);
+    return reject6(host, `The render tool is missing (${RENDER_SCRIPT}). Pull the latest vault and try again.`);
   }
   if (!await files.exists(RENDER_MODULES)) {
-    return reject5(
+    return reject6(
       host,
       `The render tool's dependencies are not installed. In a terminal, run:
 cd "${absolute(host.vaultPath, "_tools/render")}" && npm ci
@@ -9184,7 +9278,7 @@ then render again.`
     try {
       value = readCanonicalJson(await files.read(joinPath(folder, BLUEPRINT_FILE)));
     } catch (e) {
-      return reject5(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${e instanceof Error ? e.message : String(e)}`);
+      return reject6(host, `Could not read ${folder}/${BLUEPRINT_FILE}: ${e instanceof Error ? e.message : String(e)}`);
     }
     const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
     const manifest = await files.exists(manifestPath) ? parseRenderManifest(await files.read(manifestPath)) : void 0;
@@ -9351,7 +9445,7 @@ function lastErrorLine(stderr) {
 function absolute(vaultPath2, path) {
   return `${vaultPath2.replace(/[\\/]+$/, "")}/${path}`;
 }
-function reject5(host, reason) {
+function reject6(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "rejected", reason };
 }
@@ -9370,7 +9464,7 @@ async function renderExpandedBook(host, loc, signal, node2) {
     tree = await readTree(host, folder, []);
     state = await folderRenderState(host, folder);
   } catch (e) {
-    return reject5(host, `Could not read the book at ${folder}: ${e instanceof Error ? e.message : String(e)}`);
+    return reject6(host, `Could not read the book at ${folder}: ${e instanceof Error ? e.message : String(e)}`);
   }
   const needed = state.entries.filter((e) => e.state !== "current").map((e) => e.path);
   if (needed.length === 0) {
@@ -9483,7 +9577,7 @@ async function importFromClipboard(host, contextFolder) {
   try {
     text = await host.clipboard.readText();
   } catch (e) {
-    return reject6(host, `Could not read the clipboard: ${errorText5(e)}`);
+    return reject7(host, `Could not read the clipboard: ${errorText5(e)}`);
   }
   let value;
   let json;
@@ -9492,11 +9586,11 @@ async function importFromClipboard(host, contextFolder) {
     ({ value, json } = decodeBlueprintString(text));
     description = describeBlueprint(value);
   } catch (e) {
-    return reject6(host, clipboardErrorMessage(e));
+    return reject7(host, clipboardErrorMessage(e));
   }
   const lossy = findLossyNumbers(json);
   if (lossy.length > 0) {
-    return reject6(
+    return reject7(
       host,
       `This blueprint has numbers that cannot be stored exactly (${lossy.slice(0, 3).join(", ")}). Nothing was written.`
     );
@@ -9509,7 +9603,7 @@ async function importFromClipboard(host, contextFolder) {
     return { action: "expanded-book", result };
   }
   const target = await chooseImportTarget(host, contextFolder);
-  if (target.mode === "refuse") return reject6(host, target.reason);
+  if (target.mode === "refuse") return reject7(host, target.reason);
   const commit = host.settings.commitAfterImport && host.git !== void 0;
   let folder;
   let blockWarning = "";
@@ -9556,7 +9650,7 @@ async function importFromClipboard(host, contextFolder) {
         if (next !== notes) await host.files.write(notesPath, next);
       }
     } catch (e) {
-      return reject6(host, `Could not write ${folder}: ${errorText5(e)}`);
+      return reject7(host, `Could not write ${folder}: ${errorText5(e)}`);
     }
     commitMessage2 = oneLine(answer.changeNote) || `update ${title}`;
     action = "updated";
@@ -9580,7 +9674,7 @@ async function importFromClipboard(host, contextFolder) {
     });
     if (!answer) return { action: "cancelled" };
     const problem = await checkSlug(answer.slug);
-    if (problem !== void 0) return reject6(host, problem);
+    if (problem !== void 0) return reject7(host, problem);
     const newTitle = oneLine(answer.title) || title;
     folder = joinPath(target.parent, answer.slug);
     try {
@@ -9596,7 +9690,7 @@ async function importFromClipboard(host, contextFolder) {
       if (block.status === "invalid") blockWarning = ` ${block.reason}`;
       await host.files.write(joinPath(folder, NOTES_FILE), block.text);
     } catch (e) {
-      return reject6(host, `Could not write ${folder}: ${errorText5(e)}`);
+      return reject7(host, `Could not write ${folder}: ${errorText5(e)}`);
     }
     commitMessage2 = oneLine(answer.changeNote) || `add ${newTitle}`;
     action = "created";
@@ -9675,7 +9769,7 @@ function safeSummary(text) {
     return void 0;
   }
 }
-function reject6(host, reason) {
+function reject7(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "rejected", reason };
 }
@@ -9698,17 +9792,17 @@ var DETAILS = {
 };
 async function setBlueprintStatus(host, contextFolder) {
   const loc = await locate(host, contextFolder);
-  if (loc === void 0) return reject7(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
+  if (loc === void 0) return reject8(host, "This is not inside a blueprint folder (a folder with a blueprint.json) or an expanded book.");
   const folder = loc.root;
   const notesPath = joinPath(folder, NOTES_FILE);
-  if (!await host.files.exists(notesPath)) return reject7(host, `${folder} has no ${NOTES_FILE} to hold its status.`);
+  if (!await host.files.exists(notesPath)) return reject8(host, `${folder} has no ${NOTES_FILE} to hold its status.`);
   let note;
   let fm;
   try {
     note = await host.files.read(notesPath);
     fm = readFrontmatter(note);
   } catch (e) {
-    return reject7(host, `Could not read ${notesPath}: ${errorText6(e)}`);
+    return reject8(host, `Could not read ${notesPath}: ${errorText6(e)}`);
   }
   const current = fm["status"];
   const title = typeof fm["title"] === "string" && fm["title"].trim() !== "" ? fm["title"] : folder;
@@ -9724,7 +9818,7 @@ async function setBlueprintStatus(host, contextFolder) {
   try {
     next = setNoteStatus(note, status);
   } catch (e) {
-    return reject7(host, `Could not set the status in ${notesPath}: ${errorText6(e)}`);
+    return reject8(host, `Could not set the status in ${notesPath}: ${errorText6(e)}`);
   }
   if (next === note) {
     host.ui.notice(`${title} is already ${status}.`);
@@ -9733,7 +9827,7 @@ async function setBlueprintStatus(host, contextFolder) {
   try {
     await host.files.write(notesPath, next);
   } catch (e) {
-    return reject7(host, `Could not write ${notesPath}: ${errorText6(e)}`);
+    return reject8(host, `Could not write ${notesPath}: ${errorText6(e)}`);
   }
   const done = `Set ${title} to ${status}`;
   if (!host.settings.commitAfterImport || host.git === void 0) {
@@ -9743,7 +9837,7 @@ async function setBlueprintStatus(host, contextFolder) {
   const git = await publishAndReport(host, folder, `set ${title} to ${status}`, done);
   return { action: "set", folder, status, git };
 }
-function reject7(host, reason) {
+function reject8(host, reason) {
   host.ui.notice(reason, "error");
   return { action: "rejected", reason };
 }
@@ -10449,6 +10543,16 @@ var FOLDER_COMMANDS = [
     menuOnlyInBlueprintFolder: true,
     exclusive: false,
     run: (host, folder) => renderPreview(host, folder)
+  },
+  {
+    id: "commit-blog-post",
+    name: "Commit blog post",
+    menuTitle: "Commit blog post",
+    icon: "send",
+    menuOnlyInBlueprintFolder: false,
+    menuOnlyInBlogPost: true,
+    exclusive: true,
+    run: commitBlogPost
   }
 ];
 var FactorioBlueprintsPlugin = class extends import_obsidian4.Plugin {
@@ -10537,6 +10641,7 @@ var FactorioBlueprintsPlugin = class extends import_obsidian4.Plugin {
         const inBlueprint = this.isInBlueprintFolder(folder);
         for (const cmd of FOLDER_COMMANDS) {
           if (cmd.menuOnlyInBlueprintFolder && !inBlueprint) continue;
+          if (cmd.menuOnlyInBlogPost && blogPostFolderName(folder) === void 0) continue;
           menu.addItem(
             (item) => item.setTitle(cmd.menuTitle).setIcon(cmd.icon).onClick(() => void this.runCommand(cmd, folder))
           );

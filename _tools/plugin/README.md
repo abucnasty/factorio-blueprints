@@ -39,6 +39,12 @@ notes beside them, and back. The built plugin is committed in
   record without one counts as version 1). After a render tool fix that
   changes output: bump the render version, then run **Render all that need
   it**.
+- **Commit blog post** (right-click a post folder under `blog/`, or the
+  command palette in its note): checks a published post's frontmatter,
+  then commits, pulls and pushes just that folder; CI publishes it unless
+  its `status` is draft. Blog folders are never blueprint folders, so the
+  blueprint commands do not act on them. New posts start from the
+  `blog-post` template (Templates: Insert template).
 - **Refresh generated content in all notes**: writes the stats, cover image
   and contents list into every note, without committing. The cover image and
   contents list at the top of a note are generated; write below them.

@@ -42,11 +42,35 @@ _tools/ci/                  catalog validation and index builder
 _tools/link-worker/         serves the live links
 _tools/lfs-worker/          Git LFS server for render images
 blueprints/<category>/.../<slug>/
-                            one folder per blueprint (only blueprints/ is published)
+                            one folder per blueprint
   README.md                 notes, with metadata in the frontmatter
   blueprint.json            the decoded blueprint
   renders/<slot path>.jpg   preview images (Git LFS): 0.jpg, or 3/1.jpg in a book
+blog/<slug>/                one folder per post on abucnasty.dev/blog/<slug>
+  README.md                 the post, with its metadata in the frontmatter
 ```
+
+Only `blueprints/` and `blog/` are published.
+
+## Writing a blog post
+
+1. Make a folder `blog/<slug>/`: the slug is the address,
+   `abucnasty.dev/blog/<slug>`, in lowercase words joined by `-`.
+2. In it, make a note named `README.md` and run **Templates: Insert
+   template** with `blog-post`. Fill in `title`, `date`, `description` and
+   `tags`, and write the post below the frontmatter.
+3. Put images in the folder (or a subfolder such as `screenshots/`) and link
+   them relatively: `![Nauvis hub at 60 FPS](./screenshots/hub-60.jpg)`.
+4. Set `status: public` when it is ready (`unlisted` to share it by link
+   only). While it is `draft` it is never published.
+5. Right-click the folder (or run it from the command palette in the
+   post's note) and choose **Commit blog post**: it checks the frontmatter,
+   then commits and pushes the folder. CI publishes it to
+   `https://vault.abucnasty.dev/blog/` a few minutes later, and the site
+   shows it from there; no site change or deploy is needed.
+
+Setting `status: draft` again (and committing) takes a post offline. The
+details are in [Conventions](_tools/docs/conventions.md#blog-posts).
 
 - [Setup](_tools/docs/setup.md): set up a computer to edit and sync the vault.
 - [Conventions](_tools/docs/conventions.md): layout, frontmatter and file formats.

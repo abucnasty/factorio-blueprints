@@ -9,15 +9,18 @@
 # content changed without a new version is listed too and keeps its last
 # version, but does not fail the run. Run it by hand on main with "backfill"
 # to upload every string of every current version again.
+# The same runs validate and publish the blog (blog/): published posts'
+# files, their markdown, then blog/index.json (see _tools/ci/build-blog.ts).
 name: publish catalog
 
-# Only blueprints/ is catalog content (other top-level folders are not
-# published), so runs start for it and for the tools that build the
-# catalog. Keep the two lists the same.
+# Only blueprints/ and blog/ are published (other top-level folders are
+# not), so runs start for them and for the tools that build the catalog.
+# Keep the two lists the same.
 on:
   pull_request:
     paths:
       - "blueprints/**"
+      - "blog/**"
       - "_tools/ci/**"
       - "_tools/plugin/**"
       - "_tools/link-worker/package*.json"
@@ -26,6 +29,7 @@ on:
     branches: [main]
     paths:
       - "blueprints/**"
+      - "blog/**"
       - "_tools/ci/**"
       - "_tools/plugin/**"
       - "_tools/link-worker/package*.json"
@@ -33,7 +37,7 @@ on:
   workflow_dispatch:
     inputs:
       backfill:
-        description: Upload every string of every current version, not just the missing ones
+        description: Upload every string of every current version (and every blog file), not just the missing ones
         type: boolean
         default: false
 
@@ -49,7 +53,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # Never download render images; the tools read their LFS pointers from git.
+  # Never download render images (or blog files stored with LFS); the tools
+  # read their LFS pointers from git. Blog images are in plain git and read
+  # from the git objects.
   GIT_LFS_SKIP_SMUDGE: "1"
 
 jobs:

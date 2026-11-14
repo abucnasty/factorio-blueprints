@@ -133,7 +133,7 @@ export function entryKey(path: string, sha: string, slotPath: string): string {
 const RENDER_IMAGE = /\.(jpg|jpeg|png|webp)$/;
 /** A render image's name: "<slot path>.<ext>", e.g. "0.jpg" or "3/1.png". */
 const RENDER_FILE = /^((?:0|[1-9][0-9]*)(?:\/(?:0|[1-9][0-9]*))*)\.(jpg|jpeg|png|webp)$/;
-const LFS_POINTER = /^version https:\/\/git-lfs\.github\.com\/spec\/v1\noid sha256:([0-9a-f]{64})\nsize ([0-9]+)\n$/;
+export const LFS_POINTER = /^version https:\/\/git-lfs\.github\.com\/spec\/v1\noid sha256:([0-9a-f]{64})\nsize ([0-9]+)\n$/;
 
 // ---------------------------------------------------------------------------
 // git plumbing
