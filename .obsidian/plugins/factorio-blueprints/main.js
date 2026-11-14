@@ -1013,8 +1013,8 @@ function decodeFactorioVersion(packed) {
     throw new RangeError(`Not a Factorio version number: ${packed}`);
   }
   const parts = [2 ** 48, 2 ** 32, 2 ** 16, 1].map((unit) => Math.floor(packed / unit) % 65536);
-  const [major, minor, patch, build] = parts;
-  return build === 0 ? `${major}.${minor}.${patch}` : `${major}.${minor}.${patch}.${build}`;
+  const [major, minor, patch] = parts;
+  return `${major}.${minor}.${patch}`;
 }
 function summarizeBlueprint(d) {
   const name = KIND_NAMES[d.kind];
