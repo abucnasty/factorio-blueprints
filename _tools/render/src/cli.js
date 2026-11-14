@@ -45,7 +45,9 @@ Options:
   --diagnose                    run the placement experiment matrix for every blueprint (it always runs for a
                                 blueprint the game refused completely); adds [diagnose] lines to the log
   --timeout <s>                 time allowed for the game to start and its window to join, default 300
-  --work-dir <dir>              empty or new folder for the game's files (default: a temporary folder)
+  --work-dir <dir>              empty or new folder for the game's files (default: a new folder in
+                                $XDG_CACHE_HOME/factorio-render or ~/.cache/factorio-render on Linux, else the
+                                temporary folder)
   --keep-work                   keep the work folder after a successful run (it is always kept after a failure)
   --json                        print the run's report as JSON on stdout (progress goes to stderr)
   --config <file>               config file (env FACTORIO_RENDER_CONFIG; default ${defaultConfigPath()})

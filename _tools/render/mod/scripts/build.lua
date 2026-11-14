@@ -16,6 +16,11 @@ local build = {}
 local ROLLING_STOCK_TYPES = { ["cargo-wagon"] = true, ["fluid-wagon"] = true, ["artillery-wagon"] = true, ["locomotive"] = true }
 -- Vehicles that may stand where a ghost will not revive (over other entities), so they are created directly
 local VEHICLE_TYPES = { ["car"] = true, ["spider-vehicle"] = true }
+-- Rails that need a rail support within reach to be built (Space Age's elevated rails)
+local ELEVATED_RAIL_TYPES = {
+    ["elevated-straight-rail"] = true, ["elevated-curved-rail-a"] = true, ["elevated-curved-rail-b"] = true,
+    ["elevated-half-diagonal-rail"] = true,
+}
 -- Resources tried first under a drill, so a plain drill sits on plain ore; any resource it can mine is the fallback
 local PREFERRED_RESOURCES = { "iron-ore", "crude-oil", "stone", "coal", "copper-ore" }
 -- Room around the blueprint's own extent, for the underlay and chunk generation
@@ -157,24 +162,36 @@ local function self_conflicts(entities, tiles)
 end
 
 ---The offset from the blueprint's positions to the world's, from the ghosts that a build of it made: the one that
----puts every entity ghost on an entity of the blueprint of the same name. (harness.lua: blueprint_offset)
+---puts every entity ghost on an entity of the blueprint of the same name. (harness.lua: blueprint_offset) A blueprint
+---of tiles only is matched by its tile ghosts instead (a tile ghost stands at the middle of its tile).
 ---@param blueprint_entities BlueprintEntity[]
 ---@param ghosts LuaEntity[]
+---@param blueprint_tiles Tile[]|nil
 ---@return MapPosition|nil
-local function blueprint_offset(blueprint_entities, ghosts)
+local function blueprint_offset(blueprint_entities, ghosts, blueprint_tiles)
     -- positions are fixed point (1/256 tile), so a position rounded to that is an exact key
     local function key(name, x, y)
         return name .. "@" .. math.floor(x * 256 + 0.5) .. "," .. math.floor(y * 256 + 0.5)
     end
-    local by_name, at_key = {}, {}
+    local ghost_type, wanted = "entity-ghost", {}
     for _, entity in pairs(blueprint_entities) do
-        by_name[entity.name] = by_name[entity.name] or {}
-        table.insert(by_name[entity.name], entity.position)
-        at_key[key(entity.name, entity.position.x, entity.position.y)] = true
+        table.insert(wanted, { name = entity.name, x = entity.position.x, y = entity.position.y })
+    end
+    if #wanted == 0 then
+        ghost_type = "tile-ghost"
+        for _, tile in pairs(blueprint_tiles or {}) do
+            table.insert(wanted, { name = tile.name, x = tile.position.x + 0.5, y = tile.position.y + 0.5 })
+        end
+    end
+    local by_name, at_key = {}, {}
+    for _, item in ipairs(wanted) do
+        by_name[item.name] = by_name[item.name] or {}
+        table.insert(by_name[item.name], item)
+        at_key[key(item.name, item.x, item.y)] = true
     end
     local built = {}
     for _, ghost in pairs(ghosts) do
-        if ghost.valid and ghost.type == "entity-ghost" then
+        if ghost.valid and ghost.type == ghost_type then
             table.insert(built, ghost)
         end
     end
@@ -443,8 +460,9 @@ function build.inspect(blueprint)
 end
 
 ---Revive ghosts: tiles first (entities may stand on them), then entities, rolling stock (it needs its rails), vehicles
----last. A vehicle that is not built here (no ghost, a ghost destroyed by reviving what is under it, or a ghost that
----will not revive) is created after this from the blueprint (create_missing_vehicles).
+---last, each group in passes until nothing more revives. An elevated rail that still will not revive is created
+---directly if the game allows it there. A vehicle that is not built here (no ghost, a ghost destroyed by reviving what
+---is under it, or a ghost that will not revive) is created after this from the blueprint (create_missing_vehicles).
 ---@return LuaEntity[] entities, table<string, integer> built, table<string, integer> failed, string[] problems
 local function revive_all(surface, ghosts)
     local tiles, entities_first, rolling, vehicles = {}, {}, {}, {}
@@ -469,26 +487,83 @@ local function revive_all(surface, ghosts)
         destroy_all(tiles)
     end
     local entities, built, failed, problems = {}, {}, {}, {}
-    for _, list in ipairs({ entities_first, rolling, vehicles }) do
-        for _, ghost in ipairs(list) do
-            if ghost.valid then
-                local name = ghost.ghost_name
-                local _, entity, proxy = ghost.revive({ raise_revive = true })
-                if entity then
-                    if proxy and proxy.valid then
-                        local ok = pcall(fulfil_item_requests, entity, proxy)
-                        if not ok then
-                            table.insert(problems, "could not insert the items requested for " .. name)
+    local created = {}
+    ---Revive in passes until one revives nothing more: an elevated rail only revives next to a support or a rail
+    ---that already stands on one, and build_blueprint returns the ghosts in no such order (measured in 2.1.24: a T
+    ---junction of elevated rails revived 31 of 146 ghosts in the first pass and all of them in six)
+    ---@return LuaEntity[] the ghosts still waiting
+    local function revive_passes(waiting)
+        repeat
+            local still = {}
+            for _, ghost in ipairs(waiting) do
+                if ghost.valid then
+                    local name = ghost.ghost_name
+                    local _, entity, proxy = ghost.revive({ raise_revive = true })
+                    if entity then
+                        if proxy and proxy.valid then
+                            local ok = pcall(fulfil_item_requests, entity, proxy)
+                            if not ok then
+                                table.insert(problems, "could not insert the items requested for " .. name)
+                            end
                         end
+                        table.insert(entities, entity)
+                        count(built, name)
+                    else
+                        table.insert(still, ghost)
                     end
-                    table.insert(entities, entity)
-                    count(built, name)
-                elseif list ~= vehicles then
-                    -- a vehicle that will not revive is created after this (create_missing_vehicles)
-                    count(failed, name)
                 end
             end
+            local progress = #still < #waiting
+            waiting = still
+        until not progress or #waiting == 0
+        return waiting
+    end
+    ---Create the elevated rails that will not revive: the open ends of a tileable stretch rest on the next copy's
+    ---rails and supports in the game, so they never revive on their own. The script check (no support needed)
+    ---decides instead. Returns the ghosts left and whether anything was created.
+    local function create_open_ends(waiting)
+        local left, any = {}, false
+        for _, ghost in ipairs(waiting) do
+            local name = ghost.ghost_name
+            local entity
+            if ghost.valid and ELEVATED_RAIL_TYPES[ghost.ghost_type] then
+                local spec = {
+                    name = name, position = ghost.position, direction = ghost.direction, force = ghost.force,
+                    build_check_type = defines.build_check_type.script,
+                }
+                if surface.can_place_entity(spec) then
+                    spec.build_check_type, spec.quality, spec.raise_built = nil, ghost.quality, true
+                    ghost.destroy()
+                    entity = surface.create_entity(spec)
+                end
+            end
+            if entity then
+                table.insert(entities, entity)
+                count(built, name)
+                count(created, name)
+                any = true
+            elseif ghost.valid then
+                table.insert(left, ghost)
+            end
         end
+        return left, any
+    end
+    for _, list in ipairs({ entities_first, rolling, vehicles }) do
+        local waiting, any = create_open_ends(revive_passes(list))
+        if any then
+            -- the signals on those rails can be built now
+            waiting = revive_passes(waiting)
+        end
+        if list ~= vehicles then
+            -- a vehicle that will not revive is created after this (create_missing_vehicles)
+            for _, ghost in ipairs(waiting) do
+                count(failed, ghost.ghost_name)
+            end
+        end
+    end
+    for name, n in pairs(created) do
+        table.insert(problems, "created " .. n .. " " .. name .. " directly with create_entity: the ghost would not"
+            .. " revive (no rail support within reach, as at the open end of a tileable stretch)")
     end
     -- what could not be revived would otherwise be drawn as ghosts
     destroy_all(ghosts)
@@ -928,18 +1003,39 @@ function build.run(blueprint, surface_name, strategy, backdrop)
     if grid > 1 then
         diagnostics.build_grid = grid
     end
-    local at = { x = centre.x + offset.x, y = centre.y + offset.y }
-    local around = {
-        left_top = { x = at.x - half_width, y = at.y - half_height },
-        right_bottom = { x = at.x + half_width, y = at.y + half_height },
-    }
-    generate(surface, at, half_width, half_height)
+    local at, around
+    -- the blueprint's box in the world at this offset, with its margin (underlay, backdrop, tiles to count)
+    local function place_at(new_offset)
+        offset = new_offset
+        at = { x = centre.x + offset.x, y = centre.y + offset.y }
+        around = {
+            left_top = { x = at.x - half_width, y = at.y - half_height },
+            right_bottom = { x = at.x + half_width, y = at.y + half_height },
+        }
+        generate(surface, at, half_width, half_height)
+    end
+    place_at(offset)
 
     local function build_ghosts(position)
         return stack.build_blueprint({
             surface = surface, force = game.forces.player, position = position,
             build_mode = defines.build_mode.forced, skip_fog_of_war = false,
         })
+    end
+    local snap = stack.blueprint_absolute_snapping and stack.blueprint_snap_to_grid
+    if snap and not blueprint_hub then
+        -- Absolute snapping (a tileable grid blueprint): the game puts the blueprint in the grid cell that the build
+        -- position falls in, not around that position (measured in 2.1.24: a 72x72 grid blueprint landed 71 tiles up
+        -- and left of it, outside the backdrop). A probe build shows where; everything is then laid out there. The
+        -- snapping itself stays: it decides which rail grid parity the rails land on.
+        generate(surface, at, half_width + snap.x, half_height + snap.y)
+        local probe = build_ghosts(at)
+        local probed = blueprint_offset(blueprint_entities, probe, blueprint_tiles)
+        destroy_all(probe)
+        if probed then
+            place_at(probed)
+            diagnostics.absolute_snapping = snap.x .. "x" .. snap.y
+        end
     end
     -- where the blueprint actually landed (world = blueprint + landed), from the ghosts of the real build
     local ghosts, landed
@@ -983,7 +1079,7 @@ function build.run(blueprint, surface_name, strategy, backdrop)
         end
         -- a blueprint with a hub stays at its own coordinates for any position within 127 tiles of (0, 0)
         ghosts = build_ghosts(blueprint_hub and (hub and hub.position or { x = 0, y = 0 }) or at)
-        landed = blueprint_offset(blueprint_entities, ghosts)
+        landed = blueprint_offset(blueprint_entities, ghosts, blueprint_tiles)
         if landed and (math.abs(landed.x - offset.x) > 0.01 or math.abs(landed.y - offset.y) > 0.01) then
             table.insert(problems, "the blueprint landed at offset " .. landed.x .. ", " .. landed.y .. " instead of "
                 .. offset.x .. ", " .. offset.y)
@@ -1006,9 +1102,13 @@ function build.run(blueprint, surface_name, strategy, backdrop)
             end
         end
         ghosts = build_ghosts(at)
-        landed = blueprint_offset(blueprint_entities, ghosts)
+        landed = blueprint_offset(blueprint_entities, ghosts, blueprint_tiles)
     end
     inventory.destroy()
+    if landed and (landed.x ~= offset.x or landed.y ~= offset.y) then
+        -- the frame, backdrop and tile count go where the blueprint is, not where it was meant to be
+        place_at(landed)
+    end
     diagnostics.ghosts = #ghosts
     if #ghosts == 0 and #blueprint_entities > 0 then
         table.insert(problems, "build_blueprint placed no ghosts at all on a " .. diagnostics.surface_kind)

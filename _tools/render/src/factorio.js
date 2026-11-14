@@ -204,9 +204,9 @@ async function zipInfoJson(file) {
 }
 
 /**
- * Copy the named mods from `dir` into `modsDir`, with the dependencies they require (recursively). Mods already
+ * Link (or copy) the named mods from `dir` into `modsDir`, with the dependencies they require (recursively). Mods already
  * present (the game's own) are skipped. A mod that is not in `dir` is an error.
- * @returns {Promise<string[]>} the names of the copied mods
+ * @returns {Promise<string[]>} the names of the mods taken
  */
 async function copyNamedMods(dir, modsDir, names, present) {
     /** @type {Map<string, import("node:fs").Dirent[]>} */
@@ -232,7 +232,7 @@ async function copyNamedMods(dir, modsDir, names, present) {
                 throw new Error(`Cannot read the info.json of ${source}: ${error.message}`);
             }
             for (const dependency of requiredDependencies(info)) queue.push([dependency, name]);
-            await fsp.cp(source, path.join(modsDir, entry.name), { recursive: true });
+            await linkOrCopy(source, path.join(modsDir, entry.name), entry.isDirectory());
         }
     }
     return copied;
@@ -299,7 +299,7 @@ export async function prepareMods({ executable, modsDir, extraModsDir, enableMod
                 const name = await modNameOf(extraModsDir, entry);
                 if (!name || name === MOD_NAME || enabled.has(name)) continue;
                 if (wanted && !wanted.get(name)) continue;
-                await fsp.cp(path.join(extraModsDir, entry.name), path.join(modsDir, entry.name), { recursive: true });
+                await linkOrCopy(path.join(extraModsDir, entry.name), path.join(modsDir, entry.name), entry.isDirectory());
                 if (!extras.includes(name)) extras.push(name);
             }
         }
@@ -344,13 +344,37 @@ const SERVER_SETTINGS = {
     non_blocking_saving: false,
 };
 
+/**
+ * Put a mod (folder or zip) into a mods folder of ours as a link to it, so it takes no space of its own: mods are only
+ * read (measured: 2.1.24 loads a mod and its scenario through a symbolic link to a folder or a zip). Where no link can
+ * be made (Windows without the right to make symbolic links to files), it is copied.
+ */
+export async function linkOrCopy(from, to, isDirectory) {
+    const linked = await fsp.symlink(path.resolve(from), to, isDirectory ? "junction" : "file").then(() => true, () => false);
+    if (!linked) await fsp.cp(from, to, { recursive: true });
+}
+
+/** Files the game itself may write in a mods folder: each instance gets its own copy */
+const OWN_MOD_FILES = new Set(["mod-list.json", "mod-settings.dat"]);
+
+/** Give the client the server's mods without a second copy of them */
+async function shareMods(serverMods, clientMods) {
+    await fsp.mkdir(clientMods, { recursive: true });
+    for (const entry of await fsp.readdir(serverMods, { withFileTypes: true })) {
+        const from = path.join(serverMods, entry.name);
+        const to = path.join(clientMods, entry.name);
+        if (OWN_MOD_FILES.has(entry.name)) await fsp.copyFile(from, to);
+        else await linkOrCopy(await fsp.realpath(from), to, (await fsp.stat(from)).isDirectory());
+    }
+}
+
 export async function prepareWorkDir({ workDir, executable, extraModsDir, enableMods, save, hideStatusIcons }) {
     const dataDir = factorioDataDir(executable);
     const server = path.join(workDir, "server");
     const client = path.join(workDir, "client");
     for (const dir of [server, client]) await fsp.mkdir(dir, { recursive: true });
     const mods = await prepareMods({ executable, modsDir: path.join(server, "mods"), extraModsDir, enableMods, hideStatusIcons });
-    await fsp.cp(path.join(server, "mods"), path.join(client, "mods"), { recursive: true });
+    await shareMods(path.join(server, "mods"), path.join(client, "mods"));
     await fsp.writeFile(path.join(server, "config.ini"), configIni(dataDir, server));
     await fsp.writeFile(path.join(client, "config.ini"), configIni(dataDir, client));
     await fsp.writeFile(path.join(server, "server-settings.json"), JSON.stringify(SERVER_SETTINGS, null, 2));

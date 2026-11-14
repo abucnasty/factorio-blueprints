@@ -54,6 +54,12 @@ from `--mods <dir>` or else the game's own mods folder; that folder's `mod-list.
   and `report.json` into its work folder (`--json` prints the report: per image its slot path, file, label, size and
   what failed or was missing; see `RenderReport` in `src/render.js`). The work folder is kept when something failed. `--diagnose` adds a
   matrix of placement experiments; it also runs by itself when the game builds nothing.
+- **Work folder.** `--work-dir <dir>`, else a new `factorio-render-*` folder in `$XDG_CACHE_HOME/factorio-render/`
+  (default `~/.cache/factorio-render/`) on Linux, where `/tmp` is often in memory, and in the temporary folder on
+  Windows and macOS. It holds both game instances' files; mods are linked into it rather than copied where the system
+  allows, and each screenshot is deleted once it is a JPEG. It is removed after a successful run unless `--keep-work`
+  is given, and kept after a failure or when a blueprint got no image; delete kept folders when done with them (before
+  this default, they were `/tmp/factorio-render-*`).
 - **Exit status.** `0`: every blueprint has an image. `2`: some blueprint got none (see the report). `1`: the run
   failed.
 
@@ -70,6 +76,9 @@ from `--mods <dir>` or else the game's own mods folder; that folder's `mod-list.
 - A car or spidertron the game does not build from the blueprint (one over other entities gets no ghost, or loses it)
   is created directly where the rest of the blueprint landed, with its items, and the report says so ("created N car
   directly"). One the surface refuses (a car on a platform) stays missing.
+- The open end of a tileable stretch of elevated rail has no support within reach (in the game it rests on the next
+  copy), so its ghost never revives; it is created directly where the game allows it, and the report says so
+  ("created N elevated-straight-rail directly").
 - Turrets without ammo still show their ammo icon.
 - Large builds are captured as a grid of screenshots and stitched; a one-pixel seam is possible.
 - Only Linux has been run for real; Windows and macOS share only the path handling.

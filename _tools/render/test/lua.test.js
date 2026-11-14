@@ -41,6 +41,10 @@ test("the mod researches everything, lays the default backdrop and knows space p
     assert.match(build, /local function create_missing_vehicles\(surface, unbuilt, offset\)[\s\S]*?surface_refusal\(name, surface\)[\s\S]*?pcall\(surface\.create_entity/);
     assert.match(build, /revive_all\(surface, ghosts\)[\s\S]*?missing_vehicles\(blueprint_entities, entities, landed\)[\s\S]*?create_missing_vehicles\(surface, unbuilt, landed\)/);
     assert.doesNotMatch(build, /place_vehicle/);
+    // elevated rails revive only next to what already stands, so ghosts are revived in passes; a blueprint with
+    // absolute snapping lands in its grid cell, so a probe build finds where before anything is laid out around it
+    assert.match(build, /local function revive_passes\(waiting\)[\s\S]*?until not progress/);
+    assert.match(build, /blueprint_absolute_snapping[\s\S]*?local probe = build_ghosts\(at\)[\s\S]*?place_at\(probed\)/);
     const { DEFAULT_BACKDROP } = await import("../src/cli.js");
     assert.deepEqual([...DEFAULT_BACKDROP], ["lab-dark-1", "black-refined-concrete"]);
 });
