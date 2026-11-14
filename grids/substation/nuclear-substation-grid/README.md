@@ -6,7 +6,7 @@ posted: 2026-11-13
 status: public
 entities: 5532
 blueprints: 5
-factorio_version: "2.1.24.1"
+factorio_version: 2.1.24
 ---
 
 ![Nuclear Substation Grid](https://blueprints.abucnasty.dev/grids/substation/nuclear-substation-grid/cover.jpg)

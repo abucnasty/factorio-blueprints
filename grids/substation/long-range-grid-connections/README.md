@@ -6,7 +6,7 @@ posted: 2026-11-13
 status: public
 entities: 24
 blueprints: 3
-factorio_version: "2.1.24.1"
+factorio_version: 2.1.24
 ---
 
 ![Long Range Grid Connections](https://blueprints.abucnasty.dev/grids/substation/long-range-grid-connections/cover.jpg)

@@ -7,7 +7,7 @@ status: public
 entities: 116
 tiles: 1600
 blueprints: 8
-factorio_version: "2.1.24.1"
+factorio_version: 2.1.24
 ---
 
 ![Substation Relative Utils](https://blueprints.abucnasty.dev/grids/substation/substation-relative-utils/cover.jpg)

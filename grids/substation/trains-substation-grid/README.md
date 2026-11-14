@@ -6,7 +6,7 @@ posted: 2026-11-13
 status: public
 entities: 2994
 blueprints: 29
-factorio_version: "2.1.24.1"
+factorio_version: 2.1.24
 ---
 
 ![Trains Substation Grid](https://blueprints.abucnasty.dev/grids/substation/trains-substation-grid/cover.jpg)
