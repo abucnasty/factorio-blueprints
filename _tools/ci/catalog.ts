@@ -7,10 +7,17 @@
 // validate  checks every blueprint folder; exits 1 listing the problems.
 // publish   uploads the strings the live index.json lacks, then index.json.
 //           If the live index cannot be read, every string is uploaded.
-// backfill  uploads every string of every version, then index.json.
+// backfill  uploads every string of every current version, then index.json.
 //
-// Drafts (the note's status) are validated but not published; one that was
-// published before keeps that entry, rebuilt from the git history.
+// The index is built from the commit's files and each blueprint's
+// versions.json, never from the git history, so only current versions'
+// strings can be made: an older version's were uploaded while it was
+// current. Drafts (the note's status) are validated but not published; one
+// that was published before keeps its live entry.
+// A published blueprint whose content is not a recorded version (changed
+// without a new `version`, or not recorded yet) is held: it keeps its live
+// entry, marked stale, and is listed in the log and step summary, but does
+// not fail the run.
 // Publishing never waits for the whole catalog to be valid: invalid
 // blueprints are listed and left out, except that one already in the live
 // index keeps its last published entry, marked stale. The run then exits 1
@@ -31,7 +38,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
 
-import { buildCatalog, carryOverStale, type LiveIndex, produceStrings, selectStrings, type Problem } from "./build-catalog.ts";
+import { buildCatalog, carryOver, type LiveIndex, produceStrings, selectStrings, type Problem } from "./build-catalog.ts";
 
 const BUCKET = "factorio-blueprints-catalog";
 const INDEX_KEY = "index.json";
@@ -62,21 +69,25 @@ async function main(): Promise<number> {
   const catalog = await buildCatalog(repo, values.commit ? { commit: values.commit } : {});
   const { index, problems } = catalog;
   reportProblems(catalog.problems, mode);
+  reportHeld(catalog.held, catalog.renames);
   const versions = index.blueprints.reduce((n, e) => n + e.history.length, 0);
   console.log(`${index.blueprints.length} blueprints in the index, ${versions} versions (commit ${index.commit})`);
-  if (catalog.drafts.length > 0) {
-    const kept = catalog.frozen.length > 0 ? `, ${catalog.frozen.length} serving their last published version (${catalog.frozen.join(", ")})` : "";
-    console.log(`${catalog.drafts.length} draft(s): ${catalog.drafts.length - catalog.frozen.length} not published${kept}`);
+  if (mode === "validate") {
+    if (catalog.drafts.length > 0) console.log(`${catalog.drafts.length} draft(s), not published`);
+    return problems.length > 0 ? 1 : 0;
   }
-  if (mode === "validate") return problems.length > 0 ? 1 : 0;
 
   // Publishing goes ahead without the invalid blueprints, and fails the run
   // only once the valid ones are live.
   const live = await readPublished(out);
   const jobs = selectStrings(index, mode === "publish" ? live : undefined);
   console.log(`${jobs.length} version(s) need strings${mode === "publish" && live ? ` (diffed against the live schema ${live.schema} index)` : ""}`);
-  const stale = carryOverStale(catalog, live);
-  if (stale.length > 0) console.log(`kept the last published entry of ${stale.length} invalid blueprint(s): ${stale.join(", ")}`);
+  const { stale, frozen } = carryOver(catalog, live);
+  if (stale.length > 0) console.log(`kept the last published entry of ${stale.length} invalid or held blueprint(s): ${stale.join(", ")}`);
+  if (catalog.drafts.length > 0) {
+    const kept = frozen.length > 0 ? `, ${frozen.length} serving their last published version (${frozen.join(", ")})` : "";
+    console.log(`${catalog.drafts.length} draft(s): ${catalog.drafts.length - frozen.length} not published${kept}`);
+  }
   const failed = problems.length > 0 ? 1 : 0;
   if (failed) console.error(`${catalog.invalid.length} invalid blueprint(s) were not updated; see the problems above.`);
 
@@ -143,6 +154,35 @@ function reportProblems(problems: Problem[], mode: string): void {
   }
 }
 
+/**
+ * List the held blueprints (content that is not a recorded version) in the
+ * log, as warnings and in the step summary, and the version renames the
+ * ledgers do not record yet in the log. Neither fails the run.
+ */
+function reportHeld(held: Problem[], renames: Problem[]): void {
+  for (const [list, what] of [
+    [held, "with a change that is not published (the last recorded version stays live)"],
+    [renames, "with a version rename that is not recorded yet"],
+  ] as const) {
+    if (list.length === 0) continue;
+    console.warn(`${list.length} blueprint(s) ${what}:`);
+    for (const h of list) {
+      console.warn(`  ${h.folder}: ${h.message}`);
+      if (process.env["GITHUB_ACTIONS"]) console.log(`::warning file=${h.path}::${h.message}`);
+    }
+  }
+  const summary = process.env["GITHUB_STEP_SUMMARY"];
+  if (summary && held.length > 0) {
+    const cell = (t: string) => t.replace(/\|/g, "\\|").replace(/\n/g, " ");
+    appendFileSync(
+      summary,
+      `### ${held.length} blueprint(s) with an unpublished change\n\nThe last recorded version stays live. Bump \`version\` in the note and publish with the plugin.\n\n| Blueprint | Why |\n| --- | --- |\n` +
+        held.map((h) => `| \`${cell(h.folder)}\` | ${cell(h.message)} |`).join("\n") +
+        "\n",
+    );
+  }
+}
+
 /** The live index, or undefined (with a warning) if it cannot be read. */
 async function readPublished(out: string | undefined): Promise<LiveIndex | undefined> {
   let text: string;
@@ -161,7 +201,7 @@ async function readPublished(out: string | undefined): Promise<LiveIndex | undef
     }
     // Schema 1 is read too: it has root strings only, so entry strings are all produced.
     const parsed = JSON.parse(text) as LiveIndex;
-    if ((parsed.schema === 1 || parsed.schema === 2) && Array.isArray(parsed.blueprints)) return parsed;
+    if ([1, 2, 3].includes(parsed.schema) && Array.isArray(parsed.blueprints)) return parsed;
     console.warn("warning: the live index has another schema; nothing to diff against or carry over");
   } catch (e) {
     console.warn(`warning: no live index readable (${firstLine(e)}); nothing to diff against or carry over`);
