@@ -123,3 +123,5 @@ export type { VersionDecision, VersionEntry } from "./versions.ts";
 export { applyStatsToNote, blueprintStats, STATS_KEYS } from "./stats.ts";
 export type { BlueprintStats } from "./stats.ts";
 
+export { BLOG_BODY_FILE, BLOG_ROOT, blogNotePath, blogPostFolderName, isBlogSlug, isIsoDate, readBlogPost } from "./blog.ts";
+export type { BlogPostMeta, BlogPostRead } from "./blog.ts";
