@@ -1,6 +1,7 @@
 // Build and validate the catalog index from one commit's files (the
 // checked-out tree) and the blueprints' version ledgers (versions.json), and
-// produce the blueprint strings it points at. Reads that commit's git
+// produce the blueprint strings it points at. Only blueprints/ is read; the
+// index's paths are relative to it (catalog paths), problems name repo paths. Reads that commit's git
 // objects, not the files on disk, so render images are seen as their LFS
 // pointers and nothing is downloaded. It never walks the git history: the
 // versions are what the ledgers record (see the core's versions.ts). The
@@ -12,6 +13,7 @@ import {
   assembleBook,
   baseName,
   BLUEPRINT_FILE,
+  BLUEPRINTS_ROOT,
   type BlueprintKind,
   BOOK_FILE,
   contentHash,
@@ -43,6 +45,7 @@ import {
   versionHeldMessage,
   versionLabelProblem,
   VERSIONS_FILE,
+  vaultPath,
   VersionsError,
   type VersionEntry,
 } from "../plugin/src/core/index.ts";
@@ -61,7 +64,7 @@ export type LiveIndex = Omit<CatalogIndex, "schema" | "blueprints"> & {
 };
 
 export interface Problem {
-  /** The blueprint folder this problem makes invalid. */
+  /** The blueprint folder this problem makes invalid (its catalog path). */
   folder: string;
   /** Repo path of the file or folder at fault. */
   path: string;
@@ -112,14 +115,18 @@ export interface StringJob {
   entries: boolean;
 }
 
-/** R2 key of the blueprint string of `path` at the version whose commit is `sha`. */
+/**
+ * R2 key of the blueprint string of `path` at the version whose commit is
+ * `sha`: under blueprints/, like its link. Strings published before
+ * 2026-11-14 are under strings/ instead and stay there (see catalog-index.ts).
+ */
 export function stringKey(path: string, sha: string): string {
-  return `strings/${path}/${sha}.txt`;
+  return `${BLUEPRINTS_ROOT}/${path}/${sha}.txt`;
 }
 
 /** R2 key of the string of the book entry at `slotPath` ("3/1") of `path` at the version whose commit is `sha`. */
 export function entryKey(path: string, sha: string, slotPath: string): string {
-  return `strings/${path}/${sha}/${slotPath}.txt`;
+  return `${BLUEPRINTS_ROOT}/${path}/${sha}/${slotPath}.txt`;
 }
 
 /** Files under renders/ that are images (the extensions .gitattributes stores in LFS). */
@@ -150,7 +157,7 @@ export class Git {
     return this.run(["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`]).toString().trim();
   }
 
-  /** Every blob in the commit's tree (or under `folder` in it): path -> blob id. */
+  /** Every blob in the commit's tree (or under `folder` in it): repo path -> blob id. */
   tree(commit: string, folder?: string): Map<string, string> {
     const out = new Map<string, string>();
     const args = ["ls-tree", "-r", "-z", "--full-tree", commit, ...(folder === undefined ? [] : ["--", folder])];
@@ -158,6 +165,14 @@ export class Git {
       const m = /^\d+ blob ([0-9a-f]+)\t(.*)$/s.exec(rec);
       if (m) out.set(m[2]!, m[1]!);
     }
+    return out;
+  }
+
+  /** The blobs under blueprints/ (or under the catalog path `folder` in it), by catalog path. */
+  catalogTree(commit: string, folder?: string): Map<string, string> {
+    const prefix = BLUEPRINTS_ROOT + "/";
+    const out = new Map<string, string>();
+    for (const [path, id] of this.tree(commit, vaultPath(folder ?? ""))) if (path.startsWith(prefix)) out.set(path.slice(prefix.length), id);
     return out;
   }
 
@@ -223,13 +238,15 @@ async function buildAt(
   blobs: Map<string, string>,
   trees: Map<string, string>,
 ): Promise<{ entries: CatalogEntry[]; problems: Problem[]; held: Problem[]; renames: Problem[]; drafts: Catalog["drafts"] }> {
-  const files = git.tree(commit);
+  // Catalog paths from here on; problems and held blueprints are reported by repo path.
+  const files = git.catalogTree(commit);
   const problems: Problem[] = [];
   const held: Problem[] = [];
   const renames: Problem[] = [];
   const drafts: Catalog["drafts"] = [];
+  const scanned = (path: string) => isScannedPath(vaultPath(path));
   const foldersWith = (name: string) =>
-    new Set([...files.keys()].filter((p) => p.endsWith("/" + name) && isScannedPath(p)).map(parentFolder));
+    new Set([...files.keys()].filter((p) => p.endsWith("/" + name) && scanned(p)).map(parentFolder));
   const blueprintFolders = foldersWith(BLUEPRINT_FILE);
   const books = foldersWith(BOOK_FILE);
   /** The outermost expanded book that `f` is inside of, if any. */
@@ -248,7 +265,7 @@ async function buildAt(
   /** Folders with a renders/ directory. */
   const renderDirs = new Set<string>();
   for (const [path, blob] of files) {
-    if (!isScannedPath(path)) continue;
+    if (!scanned(path)) continue;
     const segs = path.split("/");
     segs.forEach((s, i) => s === "renders" && i > 0 && i < segs.length - 1 && renderDirs.add(segs.slice(0, i).join("/")));
     if (!RENDER_IMAGE.test(path)) continue;
@@ -285,7 +302,7 @@ async function buildAt(
 
   for (const folder of folders) {
     const before = problems.length;
-    const problem = (path: string, message: string) => problems.push({ folder, path, message });
+    const problem = (path: string, message: string) => problems.push({ folder, path: vaultPath(path), message });
     const isBook = books.has(folder);
     /** The folders inside this root book that hold blueprint.json or book.json. */
     const inner = isBook
@@ -359,7 +376,8 @@ async function buildAt(
     if (notes && meta) {
       meta.previous_paths = meta.previous_paths.map((p) => joinPath(p));
       for (const prev of meta.previous_paths) {
-        if (prev === "" || !isScannedPath(prev)) problem(notes.notesPath, `previous path "${prev}" is not a blueprint folder path`);
+        if (prev.startsWith(BLUEPRINTS_ROOT + "/")) problem(notes.notesPath, `previous path "${prev}" must be relative to ${BLUEPRINTS_ROOT}/, like the index's paths`);
+        else if (prev === "" || !scanned(prev)) problem(notes.notesPath, `previous path "${prev}" is not a blueprint folder path`);
         else if (prev === folder || folderSet.has(prev)) problem(notes.notesPath, `previous path "${prev}" is a current blueprint folder`);
         else if (claimed.has(prev)) problem(notes.notesPath, `previous path "${prev}" is also claimed by ${claimed.get(prev)}`);
         else claimed.set(prev, folder);
@@ -496,13 +514,13 @@ async function buildAt(
         (decision.latest
           ? `content changed and version "${label}" is not recorded in ${VERSIONS_FILE} yet (the plugin records it when it publishes: run "Publish version"); version "${decision.latest.label}" stays live`
           : `version "${label}" is not recorded in ${VERSIONS_FILE} yet (the plugin records it when it publishes: run "Publish version"); nothing is live yet`);
-      held.push({ folder, path: decision.kind === "new" ? versionsPath : notes!.notesPath, message });
+      held.push({ folder, path: vaultPath(decision.kind === "new" ? versionsPath : notes!.notesPath), message });
       continue;
     }
     if (decision.kind === "rename") {
       renames.push({
         folder,
-        path: notes!.notesPath,
+        path: vaultPath(notes!.notesPath),
         message: `the note renames version "${decision.latest.label}" to "${label}", which ${VERSIONS_FILE} does not record yet (run "Publish version" in the plugin); it stays "${decision.latest.label}" until then`,
       });
     }
@@ -576,9 +594,9 @@ async function walkSlots(folder: string, prefix: string, reader: FolderReader, b
   }
 }
 
-/** The assembled value of the expanded book at `folder` as of `commit`. */
+/** The assembled value of the expanded book at catalog path `folder` as of `commit`. */
 async function assembleAt(git: Git, commit: string, folder: string): Promise<unknown> {
-  const files = git.tree(commit, folder);
+  const files = git.catalogTree(commit, folder);
   const json = [...files].filter(([p]) => TREE_FILE.test(p));
   const data = git.readBlobs(json.map(([, id]) => id));
   const text = (path: string) => {

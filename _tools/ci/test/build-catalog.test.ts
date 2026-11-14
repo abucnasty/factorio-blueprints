@@ -33,24 +33,31 @@ const root = mkdtempSync(join(tmpdir(), "fbp-catalog-test-"));
 after(() => rmSync(root, { recursive: true, force: true }));
 let n = 0;
 
+/**
+ * A repo whose blueprints live in blueprints/, as in the vault: `write` and
+ * `git` take paths inside it (`content`), or from the repo root with a
+ * leading "/".
+ */
 function repo() {
   const dir = join(root, `repo-${++n}`);
-  mkdirSync(dir);
-  const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, encoding: "utf8" }).trim();
-  git("init", "-q", "-b", "main");
+  const content = join(dir, "blueprints");
+  mkdirSync(content, { recursive: true });
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: content, encoding: "utf8" }).trim();
+  execFileSync("git", ["init", "-q", "-b", "main", dir]);
   git("config", "user.name", "Test");
   git("config", "user.email", "test@example.com");
   git("config", "commit.gpgsign", "false");
   const write = (path: string, text: string) => {
-    mkdirSync(dirname(join(dir, path)), { recursive: true });
-    writeFileSync(join(dir, path), text);
+    const file = path.startsWith("/") ? join(dir, path) : join(content, path);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, text);
   };
   const commit = (subject: string) => {
     git("add", "-A");
     git("commit", "-q", "-m", subject);
     return git("rev-parse", "HEAD");
   };
-  return { dir, git, write, commit };
+  return { dir, content, git, write, commit };
 }
 
 const bp = (label: string, entities = 1) =>
@@ -78,21 +85,21 @@ type Repo = ReturnType<typeof repo>;
 
 /** The value a blueprint folder or expanded book holds in the working tree. */
 function valueOf(r: Repo, folder: string): Promise<unknown> {
-  const file = join(r.dir, folder, "blueprint.json");
+  const file = join(r.content, folder, "blueprint.json");
   if (existsSync(file)) return Promise.resolve(readCanonicalJson(readFileSync(file, "utf8")));
   return assembleBook(folder, {
-    folders: async (f) => readdirSync(join(r.dir, f), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name),
-    read: async (p) => (existsSync(join(r.dir, p)) ? readFileSync(join(r.dir, p), "utf8") : undefined),
+    folders: async (f) => readdirSync(join(r.content, f), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name),
+    read: async (p) => (existsSync(join(r.content, p)) ? readFileSync(join(r.content, p), "utf8") : undefined),
   });
 }
 
 /** Root blueprint folders and expanded books in the working tree. */
 function roots(r: Repo, dir = ""): string[] {
   const out: string[] = [];
-  for (const d of readdirSync(join(r.dir, dir), { withFileTypes: true })) {
+  for (const d of readdirSync(join(r.content, dir), { withFileTypes: true })) {
     if (!d.isDirectory() || d.name.startsWith(".") || d.name.startsWith("_")) continue;
     const f = dir === "" ? d.name : `${dir}/${d.name}`;
-    if (existsSync(join(r.dir, f, "book.json")) || existsSync(join(r.dir, f, "blueprint.json"))) out.push(f);
+    if (existsSync(join(r.content, f, "book.json")) || existsSync(join(r.content, f, "blueprint.json"))) out.push(f);
     else out.push(...roots(r, f));
   }
   return out;
@@ -109,7 +116,7 @@ async function publish(r: Repo, subject: string, only?: string[]): Promise<strin
   const sha = r.git("status", "--porcelain") === "" ? r.git("rev-parse", "HEAD") : r.commit(subject);
   const date = r.git("log", "-1", "--format=%aI", sha).replace(/\+00:00$/, "Z");
   for (const folder of only ?? roots(r)) {
-    const notePath = join(r.dir, folder, "README.md");
+    const notePath = join(r.content, folder, "README.md");
     if (!existsSync(notePath)) continue;
     const note = readFileSync(notePath, "utf8");
     let fm: Record<string, unknown>;
@@ -120,7 +127,7 @@ async function publish(r: Repo, subject: string, only?: string[]): Promise<strin
     }
     const label = readNotesMeta(note).version;
     if (!["public", "deprecated", "unlisted"].includes(fm["status"] as string) || label === undefined) continue;
-    const ledgerPath = join(r.dir, folder, "versions.json");
+    const ledgerPath = join(r.content, folder, "versions.json");
     const ledger = existsSync(ledgerPath) ? readVersions(readFileSync(ledgerPath, "utf8")) : [];
     let value: unknown;
     try {
@@ -143,6 +150,8 @@ test("builds the index from the files and the ledgers: frontmatter, renders, ver
   r.write("cat/b/README.md", notes("title: B\nauthors: []"));
   r.write("_tools/x/blueprint.json", "not scanned");
   r.write(".hidden/blueprint.json", "not scanned");
+  r.write("/blog/post/blueprint.json", bp("Outside blueprints/"));
+  r.write("/blog/post/README.md", notes("title: Not published\nauthors: []"));
   const c1 = await publish(r, "add a and b");
   r.write("cat/a/blueprint.json", bp("A", 3));
   r.write("cat/a/README.md", notes("title: A\nauthors: [me]\nversion: 1.1\nposted: 2026-03-10"));
@@ -195,7 +204,7 @@ test("a moved blueprint keeps its ledger; previous_paths only redirect, and olde
   r.write("cat/b/README.md", notes('title: B\nauthors: []\nversion: "2"'));
   const c2 = await publish(r, "grow b");
   const live = (await buildCatalog(r.dir)).index;
-  mkdirSync(join(r.dir, "new"));
+  mkdirSync(join(r.content, "new"));
   r.git("mv", "cat/b", "new/b");
   r.write("new/b/README.md", notes('title: B\nauthors: []\nversion: "2"\nprevious_paths: [cat/b]'));
   r.commit("move b");
@@ -374,7 +383,8 @@ test("lists validation failures and leaves those blueprints out", async () => {
 
   const { index, problems } = await buildCatalog(r.dir);
   assert.deepEqual(index.blueprints.map((e) => e.path), ["ok/a"]);
-  const byPath = (p: string) => problems.filter((x) => x.path.startsWith(p + "/") || x.path === p).map((x) => x.message);
+  // Problems name repo paths (for annotations), blueprints by their catalog path.
+  const byPath = (p: string) => problems.filter((x) => x.path.startsWith(`blueprints/${p}/`) || x.path === `blueprints/${p}`).map((x) => x.message);
   assert.match(byPath("bad/noncanonical").join(), /canonical/);
   assert.match(byPath("bad/invalid-json").join(), /not valid JSON/);
   assert.match(byPath("bad/not-blueprint").join(), /not a blueprint/);
@@ -383,9 +393,9 @@ test("lists validation failures and leaves those blueprints out", async () => {
   assert.match(byPath("bad/authors").join(), /authors/);
   assert.match(byPath("bad/yaml").join(), /not valid YAML/);
   assert.match(byPath("bad/prev").join(), /current blueprint folder/);
-  assert.deepEqual(problems.filter((p) => p.path.startsWith("bad/render/")).map((p) => p.path).sort(), [
-    "bad/render/renders/0.jpg",
-    "bad/render/renders/cover.jpg",
+  assert.deepEqual(problems.filter((p) => p.folder === "bad/render").map((p) => p.path).sort(), [
+    "blueprints/bad/render/renders/0.jpg",
+    "blueprints/bad/render/renders/cover.jpg",
   ]);
   assert.match(byPath("bad/no-version").join(), /frontmatter needs a version to be published/);
   assert.match(byPath("bad/label").join(), /version contains "\/"/);
@@ -569,7 +579,7 @@ test("expanded book rules: slot folders, both files, nesting, notes and renders"
   writeExpanded(r, "ok/book", value());
   r.write("ok/book/notes/picture.txt", "a folder without blueprints may be anything");
   writeExpanded(r, "bad/name", value());
-  renameSync(join(r.dir, "bad/name/1-b"), join(r.dir, "bad/name/misc"));
+  renameSync(join(r.content, "bad/name/1-b"), join(r.content, "bad/name/misc"));
   writeExpanded(r, "bad/holder", value());
   r.write("bad/holder/stuff/0-x/blueprint.json", bp("x"));
   r.write("bad/holder/stuff/0-x/README.md", plain("title: x\nauthors: []"));
@@ -610,7 +620,7 @@ test("expanded book rules: slot folders, both files, nesting, notes and renders"
     "bad/notes",
     "bad/renders",
   ]);
-  const of = (folder: string) => problems.filter((p) => p.folder === folder).map((p) => `${p.path}: ${p.message}`).join("\n");
+  const of = (folder: string) => problems.filter((p) => p.folder === folder).map((p) => `${p.path.replace(/^blueprints\//, "")}: ${p.message}`).join("\n");
   assert.match(of("bad/name"), /^bad\/name\/misc: is in the expanded book bad\/name but is not named by slot: rename it <slot> or <slot>-<name>, such as 0 or 0-misc$/);
   assert.match(of("bad/holder"), /^bad\/holder\/stuff: holds blueprints inside the expanded book bad\/holder, so it must be a slot folder/);
   assert.match(of("bad/dup"), /^bad\/dup: bad\/dup has two folders for slot 1 \(1-b, 1-other\)/);
@@ -655,10 +665,11 @@ test("publish: an invalid blueprint is reported and left out, the others are pub
   const res = cli("publish", r.dir, out);
   assert.equal(res.code, 1);
   assert.deepEqual(res.index.blueprints.map((e: any) => e.path), ["cat/a", "cat/c"]);
+  assert.equal(stringKey("cat/a", sha), `blueprints/cat/a/${sha}.txt`, "R2 keys follow the link layout");
   assert.ok(existsSync(join(out, stringKey("cat/a", sha))));
   assert.ok(existsSync(join(out, stringKey("cat/c", sha))));
-  assert.ok(!existsSync(join(out, "strings/cat/b")));
-  assert.match(res.log, /cat\/b\/blueprint\.json: is not valid JSON/);
+  assert.ok(!existsSync(join(out, "blueprints/cat/b")));
+  assert.match(res.log, /  blueprints\/cat\/b\/blueprint\.json: is not valid JSON/, "problems name repo paths");
   assert.match(res.summary, /cat\/b\/blueprint\.json.*is not valid JSON/);
 });
 
@@ -793,7 +804,7 @@ test("no status is a draft; drafts are left out but validated; bad statuses are 
     ["cat/unlisted", "unlisted", false],
   ]);
   assert.deepEqual(catalog.drafts.map((d) => d.folder), ["bad/draft", "bad/value", "cat/draft", "cat/empty", "cat/none"]);
-  const of = (folder: string) => catalog.problems.filter((p) => p.folder === folder).map((p) => `${p.path}: ${p.message}`).join("\n");
+  const of = (folder: string) => catalog.problems.filter((p) => p.folder === folder).map((p) => `${p.path.replace(/^blueprints\//, "")}: ${p.message}`).join("\n");
   assert.match(of("bad/draft"), /bad\/draft\/blueprint\.json: is not valid JSON/, "a draft is still validated");
   assert.equal(of("bad/value"), "bad/value/README.md: status must be draft, public, deprecated or unlisted (none means draft)");
   assert.equal(of("bad/leftover"), "bad/leftover/README.md: deprecated is replaced by status: write status: deprecated (or public) and remove deprecated");
@@ -840,7 +851,7 @@ test("publish: a new draft gets no strings and no entry; a draft of a published 
     ["cat/b", "public", c1],
     ["cat/c", "unlisted", c1],
   ]);
-  assert.ok(!existsSync(join(out, "strings/cat/new")));
+  assert.ok(!existsSync(join(out, "blueprints/cat/new")));
   assert.ok(!existsSync(join(out, stringKey("cat/a", c2))));
   assert.match(res.log, /2 draft\(s\): 1 not published, 1 serving their last published version \(cat\/a\)/);
 
