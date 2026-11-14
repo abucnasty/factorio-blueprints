@@ -7,7 +7,7 @@ status: public
 entities: 9360
 tiles: 9252
 blueprints: 10
-factorio_version: 2.1.24.1
+factorio_version: 2.1.24
 ---
 
 ![Testing Utils](https://blueprints.abucnasty.dev/utilities/testing-utils/cover.jpg)
