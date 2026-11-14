@@ -1,9 +1,9 @@
-# factorio-blueprints
+# factorio-vault
 
 Version-controlled Factorio blueprints by abucnasty and the community.
 
-Each blueprint lives in its own folder as decoded JSON next to its design
-notes, so changes show up as readable diffs. The repo doubles as an Obsidian
+Each blueprint lives in its own folder under `blueprints/` as decoded JSON
+next to its design notes, so changes show up as readable diffs. The repo doubles as an Obsidian
 vault: blueprints are pasted in and copied out as normal blueprint strings.
 
 ## Status
@@ -15,11 +15,15 @@ one by its label. Each entry of a book has its own link, by its slot in the
 book:
 
 ```
-https://blueprints.abucnasty.dev/<folder path>.txt
-https://blueprints.abucnasty.dev/<folder path>@<version>.txt
-https://blueprints.abucnasty.dev/<folder path>/<slot>/<slot>.txt
-https://blueprints.abucnasty.dev/index.json
+https://vault.abucnasty.dev/blueprints/<path>.txt
+https://vault.abucnasty.dev/blueprints/<path>@<version>.txt
+https://vault.abucnasty.dev/blueprints/<path>/<slot>/<slot>.txt
+https://vault.abucnasty.dev/index.json
 ```
+
+`<path>` is the folder path inside `blueprints/`. The old
+`https://blueprints.abucnasty.dev/<path>.txt` links redirect there for a
+few weeks.
 
 The Obsidian plugin imports a string from the clipboard and copies one back.
 The render tool makes preview images from the real game; no previews are
@@ -37,7 +41,8 @@ _tools/render/              in-game preview renderer
 _tools/ci/                  catalog validation and index builder
 _tools/link-worker/         serves the live links
 _tools/lfs-worker/          Git LFS server for render images
-<category>/.../<slug>/      one folder per blueprint
+blueprints/<category>/.../<slug>/
+                            one folder per blueprint (only blueprints/ is published)
   README.md                 notes, with metadata in the frontmatter
   blueprint.json            the decoded blueprint
   renders/<slot path>.jpg   preview images (Git LFS): 0.jpg, or 3/1.jpg in a book
