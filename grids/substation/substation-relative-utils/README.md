@@ -3,12 +3,14 @@ title: Substation Relative Utils
 authors: []
 version: "1"
 posted: 2026-11-13
-status: draft
+status: public
 entities: 116
 tiles: 1600
 blueprints: 8
 factorio_version: "2.1.24.1"
 ---
+
+![Substation Relative Utils](https://blueprints.abucnasty.dev/grids/substation/substation-relative-utils/cover.jpg)
 
 - [Green Wire Grid](https://blueprints.abucnasty.dev/grids/substation/substation-relative-utils/0.txt)
 - [Green Wire Grid](https://blueprints.abucnasty.dev/grids/substation/substation-relative-utils/1.txt)
