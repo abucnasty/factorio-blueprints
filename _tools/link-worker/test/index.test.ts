@@ -38,6 +38,8 @@ const SHA2 = "2222222bbbb" + "0".repeat(29);
 const AMB1 = "abcdef1" + "1".repeat(33);
 const AMB2 = "abcdef1" + "2".repeat(33);
 const OID = "c".repeat(64);
+/** Version labels of the commits above. */
+const LABEL: Record<string, string> = { [SHA1]: "1.0", [SHA2]: "1.2", [AMB1]: "MK 1", [AMB2]: "v2@beta" };
 
 function setup() {
   const catalog = new FakeBucket();
@@ -50,7 +52,7 @@ function setup() {
     previous_paths: [],
     blueprint: { kind: "blueprint", counts: {} },
     commit: shas[0],
-    history: shas.map((sha) => ({ sha, date: "2026-01-01T00:00:00Z", subject: "s" })),
+    history: shas.map((sha) => ({ sha, label: LABEL[sha], hash: "0".repeat(64), date: "2026-01-01T00:00:00Z", subject: LABEL[sha] })),
     renders: [],
     ...extra,
   });
@@ -87,36 +89,28 @@ test("latest string", async () => {
   assert.equal(res.headers.get("access-control-allow-origin"), "*");
 });
 
-test("@sha: full SHA is immutable, a prefix resolves, an ambiguous or unknown one is a 404", async () => {
+test("@<version>: a recorded version by its exact label, URL-encoded as needed; commits are not versions", async () => {
   const { req } = setup();
-  let res = await req(`/cat/a@${SHA1}.txt`);
-  assert.equal(await res.text(), "0older");
-  assert.equal(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
-
-  res = await req(`/cat/a@${SHA1.slice(0, 7).toUpperCase()}.txt`);
+  let res = await req(`/cat/a@1.0.txt`);
   assert.equal(await res.text(), "0older");
   assert.equal(res.headers.get("x-blueprint-commit"), SHA1);
   assert.equal(res.headers.get("cache-control"), "public, max-age=86400");
+  assert.equal(await (await req(`/cat/a@1.2.txt`)).text(), "0latest");
+  assert.equal(await (await req(`/cat/new@MK%201.txt`)).text(), "0amb1");
 
-  res = await req(`/cat/new@abcdef1.txt`);
+  res = await req(`/cat/new@v2@beta.txt`);
+  assert.equal(res.status, 503, "a label may hold @ (this one's string is not in the bucket)");
+  res = await req(`/cat/a@${SHA1}.txt`);
   assert.equal(res.status, 404);
-  assert.match(await res.text(), /matches 2 versions/);
-  res = await req(`/cat/new@abcdef11.txt`);
-  assert.equal(await res.text(), "0amb1");
-
-  res = await req(`/cat/a@3333333.txt`);
-  assert.equal(res.status, 404);
-  assert.match(await res.text(), /has no version "3333333"/);
-  res = await req(`/cat/a@abc.txt`);
-  assert.equal(res.status, 404);
-  assert.match(await res.text(), /not a commit SHA/);
+  assert.equal(await res.text(), `"cat/a" has no version "${SHA1}". Its versions are "1.2", "1.0".\n`);
+  assert.equal((await req(`/cat/a@1.txt`)).status, 404, "no prefix matching");
 });
 
 test("a previous path redirects permanently, keeping the version, suffix and query", async () => {
   const { req } = setup();
-  let res = await req(`/cat/old@abcdef11.txt?x=1`);
+  let res = await req(`/cat/old@MK%201.txt?x=1`);
   assert.equal(res.status, 301);
-  assert.equal(res.headers.get("location"), "https://blueprints.example/cat/new@abcdef11.txt?x=1");
+  assert.equal(res.headers.get("location"), "https://blueprints.example/cat/new@MK%201.txt?x=1");
   assert.equal(res.headers.get("access-control-allow-origin"), "*");
   res = await req(`/cat/old.txt`);
   assert.equal(res.headers.get("location"), "https://blueprints.example/cat/new.txt");
@@ -189,7 +183,7 @@ test("the index is read once per request at most and kept in the isolate briefly
   const { req, catalog, tick } = setup();
   const indexReads = () => catalog.reads.filter((k) => k === "index.json").length;
   await req("/cat/a.txt");
-  await req("/cat/a@1111111.txt");
+  await req("/cat/a@1.0.txt");
   assert.equal(indexReads(), 1);
   tick(6_000);
   await req("/cat/a.txt"); // revalidated, unchanged
@@ -215,9 +209,9 @@ const PNG = "d".repeat(64);
 function bookSetup() {
   const catalog = new FakeBucket();
   const lfs = new FakeBucket();
-  const history = [NEW, OLD].map((sha) => ({ sha, date: "2026-01-01T00:00:00Z", subject: "s", entries: true }));
+  const history = [NEW, OLD].map((sha) => ({ sha, label: sha === NEW ? "2" : "1", hash: "0".repeat(64), date: "2026-01-01T00:00:00Z", subject: "s", entries: true }));
   const index = {
-    schema: 2,
+    schema: 3,
     generatedAt: "2026-01-01T00:00:00Z",
     commit: NEW,
     blueprints: [
@@ -261,7 +255,7 @@ function bookSetup() {
   return (path: string, init: RequestInit = {}) => handle(new Request("https://blueprints.example" + path, init), env);
 }
 
-test("entry links: latest and @sha, nested books, entries only an old version has", async () => {
+test("entry links: latest and @<version>, nested books, entries only an old version has", async () => {
   const req = bookSetup();
   let res = await req("/cat/book/3/1.txt");
   assert.equal(res.status, 200);
@@ -271,19 +265,18 @@ test("entry links: latest and @sha, nested books, entries only an old version ha
   assert.equal(await (await req("/cat/book/3.txt")).text(), "0new-3", "a nested book's own string");
   assert.equal(await (await req("/cat/book.txt")).text(), "0root", "the root is unchanged");
 
-  res = await req(`/cat/book/3/1@${OLD}.txt`);
+  res = await req(`/cat/book/3/1@1.txt`);
   assert.equal(await res.text(), "0old-3/1");
-  assert.equal(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
-  res = await req(`/cat/book/2@${OLD.slice(0, 7)}.txt`);
-  assert.equal(await res.text(), "0old-2");
   assert.equal(res.headers.get("cache-control"), "public, max-age=86400");
+  res = await req(`/cat/book/2@1.txt`);
+  assert.equal(await res.text(), "0old-2");
 
   res = await req("/cat/book/2.txt");
   assert.equal(res.status, 404);
   assert.match(await res.text(), /no entry at slot 2 in its latest version/);
-  res = await req(`/cat/book/9/9@${NEW}.txt`);
+  res = await req(`/cat/book/9/9@2.txt`);
   assert.equal(res.status, 404);
-  assert.match(await res.text(), new RegExp(`no entry at slot 9/9 in version ${NEW}`));
+  assert.match(await res.text(), /no entry at slot 9\/9 in version "2"/);
   res = await req("/cat/single/0.txt");
   assert.equal(res.status, 404);
   assert.match(await res.text(), /is not a book/);
@@ -315,7 +308,7 @@ test("cover and nested renders", async () => {
 test("previous paths redirect every form", async () => {
   const req = bookSetup();
   for (const [from, to] of [
-    ["/old/book/3/1@01d0000.txt?x=1", "/cat/book/3/1@01d0000.txt?x=1"],
+    ["/old/book/3/1@1.txt?x=1", "/cat/book/3/1@1.txt?x=1"],
     ["/old/book/3/1.txt", "/cat/book/3/1.txt"],
     ["/old/book/cover.jpg", "/cat/book/cover.jpg"],
     ["/old/book/renders/3/1.png", "/cat/book/renders/3/1.png"],
@@ -333,7 +326,7 @@ test("schema 1 index: root links and renders work, entry links say they are not 
   let res = await req("/cat/a/0.txt");
   assert.equal(res.status, 503);
   assert.match(await res.text(), /not published yet/);
-  res = await req(`/cat/old/0@abcdef11.txt`);
+  res = await req(`/cat/old/0@MK%201.txt`);
   assert.equal(res.status, 301);
   res = await req("/cat/a/cover.jpg");
   assert.equal(res.status, 404);

@@ -262,9 +262,9 @@ bytes. There is exactly one implementation of the writer, in
 `https://blueprints.abucnasty.dev/` serves, for a blueprint folder `<path>`:
 
 - `<path>.txt`: the latest blueprint string.
-- `<path>@<sha>.txt`: the string of a recorded version, by the commit in
-  its ledger entry (full SHA, or a unique prefix of at least 7).
-- `<path>/<slot path>.txt` and `<path>/<slot path>@<sha>.txt`: one entry
+- `<path>@<version>.txt`: the string of a recorded version, by its exact
+  label, URL-encoded as needed (`@1.2.txt`, `@MK%202.txt`).
+- `<path>/<slot path>.txt` and `<path>/<slot path>@<version>.txt`: one entry
   of a book (a blueprint, nested book or planner), alone.
 - `<path>/renders/<file path>`: a render image.
 - `<path>/cover.jpg`: the cover render.
