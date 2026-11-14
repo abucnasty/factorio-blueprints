@@ -2,9 +2,15 @@ name = "factorio-blueprints-links"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 
-# blueprints.abucnasty.dev, attached as a Workers custom domain (the zone
-# must be in the same Cloudflare account).
-routes = [{ pattern = "blueprints.abucnasty.dev", custom_domain = true }]
+# Workers custom domains (the zone must be in the same Cloudflare account;
+# wrangler deploy creates the DNS record and certificate).
+# vault.abucnasty.dev serves everything. blueprints.abucnasty.dev is the old
+# host, kept from 2026-11-14 only to redirect old links there: remove it
+# (and LEGACY_HOST in src/index.ts) after a few weeks.
+routes = [
+  { pattern = "vault.abucnasty.dev", custom_domain = true },
+  { pattern = "blueprints.abucnasty.dev", custom_domain = true },
+]
 
 # Both buckets already exist in the account; they are not created by this
 # config or by CI. The Worker only reads them.

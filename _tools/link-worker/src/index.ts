@@ -1,33 +1,56 @@
 /**
- * Public blueprint links, served from R2. Read-only: everything it serves is
- * produced in CI by _tools/ci/catalog.ts; the Worker encodes nothing.
+ * Public vault links on vault.abucnasty.dev, served from R2. Read-only:
+ * everything it serves is produced in CI by _tools/ci/catalog.ts; the
+ * Worker encodes nothing. URLs mirror the vault: blueprints are under
+ * /blueprints/ (other top-level folders, such as a future /blog/, are not
+ * served yet).
  *
- *   GET /index.json                      the catalog index
- *   GET /<path>.txt                      latest blueprint string
- *   GET /<path>@<version>.txt            string of a recorded version, by its
- *                                        label (URL-encoded as needed)
- *   GET /<path>/<slot>[/<slot>...].txt   one entry of a book, latest
- *   GET /<path>/<slot>/...@<version>.txt one entry of a book at a version
- *   GET /<path>/renders/<file path>      preview image, from the LFS bucket
- *   GET /<path>/cover.jpg                the index's cover render
+ *   GET /index.json                                 the catalog index
+ *   GET /blueprints/<path>.txt                      latest blueprint string
+ *   GET /blueprints/<path>@<version>.txt            string of a recorded version,
+ *                                                   by its label (URL-encoded as needed)
+ *   GET /blueprints/<path>/<slot>[/<slot>...].txt   one entry of a book, latest
+ *   GET /blueprints/<path>/<slot>/...@<version>.txt one entry of a book at a version
+ *   GET /blueprints/<path>/renders/<file path>      preview image, from the LFS bucket
+ *   GET /blueprints/<path>/cover.jpg                the index's cover render
  *
- * <path> is the longest blueprint folder that prefixes the request (folders
- * never nest, so there is one); what follows it is a slot path. A path
- * listed in some blueprint's previous_paths redirects (301) to the same
- * request on its current path. A schema 1 index (before the first schema 2
- * publish) has root strings and renders only: entry links answer 503.
+ * <path> is the index's path (relative to blueprints/): the longest
+ * blueprint folder that prefixes the request (folders never nest, so there
+ * is one); what follows it is a slot path. A path listed in some
+ * blueprint's previous_paths redirects (301) to the same request on its
+ * current path. A schema 1 index (before the first schema 2 publish) has
+ * root strings and renders only: entry links answer 503.
+ *
+ * The old host, blueprints.abucnasty.dev, served the same at the root
+ * (/<path>.txt and so on); it now redirects there (see LEGACY_HOST).
  */
 
 import type { CatalogEntry, CatalogIndex, CatalogNode } from "../../ci/catalog-index.ts";
 
 export interface Env {
-  /** factorio-blueprints-catalog: index.json and strings/<path>/<commit>.txt */
+  /** factorio-blueprints-catalog: index.json and blueprints/<path>/<commit>.txt (strings/... before 2026-11-14) */
   CATALOG: R2Bucket;
   /** factorio-blueprints-lfs: render images by LFS object id */
   LFS: R2Bucket;
 }
 
 const INDEX_KEY = "index.json";
+/** The vault folder, URL prefix and R2 key prefix of blueprints. */
+const BLUEPRINTS = "blueprints";
+/** Where strings were stored before they moved under blueprints/ on 2026-11-14; never rewritten, so still read. */
+const LEGACY_STRINGS = "strings";
+
+/** The host this Worker serves. */
+export const HOST = "vault.abucnasty.dev";
+/**
+ * Compatibility host, added 2026-11-14 when the vault moved to HOST: the
+ * old links (/<path>.txt, /<path>@<label>.txt, images, /index.json) answer
+ * with a 301 to the same thing on HOST. Readers use fetch with CORS or
+ * plain image and link loads, which follow it; the redirect carries the
+ * CORS headers and preflights are answered here. Remove this, with its
+ * route in wrangler.toml, a few weeks after the site uses HOST.
+ */
+const LEGACY_HOST = "blueprints.abucnasty.dev";
 /** How long an isolate trusts its parsed index before asking R2 if it changed. */
 const INDEX_TTL_MS = 5_000;
 
@@ -52,7 +75,7 @@ const BASE_HEADERS = {
 };
 
 const USAGE =
-  "Links look like /<path>.txt, /<path>@<version>.txt, /<path>/<slot>.txt, /<path>/cover.jpg, /<path>/renders/<file>; every blueprint is listed in /index.json.";
+  "Links look like /blueprints/<path>.txt, /blueprints/<path>@<version>.txt, /blueprints/<path>/<slot>.txt, /blueprints/<path>/cover.jpg, /blueprints/<path>/renders/<file>; every blueprint is listed in /index.json.";
 const SLOT = /^(0|[1-9][0-9]*)$/;
 
 interface LoadedIndex {
@@ -123,6 +146,7 @@ export function createHandler(now: () => number = Date.now) {
     }
 
     const url = new URL(request.url);
+    if (url.hostname === LEGACY_HOST) return legacyRedirect(url);
     let path: string;
     try {
       path = decodeURIComponent(url.pathname.slice(1));
@@ -133,6 +157,8 @@ export function createHandler(now: () => number = Date.now) {
     if (path === INDEX_KEY) {
       return (await serveObject(env.CATALOG, INDEX_KEY, request, JSON_TYPE, CACHE_SHORT)) ?? unavailable();
     }
+    if (!path.startsWith(BLUEPRINTS + "/")) return notFound(`Not found. ${USAGE}`);
+    path = path.slice(BLUEPRINTS.length + 1);
 
     const index = await loadIndex(env.CATALOG);
     if (!index) return unavailable();
@@ -178,7 +204,7 @@ export function createHandler(now: () => number = Date.now) {
     }
 
     if (found.to !== undefined) {
-      const location = new URL("/" + encodePath(found.to + path.slice(folder.length)) + url.search, url);
+      const location = new URL(`/${BLUEPRINTS}/` + encodePath(found.to + path.slice(folder.length)) + url.search, url);
       return new Response(null, {
         status: 301,
         headers: { ...BASE_HEADERS, Location: location.href, "Cache-Control": CACHE_REDIRECT },
@@ -217,16 +243,14 @@ export function createHandler(now: () => number = Date.now) {
       cache = CACHE_VERSION;
     }
     const headers = { "X-Blueprint-Commit": sha };
+    const serveString = (name: string) => serveStringObject(env.CATALOG, `${entry.path}/${name}.txt`, request, cache, headers);
     if (slot === "") {
-      return (
-        (await serveObject(env.CATALOG, `strings/${entry.path}/${sha}.txt`, request, TEXT, cache, headers)) ??
-        unavailable(`The string for "${entry.path}" at ${sha} is not published yet.`)
-      );
+      return (await serveString(sha)) ?? unavailable(`The string for "${entry.path}" at ${sha} is not published yet.`);
     }
 
     if (entry.history.find((h) => h.sha === sha)?.entries !== true) {
       return unavailable(
-        `Links to single entries of "${entry.path}" are not published yet for ${sha}; the whole thing is at /${encodePath(entry.path)}.txt.`,
+        `Links to single entries of "${entry.path}" are not published yet for ${sha}; the whole thing is at /${BLUEPRINTS}/${encodePath(entry.path)}.txt.`,
       );
     }
     if (ref === undefined && !index.slots.get(entry.path)?.has(slot)) {
@@ -236,7 +260,7 @@ export function createHandler(now: () => number = Date.now) {
           : `"${entry.path}" has no entry at slot ${slot} in its latest version.`,
       );
     }
-    const res = await serveObject(env.CATALOG, `strings/${entry.path}/${sha}/${slot}.txt`, request, TEXT, cache, headers);
+    const res = await serveString(`${sha}/${slot}`);
     if (res) return res;
     return ref === undefined
       ? unavailable(`The string for "${entry.path}" slot ${slot} at ${sha} is not published yet.`)
@@ -251,6 +275,34 @@ export function createHandler(now: () => number = Date.now) {
     }
     return response;
   };
+}
+
+/**
+ * A blueprint string, `<path>/<sha>[/<slot>].txt`: stored under blueprints/
+ * since 2026-11-14, under strings/ before; the old objects are kept, so a
+ * missing blueprints/ key is looked up there. Null if neither exists.
+ */
+async function serveStringObject(
+  bucket: R2Bucket,
+  name: string,
+  request: Request,
+  cacheControl: string,
+  extra: Record<string, string>,
+): Promise<Response | null> {
+  return (
+    (await serveObject(bucket, `${BLUEPRINTS}/${name}`, request, TEXT, cacheControl, extra)) ??
+    (await serveObject(bucket, `${LEGACY_STRINGS}/${name}`, request, TEXT, cacheControl, extra))
+  );
+}
+
+/** The same request on HOST: /index.json stays, anything else moves under /blueprints/ (path still encoded, query kept). */
+function legacyRedirect(url: URL): Response {
+  const target = new URL(url.pathname === `/${INDEX_KEY}` ? url.pathname : `/${BLUEPRINTS}${url.pathname}`, `https://${HOST}`);
+  target.search = url.search;
+  return new Response(null, {
+    status: 301,
+    headers: { ...BASE_HEADERS, Location: target.href, "Cache-Control": CACHE_REDIRECT },
+  });
 }
 
 /** Stream an R2 object with conditional GET support; null if it does not exist. */

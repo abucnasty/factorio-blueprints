@@ -35,11 +35,13 @@ class FakeBucket {
 
 const SHA1 = "1111111aaaa" + "0".repeat(29);
 const SHA2 = "2222222bbbb" + "0".repeat(29);
-const AMB1 = "abcdef1" + "1".repeat(33);
-const AMB2 = "abcdef1" + "2".repeat(33);
+const SHA3 = "3333333cccc" + "0".repeat(29);
+const SHA4 = "4444444dddd" + "0".repeat(29);
 const OID = "c".repeat(64);
+const VAULT = "https://vault.abucnasty.dev";
+const OLD_HOST = "https://blueprints.abucnasty.dev";
 /** Version labels of the commits above. */
-const LABEL: Record<string, string> = { [SHA1]: "1.0", [SHA2]: "1.2", [AMB1]: "MK 1", [AMB2]: "v2@beta" };
+const LABEL: Record<string, string> = { [SHA1]: "1.0", [SHA2]: "1.2", [SHA3]: "MK 1", [SHA4]: "v2@beta" };
 
 function setup() {
   const catalog = new FakeBucket();
@@ -62,24 +64,24 @@ function setup() {
     commit: SHA2,
     blueprints: [
       entry("cat/a", [SHA2, SHA1], { renders: [{ n: 0, file: "0.jpg", oid: OID, size: 5 }] }),
-      entry("cat/new", [AMB2, AMB1], { previous_paths: ["cat/old"] }),
+      entry("cat/new", [SHA4, SHA3], { previous_paths: ["cat/old"] }),
     ],
   };
   catalog.put("index.json", JSON.stringify(index));
   catalog.put(`strings/cat/a/${SHA2}.txt`, "0latest");
   catalog.put(`strings/cat/a/${SHA1}.txt`, "0older");
-  catalog.put(`strings/cat/new/${AMB1}.txt`, "0amb1");
+  catalog.put(`strings/cat/new/${SHA3}.txt`, "0amb1");
   lfs.put(`cc/cc/${OID}`, "JFIF!");
   let clock = 0;
   const handle = createHandler(() => clock);
   const env = { CATALOG: catalog, LFS: lfs } as any;
-  const req = (path: string, init: RequestInit = {}) => handle(new Request("https://blueprints.example" + path, init), env);
+  const req = (path: string, init: RequestInit = {}, origin = VAULT) => handle(new Request(origin + path, init), env);
   return { catalog, lfs, req, tick: (ms: number) => (clock += ms) };
 }
 
 test("latest string", async () => {
   const { req } = setup();
-  const res = await req("/cat/a.txt");
+  const res = await req("/blueprints/cat/a.txt");
   assert.equal(res.status, 200);
   assert.equal(await res.text(), "0latest");
   assert.equal(res.headers.get("content-type"), "text/plain; charset=utf-8");
@@ -91,58 +93,58 @@ test("latest string", async () => {
 
 test("@<version>: a recorded version by its exact label, URL-encoded as needed; commits are not versions", async () => {
   const { req } = setup();
-  let res = await req(`/cat/a@1.0.txt`);
+  let res = await req(`/blueprints/cat/a@1.0.txt`);
   assert.equal(await res.text(), "0older");
   assert.equal(res.headers.get("x-blueprint-commit"), SHA1);
   assert.equal(res.headers.get("cache-control"), "public, max-age=86400");
-  assert.equal(await (await req(`/cat/a@1.2.txt`)).text(), "0latest");
-  assert.equal(await (await req(`/cat/new@MK%201.txt`)).text(), "0amb1");
+  assert.equal(await (await req(`/blueprints/cat/a@1.2.txt`)).text(), "0latest");
+  assert.equal(await (await req(`/blueprints/cat/new@MK%201.txt`)).text(), "0amb1");
 
-  res = await req(`/cat/new@v2@beta.txt`);
+  res = await req(`/blueprints/cat/new@v2@beta.txt`);
   assert.equal(res.status, 503, "a label may hold @ (this one's string is not in the bucket)");
-  res = await req(`/cat/a@${SHA1}.txt`);
+  res = await req(`/blueprints/cat/a@${SHA1}.txt`);
   assert.equal(res.status, 404);
   assert.equal(await res.text(), `"cat/a" has no version "${SHA1}". Its versions are "1.2", "1.0".\n`);
-  assert.equal((await req(`/cat/a@1.txt`)).status, 404, "no prefix matching");
+  assert.equal((await req(`/blueprints/cat/a@1.txt`)).status, 404, "no prefix matching");
 });
 
 test("a previous path redirects permanently, keeping the version, suffix and query", async () => {
   const { req } = setup();
-  let res = await req(`/cat/old@MK%201.txt?x=1`);
+  let res = await req(`/blueprints/cat/old@MK%201.txt?x=1`);
   assert.equal(res.status, 301);
-  assert.equal(res.headers.get("location"), "https://blueprints.example/cat/new@MK%201.txt?x=1");
+  assert.equal(res.headers.get("location"), VAULT + "/blueprints/cat/new@MK%201.txt?x=1");
   assert.equal(res.headers.get("access-control-allow-origin"), "*");
-  res = await req(`/cat/old.txt`);
-  assert.equal(res.headers.get("location"), "https://blueprints.example/cat/new.txt");
-  res = await req(`/cat/old/renders/0.jpg`);
-  assert.equal(res.headers.get("location"), "https://blueprints.example/cat/new/renders/0.jpg");
+  res = await req(`/blueprints/cat/old.txt`);
+  assert.equal(res.headers.get("location"), VAULT + "/blueprints/cat/new.txt");
+  res = await req(`/blueprints/cat/old/renders/0.jpg`);
+  assert.equal(res.headers.get("location"), VAULT + "/blueprints/cat/new/renders/0.jpg");
 });
 
 test("renders stream from the LFS bucket by object id", async () => {
   const { req, lfs } = setup();
-  let res = await req("/cat/a/renders/0.jpg");
+  let res = await req("/blueprints/cat/a/renders/0.jpg");
   assert.equal(res.status, 200);
   assert.equal(await res.text(), "JFIF!");
   assert.equal(res.headers.get("content-type"), "image/jpeg");
   assert.equal(res.headers.get("cache-control"), "public, max-age=60");
   assert.ok(lfs.reads.includes(`cc/cc/${OID}`));
-  res = await req(`/cat/a/renders/0.jpg?v=${OID}`);
+  res = await req(`/blueprints/cat/a/renders/0.jpg?v=${OID}`);
   assert.equal(res.headers.get("cache-control"), "public, max-age=31536000, immutable");
-  res = await req("/cat/a/renders/1.jpg");
+  res = await req("/blueprints/cat/a/renders/1.jpg");
   assert.equal(res.status, 404);
   assert.match(await res.text(), /has no render "1.jpg"/);
 });
 
 test("404s are plain text and say what was not found", async () => {
   const { req } = setup();
-  for (const path of ["/", "/cat/a", "/nope.txt", "/nope/renders/0.jpg", "/%E0%A4%A.txt"]) {
+  for (const path of ["/", "/blueprints/cat/a", "/blueprints/nope.txt", "/blueprints/nope/renders/0.jpg", "/blueprints/%E0%A4%A.txt", "/cat/a.txt", "/blog/x.txt"]) {
     const res = await req(path);
     assert.equal(res.status, 404, path);
     assert.equal(res.headers.get("content-type"), "text/plain; charset=utf-8");
     assert.equal(res.headers.get("access-control-allow-origin"), "*");
     assert.equal(res.headers.get("cache-control"), "no-store");
   }
-  assert.match(await (await req("/nope.txt")).text(), /No blueprint at "nope"/);
+  assert.match(await (await req("/blueprints/nope.txt")).text(), /No blueprint at "nope"/);
 });
 
 test("index.json, conditional requests and HEAD", async () => {
@@ -158,23 +160,23 @@ test("index.json, conditional requests and HEAD", async () => {
   assert.equal(res.status, 304);
   assert.equal(res.headers.get("etag"), etag);
 
-  res = await req("/cat/a.txt", { method: "HEAD" });
+  res = await req("/blueprints/cat/a.txt", { method: "HEAD" });
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("content-length"), "7");
   assert.equal(await res.text(), "");
-  res = await req("/nope.txt", { method: "HEAD" });
+  res = await req("/blueprints/nope.txt", { method: "HEAD" });
   assert.equal(res.status, 404);
   assert.equal(await res.text(), "");
 });
 
 test("CORS preflight and other methods", async () => {
   const { req } = setup();
-  let res = await req("/cat/a.txt", { method: "OPTIONS", headers: { "Access-Control-Request-Headers": "if-none-match" } });
+  let res = await req("/blueprints/cat/a.txt", { method: "OPTIONS", headers: { "Access-Control-Request-Headers": "if-none-match" } });
   assert.equal(res.status, 204);
   assert.equal(res.headers.get("access-control-allow-origin"), "*");
   assert.equal(res.headers.get("access-control-allow-methods"), "GET, HEAD, OPTIONS");
   assert.equal(res.headers.get("access-control-allow-headers"), "if-none-match");
-  res = await req("/cat/a.txt", { method: "POST", body: "x" });
+  res = await req("/blueprints/cat/a.txt", { method: "POST", body: "x" });
   assert.equal(res.status, 405);
   assert.equal(res.headers.get("allow"), "GET, HEAD, OPTIONS");
 });
@@ -182,21 +184,21 @@ test("CORS preflight and other methods", async () => {
 test("the index is read once per request at most and kept in the isolate briefly", async () => {
   const { req, catalog, tick } = setup();
   const indexReads = () => catalog.reads.filter((k) => k === "index.json").length;
-  await req("/cat/a.txt");
-  await req("/cat/a@1.0.txt");
+  await req("/blueprints/cat/a.txt");
+  await req("/blueprints/cat/a@1.0.txt");
   assert.equal(indexReads(), 1);
   tick(6_000);
-  await req("/cat/a.txt"); // revalidated, unchanged
+  await req("/blueprints/cat/a.txt"); // revalidated, unchanged
   assert.equal(indexReads(), 2);
   catalog.put("index.json", JSON.stringify({ schema: 1, generatedAt: "", commit: "", blueprints: [] }));
   tick(6_000);
-  assert.equal((await req("/cat/a.txt")).status, 404, "a changed index is picked up");
+  assert.equal((await req("/blueprints/cat/a.txt")).status, 404, "a changed index is picked up");
 });
 
 test("before the first publish: 503", async () => {
   const { req, catalog } = setup();
   catalog.objects.clear();
-  assert.equal((await req("/cat/a.txt")).status, 503);
+  assert.equal((await req("/blueprints/cat/a.txt")).status, 503);
   assert.equal((await req("/index.json")).status, 503);
 });
 
@@ -245,44 +247,45 @@ function bookSetup() {
     ],
   };
   catalog.put("index.json", JSON.stringify(index));
-  catalog.put(`strings/cat/book/${NEW}.txt`, "0root");
+  // The latest version published after 2026-11-14 (blueprints/ keys), the older one before (strings/).
+  catalog.put(`blueprints/cat/book/${NEW}.txt`, "0root");
   for (const [sha, slots] of [[NEW, ["0", "3", "3/1"]], [OLD, ["0", "2", "3", "3/1"]]] as const) {
-    for (const slot of slots) catalog.put(`strings/cat/book/${sha}/${slot}.txt`, `0${sha === NEW ? "new" : "old"}-${slot}`);
+    for (const slot of slots) catalog.put(`${sha === NEW ? "blueprints" : "strings"}/cat/book/${sha}/${slot}.txt`, `0${sha === NEW ? "new" : "old"}-${slot}`);
   }
   lfs.put(`dd/dd/${PNG}`, "PNG!");
   const handle = createHandler(() => 0);
   const env = { CATALOG: catalog, LFS: lfs } as any;
-  return (path: string, init: RequestInit = {}) => handle(new Request("https://blueprints.example" + path, init), env);
+  return (path: string, init: RequestInit = {}) => handle(new Request(VAULT + path, init), env);
 }
 
 test("entry links: latest and @<version>, nested books, entries only an old version has", async () => {
   const req = bookSetup();
-  let res = await req("/cat/book/3/1.txt");
+  let res = await req("/blueprints/cat/book/3/1.txt");
   assert.equal(res.status, 200);
   assert.equal(await res.text(), "0new-3/1");
   assert.equal(res.headers.get("cache-control"), "public, max-age=60");
   assert.equal(res.headers.get("x-blueprint-commit"), NEW);
-  assert.equal(await (await req("/cat/book/3.txt")).text(), "0new-3", "a nested book's own string");
-  assert.equal(await (await req("/cat/book.txt")).text(), "0root", "the root is unchanged");
+  assert.equal(await (await req("/blueprints/cat/book/3.txt")).text(), "0new-3", "a nested book's own string");
+  assert.equal(await (await req("/blueprints/cat/book.txt")).text(), "0root", "the root is unchanged");
 
-  res = await req(`/cat/book/3/1@1.txt`);
+  res = await req(`/blueprints/cat/book/3/1@1.txt`);
   assert.equal(await res.text(), "0old-3/1");
   assert.equal(res.headers.get("cache-control"), "public, max-age=86400");
-  res = await req(`/cat/book/2@1.txt`);
+  res = await req(`/blueprints/cat/book/2@1.txt`);
   assert.equal(await res.text(), "0old-2");
 
-  res = await req("/cat/book/2.txt");
+  res = await req("/blueprints/cat/book/2.txt");
   assert.equal(res.status, 404);
   assert.match(await res.text(), /no entry at slot 2 in its latest version/);
-  res = await req(`/cat/book/9/9@2.txt`);
+  res = await req(`/blueprints/cat/book/9/9@2.txt`);
   assert.equal(res.status, 404);
   assert.match(await res.text(), /no entry at slot 9\/9 in version "2"/);
-  res = await req("/cat/single/0.txt");
+  res = await req("/blueprints/cat/single/0.txt");
   assert.equal(res.status, 404);
   assert.match(await res.text(), /is not a book/);
-  assert.equal((await req("/cat/book/03.txt")).status, 404, "slots are plain numbers");
+  assert.equal((await req("/blueprints/cat/book/03.txt")).status, 404, "slots are plain numbers");
 
-  res = await req("/cat/book/3/1.txt", { method: "HEAD" });
+  res = await req("/blueprints/cat/book/3/1.txt", { method: "HEAD" });
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("content-length"), "8");
   assert.equal(await res.text(), "");
@@ -290,17 +293,17 @@ test("entry links: latest and @<version>, nested books, entries only an old vers
 
 test("cover and nested renders", async () => {
   const req = bookSetup();
-  let res = await req("/cat/book/cover.jpg");
+  let res = await req("/blueprints/cat/book/cover.jpg");
   assert.equal(res.status, 200);
   assert.equal(await res.text(), "PNG!");
   assert.equal(res.headers.get("content-type"), "image/png", "typed by the file actually used");
   assert.equal(res.headers.get("cache-control"), "public, max-age=60");
   const etag = res.headers.get("etag")!;
-  assert.equal((await req("/cat/book/cover.jpg", { headers: { "If-None-Match": etag } })).status, 304);
-  assert.equal((await req(`/cat/book/cover.jpg?v=${PNG}`)).headers.get("cache-control"), "public, max-age=31536000, immutable");
-  assert.equal(await (await req("/cat/book/renders/3/1.png")).text(), "PNG!");
-  assert.equal((await req("/cat/book/renders/3/2.png")).status, 404);
-  res = await req("/cat/single/cover.jpg");
+  assert.equal((await req("/blueprints/cat/book/cover.jpg", { headers: { "If-None-Match": etag } })).status, 304);
+  assert.equal((await req(`/blueprints/cat/book/cover.jpg?v=${PNG}`)).headers.get("cache-control"), "public, max-age=31536000, immutable");
+  assert.equal(await (await req("/blueprints/cat/book/renders/3/1.png")).text(), "PNG!");
+  assert.equal((await req("/blueprints/cat/book/renders/3/2.png")).status, 404);
+  res = await req("/blueprints/cat/single/cover.jpg");
   assert.equal(res.status, 404);
   assert.match(await res.text(), /no render images/);
 });
@@ -313,21 +316,60 @@ test("previous paths redirect every form", async () => {
     ["/old/book/cover.jpg", "/cat/book/cover.jpg"],
     ["/old/book/renders/3/1.png", "/cat/book/renders/3/1.png"],
   ]) {
-    const res = await req(from!);
+    const res = await req("/blueprints" + from!);
     assert.equal(res.status, 301, from);
-    assert.equal(res.headers.get("location"), "https://blueprints.example" + to);
+    assert.equal(res.headers.get("location"), VAULT + "/blueprints" + to);
   }
 });
 
 test("schema 1 index: root links and renders work, entry links say they are not published, no cover", async () => {
   const { req } = setup(); // the fixture above is schema 1 shaped: no entries flags, nodes or cover
-  assert.equal(await (await req("/cat/a.txt")).text(), "0latest");
-  assert.equal((await req("/cat/a/renders/0.jpg")).status, 200);
-  let res = await req("/cat/a/0.txt");
+  assert.equal(await (await req("/blueprints/cat/a.txt")).text(), "0latest");
+  assert.equal((await req("/blueprints/cat/a/renders/0.jpg")).status, 200);
+  let res = await req("/blueprints/cat/a/0.txt");
   assert.equal(res.status, 503);
   assert.match(await res.text(), /not published yet/);
-  res = await req(`/cat/old/0@MK%201.txt`);
+  res = await req(`/blueprints/cat/old/0@MK%201.txt`);
   assert.equal(res.status, 301);
-  res = await req("/cat/a/cover.jpg");
+  res = await req("/blueprints/cat/a/cover.jpg");
   assert.equal(res.status, 404);
+});
+
+// The move to vault.abucnasty.dev/blueprints/ (2026-11-14).
+
+test("strings: the blueprints/ key first, then the strings/ key published before the move", async () => {
+  const { req, catalog } = setup();
+  catalog.reads.length = 0;
+  assert.equal(await (await req("/blueprints/cat/a@1.0.txt")).text(), "0older");
+  assert.deepEqual(catalog.reads.slice(-2), [`blueprints/cat/a/${SHA1}.txt`, `strings/cat/a/${SHA1}.txt`]);
+  catalog.put(`blueprints/cat/a/${SHA1}.txt`, "0older, published again");
+  catalog.reads.length = 0;
+  assert.equal(await (await req("/blueprints/cat/a@1.0.txt")).text(), "0older, published again");
+  assert.deepEqual(catalog.reads, [`blueprints/cat/a/${SHA1}.txt`], "no fallback read when the new key exists");
+  assert.equal((await req("/blueprints/cat/a@1.0.txt", { method: "HEAD" })).status, 200);
+});
+
+test("the old host redirects every link to the same thing on the new one, with CORS", async () => {
+  const { req, catalog } = setup();
+  catalog.reads.length = 0;
+  for (const [from, to] of [
+    ["/index.json", "/index.json"],
+    ["/cat/a.txt", "/blueprints/cat/a.txt"],
+    ["/cat/a@1.0.txt", "/blueprints/cat/a@1.0.txt"],
+    ["/cat/new@MK%201.txt", "/blueprints/cat/new@MK%201.txt"],
+    [`/cat/a/renders/0.jpg?v=${OID}`, `/blueprints/cat/a/renders/0.jpg?v=${OID}`],
+    ["/cat/a/cover.jpg", "/blueprints/cat/a/cover.jpg"],
+  ]) {
+    for (const method of ["GET", "HEAD"]) {
+      const res = await req(from!, { method }, OLD_HOST);
+      assert.equal(res.status, 301, `${method} ${from}`);
+      assert.equal(res.headers.get("location"), VAULT + to);
+      assert.equal(res.headers.get("access-control-allow-origin"), "*");
+    }
+  }
+  assert.deepEqual(catalog.reads, [], "redirects read nothing");
+  const res = await req("/cat/a.txt", { method: "OPTIONS", headers: { "Access-Control-Request-Headers": "if-none-match" } }, OLD_HOST);
+  assert.equal(res.status, 204, "a preflight is answered, not redirected");
+  // Following the redirect gets the string.
+  assert.equal(await (await req(new URL((await req("/cat/a@1.0.txt", {}, OLD_HOST)).headers.get("location")!).pathname)).text(), "0older");
 });
