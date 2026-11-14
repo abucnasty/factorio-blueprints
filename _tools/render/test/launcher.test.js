@@ -11,6 +11,7 @@ import { encodeBlueprintString } from "../src/codec.js";
 import { FRAMING_DEFAULTS } from "../src/framing.js";
 import { blueprintHash } from "../src/manifest.js";
 import { defaultWorkRoot, render } from "../src/render.js";
+import { RENDER_VERSION } from "../src/version.js";
 import { alive, fakeInstall, fakePids, row, sampleBook, tempDir } from "./helpers.js";
 
 const BIN = new URL("../bin/render.js", import.meta.url).pathname;
@@ -85,8 +86,9 @@ test("a book renders one image per blueprint at its slot path, and the game is c
     // written with keys in code-point order, so the file diffs cleanly
     const raw = await fs.readFile(path.join(env.out, "render.json"), "utf8");
     assert.deepEqual([...raw.matchAll(/^    "([^"]+)": \{$/gm)].map(match => match[1]), ["0", "2/0", "2/1", "3"]);
-    assert.deepEqual(manifest.entries["2/1"], { file: "2/1.jpg", height: report.images[2].height, sha256: blueprintHash(row("C", 3)), width: report.images[2].width });
+    assert.deepEqual(manifest.entries["2/1"], { file: "2/1.jpg", height: report.images[2].height, render_version: RENDER_VERSION, sha256: blueprintHash(row("C", 3)), width: report.images[2].width });
     assert.equal(report.images[2].sha256, blueprintHash(row("C", 3)));
+    assert.equal(report.images[2].render_version, RENDER_VERSION);
     // stale render images are gone, nested ones too, and the slot folders they leave empty
     assert.deepEqual(report.removed, ["5.jpg", "7/1.jpg", "7/2/0.jpg", "9.jpg"]);
     assert.ok(messages.includes(`Removed stale ${path.join(env.out, "7", "1.jpg")}`));

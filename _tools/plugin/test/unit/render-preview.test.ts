@@ -64,7 +64,7 @@ const path = require("path");
     fs.mkdirSync(path.dirname(f), { recursive: true });
     fs.writeFileSync(f, "jpeg " + t.file);
     const build = mode === "build-problems" && i === 0 ? { failed: { "stone-furnace": 2 }, missing: { "small-lamp": 1 } } : { failed: {}, missing: {} };
-    images.push({ path: t.path, file: t.file, label: t.label, sha256: t.hash, width: 10, height: 20, bytes: 5, pixels_per_tile: 32, screenshots: 1, strategy: "ordinary", built: 1, tiles: 0, ...build, problems: [], import_errors: false, attempts: [] });
+    images.push({ path: t.path, file: t.file, label: t.label, sha256: t.hash, render_version: 1, width: 10, height: 20, bytes: 5, pixels_per_tile: 32, screenshots: 1, strategy: "ordinary", built: 1, tiles: 0, ...build, problems: [], import_errors: false, attempts: [] });
   });
   if (mode === "empty-too") without.push({ path: "9", file: "9.jpg", label: "", reason: "empty blueprint" });
   const manifestFile = path.join(out, "render.json");
@@ -72,7 +72,7 @@ const path = require("path");
     fs.mkdirSync(out, { recursive: true });
     const previous = only && fs.existsSync(manifestFile) ? JSON.parse(fs.readFileSync(manifestFile, "utf8")).entries : {};
     const entries = { ...previous };
-    for (const i of images) entries[i.path === "" ? "0" : i.path] = { file: i.file, sha256: i.sha256, width: i.width, height: i.height };
+    for (const i of images) entries[i.path === "" ? "0" : i.path] = { file: i.file, sha256: i.sha256, render_version: i.render_version, width: i.width, height: i.height };
     fs.writeFileSync(manifestFile, JSON.stringify({ schema: 1, rendered_at: new Date().toISOString(), entries }, null, 2) + "\n");
   }
   if (mode !== "noreport") {
@@ -335,6 +335,17 @@ describe("render only what needs it", () => {
     assert.match(h.notices.at(-1)!.message, /already current/);
   });
 
+  test("a newer render version in _tools/render/render-version.json makes the images outdated", async () => {
+    await renderPreview(host("ok"), SINGLE_DIR);
+    const h = host("ok");
+    assert.deepStrictEqual(await foldersNeedingRender(h).then((l) => l.map((f) => f.folder)), [BOOK_DIR]);
+    writeFileSync(join(vault, "_tools/render/render-version.json"), '{ "render_version": 2 }\n');
+    assert.deepStrictEqual(await foldersNeedingRender(h).then((l) => l.map((f) => [f.folder, f.state.overall])), [
+      [BOOK_DIR, "none"],
+      [SINGLE_DIR, "outdated"],
+    ]);
+  });
+
   test("everything needed, or a single blueprint: a whole run without --only", async () => {
     await renderPreview(host("ok"), BOOK_DIR, { onlyNeeded: true });
     assert.ok(!lastArgs().includes("--only"));
@@ -397,7 +408,7 @@ describe("render an expanded book", () => {
     assert.equal(read(`${LEAF_LAMPS}/renders/0.jpg`), "jpeg 1/0.jpg");
     const target = renderTargets(JSON.parse(read(`${LEAF_LAMPS}/blueprint.json`)))[0]!;
     assert.deepStrictEqual(parseRenderManifest(read(`${LEAF_LAMPS}/renders/render.json`))!.entries, {
-      "0": { file: "0.jpg", sha256: target.hash, width: 10, height: 20 },
+      "0": { file: "0.jpg", sha256: target.hash, render_version: 1, width: 10, height: 20 },
     });
     assert.ok(!existsSync(join(vault, ".factorio-render")), "scratch removed, and its empty parent too");
     assert.deepStrictEqual((await folderRenderState(h, BOOK_DIR)).overall, "current");

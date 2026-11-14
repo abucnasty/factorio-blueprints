@@ -31,7 +31,12 @@ notes beside them, and back. The built plugin is committed in
   entries when clicked from the status bar), refreshes the notes' generated
   block, commits and pushes. **Show
   blueprints needing a render** and **Render all that need it** work across
-  the vault; **Cancel render preview** stops a run.
+  the vault; **Cancel render preview** stops a run. An image is outdated
+  when its blueprint changed since it was made, or when it was made by an
+  older render version than `_tools/render/render-version.json` (an image
+  record without one counts as version 1). After a render tool fix that
+  changes output: bump the render version, then run **Render all that need
+  it**.
 - **Refresh generated content in all notes**: writes the stats, cover image
   and contents list into every note, without committing. The cover image and
   contents list at the top of a note are generated; write below them.

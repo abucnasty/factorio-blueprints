@@ -1,0 +1,4 @@
+{
+  "render_version": 1,
+  "rule": "Bump render_version by one in any change to this tool that alters what an existing blueprint's image looks like (framing, backdrop, the mod in mod/, game settings, stitching, JPEG encoding, ...). Do not bump it for changes that cannot alter output (tests, docs, logging, error messages, refactors). Every image record in a render.json carries the version that made it (none means 1); the Obsidian plugin treats an image made by an older version as outdated, so after a bump run 'Render all that need it' in Obsidian."
+}

@@ -21,11 +21,13 @@ import { folderValue, leaves, locate, readTree } from "./expanded.ts";
 import type { Located } from "./expanded.ts";
 import { listRenderFiles, refreshExpandedBook, refreshGeneratedBlock } from "./generated-notes.ts";
 import type { Host, ProcessResult } from "./host.ts";
-import { folderRenderState } from "./render-status.ts";
+import { folderRenderState, readRenderVersion } from "./render-status.ts";
 import { publishAndReport } from "./publish.ts";
 
 export const RENDER_SCRIPT = "_tools/render/bin/render.js";
 export const RENDER_MODULES = "_tools/render/node_modules";
+/** The render tool's current render version and the rule for bumping it; a newer one makes older images outdated. */
+export const RENDER_VERSION_FILE = "_tools/render/render-version.json";
 /** Scratch space inside the vault (git-ignored): the tool runs on the host under Flatpak, so the sandbox's /tmp will not do. */
 export const RENDER_SCRATCH = ".factorio-render";
 
@@ -109,7 +111,7 @@ async function run(host: Host, contextFolder: string, signal: AbortSignal, optio
     }
     const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
     const manifest = (await files.exists(manifestPath)) ? parseRenderManifest(await files.read(manifestPath)) : undefined;
-    const state = renderState(value, manifest, await listRenderFiles(host, folder));
+    const state = renderState(value, manifest, await listRenderFiles(host, folder), await readRenderVersion(host));
     const needed = state.entries.filter((e) => e.state !== "current").map((e) => e.path);
     if (needed.length === 0 && state.counts.total > 0) {
       ui.notice(`The render of ${folder} is already current.`);
@@ -398,6 +400,7 @@ async function renderExpandedBook(host: Host, loc: Located, signal: AbortSignal,
       manifest.entries[inner] = {
         file: name,
         sha256: String(r["sha256"] ?? ""),
+        ...(typeof r["render_version"] === "number" ? { render_version: r["render_version"] } : {}),
         ...(typeof r["width"] === "number" ? { width: r["width"] } : {}),
         ...(typeof r["height"] === "number" ? { height: r["height"] } : {}),
       };

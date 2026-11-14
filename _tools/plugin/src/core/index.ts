@@ -90,6 +90,7 @@ export { sha256Hex } from "./sha256.ts";
 export {
   blueprintHash,
   parseRenderManifest,
+  parseRenderVersion,
   RENDER_MANIFEST,
   renderState,
   renderStateLabel,

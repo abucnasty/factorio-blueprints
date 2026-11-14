@@ -16,6 +16,8 @@ export const MANIFEST_SCHEMA = 1;
  * @typedef {object} ManifestEntry
  * @property {string} file     render file relative to the output folder ("3/1.jpg")
  * @property {string} sha256   blueprintHash of the blueprint the image was made from
+ * @property {number} [render_version]  RENDER_VERSION (src/version.js) of the tool that made the image; absent in
+ *                                      records written before it was stamped, which count as version 1
  * @property {number} width
  * @property {number} height
  */
@@ -109,9 +111,10 @@ export async function writeManifest(out, manifest) {
 
 /**
  * The manifest after a run. A full run lists exactly the images it produced. An --only run starts from the existing
- * manifest, drops entries whose image it removed, and sets the entries it rendered.
+ * manifest, drops entries whose image it removed, and sets the entries it rendered; the others keep their record,
+ * render_version stamp included.
  * @param {Manifest | null} previous
- * @param {{ key: string, file: string, sha256: string, width: number, height: number }[]} produced
+ * @param {{ key: string, file: string, sha256: string, render_version: number, width: number, height: number }[]} produced
  * @param {string[]} removed  render files removed from the output folder
  * @param {boolean} partial   an --only run
  * @param {Date} now
@@ -123,6 +126,6 @@ export function nextManifest(previous, produced, removed, partial, now = new Dat
         const gone = new Set(removed);
         for (const [key, entry] of Object.entries(previous.entries)) if (!gone.has(entry?.file)) entries[key] = entry;
     }
-    for (const { key, file, sha256, width, height } of produced) entries[key] = { file, sha256, width, height };
+    for (const { key, file, sha256, render_version, width, height } of produced) entries[key] = { file, sha256, render_version, width, height };
     return { schema: MANIFEST_SCHEMA, rendered_at: now.toISOString(), entries };
 }

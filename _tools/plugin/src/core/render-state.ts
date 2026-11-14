@@ -3,18 +3,27 @@
 // The render tool writes <folder>/renders/render.json after a run:
 //   { "schema": 1, "rendered_at": "<ISO time>",
 //     "entries": { "<slot path, or "0" for a single blueprint>":
-//                  { "file": "3/1.jpg", "sha256": "<hash>", "width": 0, "height": 0 } } }
+//                  { "file": "3/1.jpg", "sha256": "<hash>", "render_version": 1,
+//                    "width": 0, "height": 0 } } }
 // The hash is blueprintHash() of the entry's blueprint object. An image is
-// current when its entry's hash in the manifest matches the blueprint now.
+// current when its entry's hash in the manifest matches the blueprint now
+// and its render_version is not lower than the tool's current one (in
+// _tools/render/render-version.json). An entry without render_version was
+// written before images were stamped and counts as version 1.
 
 import { writeCompactSortedJson } from "./canonical-json.ts";
 import { sha256Hex } from "./sha256.ts";
 
 export const RENDER_MANIFEST = "render.json";
 
+/** The render version of an image record without a stamp, and of a tool whose version cannot be read. */
+export const UNSTAMPED_RENDER_VERSION = 1;
+
 export interface RenderManifestEntry {
   file: string;
   sha256: string;
+  /** Render version of the tool that made the image; absent means UNSTAMPED_RENDER_VERSION. */
+  render_version?: number;
   width?: number;
   height?: number;
 }
@@ -93,6 +102,28 @@ export function parseRenderManifest(text: string | undefined): RenderManifest | 
   }
 }
 
+/**
+ * The current render version from the text of
+ * _tools/render/render-version.json; UNSTAMPED_RENDER_VERSION if absent or
+ * unreadable (then no image counts as outdated because of the tool).
+ */
+export function parseRenderVersion(text: string | undefined): number {
+  if (text === undefined) return UNSTAMPED_RENDER_VERSION;
+  try {
+    const v: unknown = JSON.parse(text);
+    const version = isObject(v) ? v["render_version"] : undefined;
+    return typeof version === "number" && Number.isInteger(version) && version >= 1 ? version : UNSTAMPED_RENDER_VERSION;
+  } catch {
+    return UNSTAMPED_RENDER_VERSION;
+  }
+}
+
+/** The render version an image record says made it. */
+function recordedRenderVersion(entry: RenderManifestEntry): number {
+  const v = entry.render_version;
+  return typeof v === "number" && Number.isInteger(v) ? v : UNSTAMPED_RENDER_VERSION;
+}
+
 export type EntryRenderState = "none" | "current" | "outdated";
 
 export interface FolderRenderState {
@@ -108,13 +139,15 @@ export interface FolderRenderState {
 }
 
 /**
- * Render state from the blueprint, its manifest (may be absent) and the
- * images present (paths relative to renders/, e.g. "3/1.jpg").
+ * Render state from the blueprint, its manifest (may be absent), the
+ * images present (paths relative to renders/, e.g. "3/1.jpg") and the
+ * render tool's current render version (parseRenderVersion).
  */
 export function renderState(
   value: unknown,
   manifest: RenderManifest | undefined,
   images: readonly string[],
+  renderVersion: number,
 ): FolderRenderState {
   const present = new Set(images);
   const claimed = new Set<string>();
@@ -122,8 +155,8 @@ export function renderState(
     const recorded = manifest?.entries[t.key];
     const image = present.has(t.file) ? t.file : undefined;
     if (image !== undefined) claimed.add(image);
-    const state: EntryRenderState =
-      image === undefined ? "none" : recorded !== undefined && recorded.sha256 === t.hash ? "current" : "outdated";
+    const current = recorded !== undefined && recorded.sha256 === t.hash && recordedRenderVersion(recorded) >= renderVersion;
+    const state: EntryRenderState = image === undefined ? "none" : current ? "current" : "outdated";
     return { ...t, state, image };
   });
   const orphans = images.filter((f) => !claimed.has(f)).sort();

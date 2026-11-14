@@ -11,7 +11,7 @@ import type { Host } from "./commands/host.ts";
 import { importFromClipboard } from "./commands/import-blueprint.ts";
 import { expandBookIntoFolders } from "./commands/expand-book.ts";
 import { publishVersion } from "./commands/publish.ts";
-import { renderPreview } from "./commands/render-preview.ts";
+import { RENDER_VERSION_FILE, renderPreview } from "./commands/render-preview.ts";
 import { setBlueprintStatus } from "./commands/set-status.ts";
 import { cancelRenderAll, folderRenderState, renderAllNeeded, showFoldersNeedingRender } from "./commands/render-status.ts";
 import { BLUEPRINT_FILE, BOOK_FILE, isScannedPath, joinPath, RENDER_MANIFEST, renderStateLabel, selfAndAncestors } from "./core/index.ts";
@@ -295,6 +295,7 @@ export default class FactorioBlueprintsPlugin extends Plugin {
       const key = [
         await stat(joinPath(folder, BLUEPRINT_FILE)),
         await stat(joinPath(rendersDir, RENDER_MANIFEST)),
+        await stat(RENDER_VERSION_FILE),
         (await host.files.exists(rendersDir)) ? JSON.stringify(await adapter.list(rendersDir)) : "",
       ].join("|");
       // An expanded book sums its leaves: not cached (its files are spread over the tree).

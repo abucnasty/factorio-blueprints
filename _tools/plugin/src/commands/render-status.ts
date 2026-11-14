@@ -7,6 +7,7 @@ import {
   joinPath,
   NOTES_FILE,
   parseRenderManifest,
+  parseRenderVersion,
   readCanonicalJson,
   RENDER_MANIFEST,
   renderState,
@@ -16,29 +17,39 @@ import type { FolderRenderState } from "../core/index.ts";
 import { leaves, readTree } from "./expanded.ts";
 import { findBlueprintFolders, listRenderFiles } from "./generated-notes.ts";
 import type { Host } from "./host.ts";
-import { cancelRender, isRendering, renderPreview } from "./render-preview.ts";
+import { cancelRender, isRendering, RENDER_VERSION_FILE, renderPreview } from "./render-preview.ts";
+
+/** The render tool's current render version (1 when its file is missing or unreadable). */
+export async function readRenderVersion(host: Host): Promise<number> {
+  try {
+    return parseRenderVersion((await host.files.exists(RENDER_VERSION_FILE)) ? await host.files.read(RENDER_VERSION_FILE) : undefined);
+  } catch {
+    return parseRenderVersion(undefined);
+  }
+}
 
 /**
  * Render state of one blueprint folder, or of an expanded book as the sum of
  * its leaves (entries keyed by slot path under the book). Throws if a file
- * is unreadable.
+ * is unreadable. renderVersion: the tool's current one, read when not given.
  */
-export async function folderRenderState(host: Host, folder: string): Promise<FolderRenderState> {
-  if (await host.files.exists(joinPath(folder, BOOK_FILE))) return bookRenderState(host, folder);
+export async function folderRenderState(host: Host, folder: string, renderVersion?: number): Promise<FolderRenderState> {
+  renderVersion ??= await readRenderVersion(host);
+  if (await host.files.exists(joinPath(folder, BOOK_FILE))) return bookRenderState(host, folder, renderVersion);
   const value = readCanonicalJson(await host.files.read(joinPath(folder, BLUEPRINT_FILE)));
   const manifestPath = joinPath(folder, "renders", RENDER_MANIFEST);
   const manifest = (await host.files.exists(manifestPath))
     ? parseRenderManifest(await host.files.read(manifestPath))
     : undefined;
-  return renderState(value, manifest, await listRenderFiles(host, folder));
+  return renderState(value, manifest, await listRenderFiles(host, folder), renderVersion);
 }
 
-async function bookRenderState(host: Host, folder: string): Promise<FolderRenderState> {
+async function bookRenderState(host: Host, folder: string, renderVersion: number): Promise<FolderRenderState> {
   const entries: FolderRenderState["entries"] = [];
   const orphans: string[] = [];
   for (const leaf of leaves(await readTree(host, folder, []))) {
     const prefix = leaf.slots.join("/");
-    const own = await folderRenderState(host, leaf.folder);
+    const own = await folderRenderState(host, leaf.folder, renderVersion);
     for (const e of own.entries) {
       // A leaf's own entry "0" (path "") is the book's slot path; an unexpanded book in a leaf nests below it.
       const path = e.path === "" ? prefix : `${prefix}/${e.path}`;
@@ -60,9 +71,10 @@ export interface FolderNeedingRender {
 /** Every blueprint folder whose render is not current (and has something to render), sorted by path. */
 export async function foldersNeedingRender(host: Host): Promise<FolderNeedingRender[]> {
   const out: FolderNeedingRender[] = [];
+  const renderVersion = await readRenderVersion(host);
   for (const folder of await findBlueprintFolders(host)) {
     try {
-      const state = await folderRenderState(host, folder);
+      const state = await folderRenderState(host, folder, renderVersion);
       if (state.counts.total > 0 && state.overall !== "current") out.push({ folder, state });
     } catch {
       // an unreadable blueprint.json is reported by the other commands

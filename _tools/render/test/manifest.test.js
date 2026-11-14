@@ -40,9 +40,11 @@ test("keys are compared by code point, not UTF-16 unit", () => {
 
 test("manifest merge: a full run replaces, an --only run keeps others and drops removed files", () => {
     const at = new Date("2026-11-12T10:00:00.000Z");
-    const previous = { schema: 1, rendered_at: "x", entries: { 0: { file: "0.jpg" }, 1: { file: "1.jpg" }, "2/0": { file: "2/0.jpg" } } };
-    const produced = [{ key: "2/0", file: "2/0.jpg", sha256: "h", width: 1, height: 2 }];
-    assert.deepEqual(nextManifest(previous, produced, [], false, at), { schema: 1, rendered_at: "2026-11-12T10:00:00.000Z", entries: { "2/0": { file: "2/0.jpg", sha256: "h", width: 1, height: 2 } } });
+    const previous = { schema: 1, rendered_at: "x", entries: { 0: { file: "0.jpg" }, 1: { file: "1.jpg", render_version: 1 }, "2/0": { file: "2/0.jpg" } } };
+    const produced = [{ key: "2/0", file: "2/0.jpg", sha256: "h", render_version: 3, width: 1, height: 2 }];
+    assert.deepEqual(nextManifest(previous, produced, [], false, at), { schema: 1, rendered_at: "2026-11-12T10:00:00.000Z", entries: { "2/0": { file: "2/0.jpg", sha256: "h", render_version: 3, width: 1, height: 2 } } });
+    // entries an --only run did not render keep their record as it was, stamp or no stamp
+    assert.deepEqual(nextManifest(previous, produced, [], true, at).entries, { 0: { file: "0.jpg" }, 1: { file: "1.jpg", render_version: 1 }, "2/0": { file: "2/0.jpg", sha256: "h", render_version: 3, width: 1, height: 2 } });
     assert.deepEqual(Object.keys(nextManifest(previous, produced, ["1.jpg"], true, at).entries), ["0", "2/0"]);
     assert.deepEqual(Object.keys(nextManifest(null, produced, [], true, at).entries), ["2/0"]);
     assert.equal(manifestKey(""), "0");
