@@ -3,11 +3,13 @@ title: Solar Substation Grid
 authors: []
 version: "1"
 posted: 2026-11-13
-status: draft
+status: public
 entities: 3816
 blueprints: 9
 factorio_version: "2.1.24.1"
 ---
+
+![Solar Substation Grid](https://blueprints.abucnasty.dev/grids/substation/solar-substation-grid/cover.jpg)
 
 - [Nauvis 52.2 MW Solar](https://blueprints.abucnasty.dev/grids/substation/solar-substation-grid/0.txt)
 - [Nauvis 52.2 MW Solar](https://blueprints.abucnasty.dev/grids/substation/solar-substation-grid/1.txt)
