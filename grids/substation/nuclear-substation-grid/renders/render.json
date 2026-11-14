@@ -3,34 +3,39 @@
     "0": {
       "file": "0.jpg",
       "height": 3720,
+      "render_version": 1,
       "sha256": "3c04d4d35896802f03a1602a8b1d198ac1425ba38cda4b143e766874737673c1",
       "width": 3716
     },
     "1": {
       "file": "1.jpg",
       "height": 3720,
+      "render_version": 1,
       "sha256": "44e4b399e285038706378d3c3d151e4b137d69afe26bd05c00f63e0f7348a25e",
       "width": 3716
     },
     "2": {
       "file": "2.jpg",
       "height": 3716,
+      "render_version": 1,
       "sha256": "5401e8801a4e6bf6b879350ed6df735c03f6b48bdb05ec062c39aa8ecabaf9ad",
       "width": 3716
     },
     "6": {
       "file": "6.jpg",
       "height": 3716,
+      "render_version": 1,
       "sha256": "633f765818b40f8d44c85a0b2106f51f3e501e16a63269b764cc1dd255759b67",
       "width": 3716
     },
     "7": {
       "file": "7.jpg",
       "height": 3716,
+      "render_version": 1,
       "sha256": "b3294f3edf86d2a163d1db4eb2cb6558a1e806dee76000f62869cfda0f2b5972",
       "width": 3716
     }
   },
-  "rendered_at": "2026-11-14T01:21:51.839Z",
+  "rendered_at": "2026-11-14T02:35:43.761Z",
   "schema": 1
 }
