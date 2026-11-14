@@ -8,7 +8,9 @@ notes beside them, and back. The built plugin is committed in
   palette): writes `blueprint.json` in the
   [canonical format](../docs/conventions.md), creating the folder and notes
   from the template or updating an existing blueprint, then commits just
-  that folder with a one-line change note, pulls and pushes.
+  that folder with a one-line change note, pulls and pushes. New blueprints
+  go under `blueprints/` (from the vault root, straight into it); the
+  commands only see blueprints there.
 - **Copy blueprint string**: encodes a folder's `blueprint.json` to the
   clipboard, ready for Import string in the game.
 

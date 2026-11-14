@@ -1,9 +1,9 @@
 # Validates the blueprint catalog on every pull request. On pushes to main
 # (the vault pushes there directly) it publishes it for the link Worker:
 # the blueprint strings the live index.json lacks, then index.json, to the
-# factorio-blueprints-catalog R2 bucket. The versions are the ones each
-# blueprint's versions.json records (the plugin writes it; this job only
-# reads it), so no git history is needed. An invalid blueprint does not hold
+# factorio-blueprints-catalog R2 bucket (served at vault.abucnasty.dev).
+# The versions are the ones each blueprint's versions.json records (the
+# plugin writes it; this job only reads it), so no git history is needed. An invalid blueprint does not hold
 # up the others: it is listed in the step summary, keeps its last published
 # version, and the run fails after the valid ones are live. A blueprint whose
 # content changed without a new version is listed too and keeps its last
@@ -11,36 +11,25 @@
 # to upload every string of every current version again.
 name: publish catalog
 
-# Changes that cannot affect the catalog (other tools, their workflows, vault
-# settings, docs) do not start a run. Blueprints can live in any top-level
-# folder, so this lists what to ignore rather than what to include.
-# Keep the two lists the same.
+# Only blueprints/ is catalog content (other top-level folders are not
+# published), so runs start for it and for the tools that build the
+# catalog. Keep the two lists the same.
 on:
   pull_request:
-    paths-ignore:
-      - "_tools/render/**"
-      - "_tools/setup/**"
-      - "_tools/lfs-worker/**"
-      - "_tools/link-worker/**"
-      - "_tools/docs/**"
-      - "_tools/templates/**"
-      - ".obsidian/**"
-      - ".github/workflows/deploy-*.yml"
-      - ".github/workflows/check-plugin.yml"
-      - "README.md"
+    paths:
+      - "blueprints/**"
+      - "_tools/ci/**"
+      - "_tools/plugin/**"
+      - "_tools/link-worker/package*.json"
+      - ".github/workflows/publish-catalog.yml"
   push:
     branches: [main]
-    paths-ignore:
-      - "_tools/render/**"
-      - "_tools/setup/**"
-      - "_tools/lfs-worker/**"
-      - "_tools/link-worker/**"
-      - "_tools/docs/**"
-      - "_tools/templates/**"
-      - ".obsidian/**"
-      - ".github/workflows/deploy-*.yml"
-      - ".github/workflows/check-plugin.yml"
-      - "README.md"
+    paths:
+      - "blueprints/**"
+      - "_tools/ci/**"
+      - "_tools/plugin/**"
+      - "_tools/link-worker/package*.json"
+      - ".github/workflows/publish-catalog.yml"
   workflow_dispatch:
     inputs:
       backfill:

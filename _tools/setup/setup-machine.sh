@@ -82,8 +82,8 @@ check_clone() {
   local dir branch origin; dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   REPO=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) && [ -f "$REPO/.lfsconfig" ] &&
     [ -f "$REPO/.obsidian/plugins/factorio-blueprints/manifest.json" ] ||
-    { action "this script is not inside a factorio-blueprints clone" \
-        "git clone https://github.com/abucnasty/factorio-blueprints.git, then run the script from that clone"; stop; }
+    { action "this script is not inside a clone of the vault" \
+        "git clone https://github.com/abucnasty/factorio-vault.git, then run the script from that clone"; stop; }
   branch=$(g rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
   origin=$(g config --get remote.origin.url || true)
   pass "clone at $REPO, branch $branch, origin ${origin:-none}"
@@ -93,7 +93,7 @@ check_clone() {
         "clone it again somewhere outside that folder and run the script there" ;;
   esac
   [ "$branch" = main ] || info "on branch $branch; Obsidian syncs whatever branch is checked out"
-  [ -n "$origin" ] || { action "the clone has no origin remote" "git remote add origin https://github.com/abucnasty/factorio-blueprints.git"; }
+  [ -n "$origin" ] || { action "the clone has no origin remote" "git remote add origin https://github.com/abucnasty/factorio-vault.git"; }
   LFS_URL=${SETUP_LFS_URL:-$(git config -f "$REPO/.lfsconfig" --get lfs.url || true)}
   LFS_URL=${LFS_URL%/}
   [ -n "$LFS_URL" ] || { action ".lfsconfig has no lfs.url" "restore .lfsconfig from origin/main"; stop; }
@@ -419,7 +419,7 @@ summary() {
   echo
   echo "All good. Next: open this folder in Obsidian and edit any note. Within"
   echo "about 2 minutes a commit \"sync edits from obsidian\" should appear at"
-  echo "https://github.com/abucnasty/factorio-blueprints/commits/main"
+  echo "https://github.com/abucnasty/factorio-vault/commits/main"
 }
 
 check_tools

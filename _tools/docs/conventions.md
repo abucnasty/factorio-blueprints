@@ -22,16 +22,22 @@ _tools/                    everything that is not a blueprint
   migration/               one-off import of the old catalog
   link-worker/             Cloudflare Worker: live blueprint links
   ci/                      validation and catalog index builder
-<category>/<sub-category>/<blueprint-slug>/
-  README.md                notes + frontmatter
-  blueprint.json           the decoded blueprint
-  versions.json            its recorded versions, once published
-  renders/<slot path>.jpg  one image per blueprint: 0.jpg, or 3/1.jpg in a book
-<category>/<book-slug>/    an expanded book
-  README.md  book.json     the book without its entries
-  versions.json            the whole book's recorded versions, once published
-  0-<slug>/                slot folder: a blueprint folder or expanded book
+blueprints/                every blueprint, and nothing else
+  <category>/<sub-category>/<blueprint-slug>/
+    README.md                notes + frontmatter
+    blueprint.json           the decoded blueprint
+    versions.json            its recorded versions, once published
+    renders/<slot path>.jpg  one image per blueprint: 0.jpg, or 3/1.jpg in a book
+  <category>/<book-slug>/    an expanded book
+    README.md  book.json     the book without its entries
+    versions.json            the whole book's recorded versions, once published
+    0-<slug>/                slot folder: a blueprint folder or expanded book
 ```
+
+Only `blueprints/` holds blueprints: other top-level folders (a future
+`blog/` or `wiki/`) are never scanned or published. A blueprint's **path**
+(in `index.json`, links and site addresses) is its folder path relative to
+`blueprints/`, e.g. `grids/substation/trains-substation-grid`.
 
 A **blueprint folder** has `blueprint.json` (one pasted string), `README.md`
 and optional `renders/`. An **expanded book** has `book.json` (the book
@@ -44,7 +50,7 @@ blueprint folder contains no other, and inside an expanded book every
 folder holding blueprints is a slot folder. The book's value is `book.json`
 with one entry per slot folder, `index` = slot (`assembleBook` /
 `expandBook` in the core). Any directory whose name starts with `_` or `.`
-is never scanned for blueprints. Category nesting can be any depth.
+is never scanned for blueprints, nor anything outside `blueprints/`. Category nesting can be any depth.
 
 Slugs are lowercase ASCII, words joined by `-`, no other punctuation
 (`Military Science (240/s)` becomes `military-science-240`). In detail:
@@ -84,7 +90,7 @@ posted: 2026-03-10                  # optional, ISO date
 video: https://youtu.be/...         # optional
 factoriobin: https://factoriobin.com/post/...   # optional
 status: public                      # draft, public, deprecated or unlisted; absent means draft
-previous_paths: [old/folder/path]   # optional, old folder paths, for link redirects
+previous_paths: [old/folder/path]   # optional, old paths (relative to blueprints/), for link redirects
 ---
 ```
 
@@ -171,11 +177,11 @@ after the frontmatter and one blank line before the owner's text, with no
 marker lines:
 
 ```
-![<title>](https://blueprints.abucnasty.dev/<folder path>/cover.jpg)
+![<title>](https://vault.abucnasty.dev/blueprints/<path>/cover.jpg)
 
-- [<label>](https://blueprints.abucnasty.dev/<folder path>/0.txt)
-- <label of nested book> ([book](https://blueprints.abucnasty.dev/<folder path>/3.txt))
-  - [<label>](https://blueprints.abucnasty.dev/<folder path>/3/1.txt)
+- [<label>](https://vault.abucnasty.dev/blueprints/<path>/0.txt)
+- <label of nested book> ([book](https://vault.abucnasty.dev/blueprints/<path>/3.txt))
+  - [<label>](https://vault.abucnasty.dev/blueprints/<path>/3/1.txt)
 ```
 
 - The image line is there only when the folder has a render image.
@@ -259,7 +265,9 @@ bytes. There is exactly one implementation of the writer, in
 
 ## Links
 
-`https://blueprints.abucnasty.dev/` serves, for a blueprint folder `<path>`:
+`https://vault.abucnasty.dev/` mirrors the vault: `index.json` at the
+root, and under `blueprints/`, for a blueprint at `<path>` (so the link is
+`https://vault.abucnasty.dev/blueprints/<path>.txt`):
 
 - `<path>.txt`: the latest blueprint string.
 - `<path>@<version>.txt`: the string of a recorded version, by its exact
@@ -268,7 +276,11 @@ bytes. There is exactly one implementation of the writer, in
   of a book (a blueprint, nested book or planner), alone.
 - `<path>/renders/<file path>`: a render image.
 - `<path>/cover.jpg`: the cover render.
-- `index.json`: the catalog index (schema: `_tools/ci/catalog-index.ts`).
+- `/index.json`: the catalog index (schema: `_tools/ci/catalog-index.ts`).
+
+The old host `https://blueprints.abucnasty.dev/` served the same without
+`blueprints/` (`/<path>.txt`); from 2026-11-14 it redirects (301) every
+link there, for a few weeks.
 
 A book entry's **slot path** is the slot numbers from the root book down to
 it, each the entry's `index` or, without one, its position in `blueprints`:
@@ -293,8 +305,10 @@ A path in some blueprint's `previous_paths` redirects to its current path.
 CI (`_tools/ci/catalog.ts`) builds the index from the pushed commit's files
 and the ledgers, never from the git history, and writes the R2 bucket
 `factorio-blueprints-catalog` on every push to `main`:
-`strings/<path>/<commit>.txt` and `strings/<path>/<commit>/<slot path>.txt`
+`blueprints/<path>/<commit>.txt` and `blueprints/<path>/<commit>/<slot path>.txt`
 for the current version (`<commit>` is the version's), then `index.json`.
+Strings published before 2026-11-14 are under `strings/` instead and stay
+there; the Worker reads that key when the `blueprints/` one is missing.
 An older version's strings were uploaded while it was current and are
 never made again, so a moved folder's older versions are not served under
 its new path. Renders are read from `factorio-blueprints-lfs` at

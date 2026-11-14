@@ -7,11 +7,13 @@ import {
   blueprintStats,
   baseName,
   BLUEPRINT_FILE,
+  BLUEPRINTS_ROOT,
   BOOK_FILE,
   bookTree,
   coverUrl,
   expandedBlockLines,
   generatedBlockLines,
+  isScannedPath,
   renderUrl,
   joinPath,
   NOTES_FILE,
@@ -121,24 +123,29 @@ export async function refreshGeneratedBlock(host: Host, folder: string): Promise
 }
 
 /**
- * Every blueprint folder and expanded book in the vault, skipping folders
- * starting with "_" or ".". With `slotFolders`, also the folders inside
- * expanded books (each has its own note); without, an expanded book is one
- * item, as it is in the catalog.
+ * Every blueprint folder and expanded book in the vault (under blueprints/),
+ * skipping folders starting with "_" or ".". With `slotFolders`, also the
+ * folders inside expanded books (each has its own note); without, an
+ * expanded book is one item, as it is in the catalog.
  */
-export async function findBlueprintFolders(host: Host, from = "", opts: { slotFolders?: boolean } = {}): Promise<string[]> {
+export async function findBlueprintFolders(
+  host: Host,
+  from = BLUEPRINTS_ROOT,
+  opts: { slotFolders?: boolean } = {},
+): Promise<string[]> {
   const out: string[] = [];
   const walk = async (dir: string, inBook: boolean) => {
     const { files, folders } = await host.files.list(dir);
-    if (dir !== "" && files.includes(joinPath(dir, BLUEPRINT_FILE))) {
+    const scanned = isScannedPath(dir);
+    if (scanned && files.includes(joinPath(dir, BLUEPRINT_FILE))) {
       if (!inBook || opts.slotFolders) out.push(dir);
       return; // a blueprint folder never holds another
     }
-    const isBook = dir !== "" && files.includes(joinPath(dir, BOOK_FILE));
+    const isBook = scanned && files.includes(joinPath(dir, BOOK_FILE));
     if (isBook && (!inBook || opts.slotFolders)) out.push(dir);
     for (const d of folders) if (!/^[_.]/.test(baseName(d))) await walk(d, inBook || isBook);
   };
-  await walk(from, false);
+  if (await host.files.exists(from)) await walk(from, false);
   return out.sort();
 }
 
@@ -156,7 +163,7 @@ export async function refreshAllGeneratedBlocks(host: Host): Promise<RefreshResu
       }
     }
   }
-  for (const folder of await findBlueprintFolders(host, "", { slotFolders: true })) results.push(await refreshGeneratedBlock(host, folder));
+  for (const folder of await findBlueprintFolders(host, BLUEPRINTS_ROOT, { slotFolders: true })) results.push(await refreshGeneratedBlock(host, folder));
   const changed = results.filter((r) => r.status === "changed").length;
   const unchanged = results.filter((r) => r.status === "unchanged").length;
   const skipped = results.filter((r): r is Extract<RefreshResult, { status: "skipped" }> => r.status === "skipped");

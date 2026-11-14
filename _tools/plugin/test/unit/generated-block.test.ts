@@ -18,8 +18,8 @@ import {
 } from "../../src/core/index.ts";
 import { fixture } from "./fixtures.ts";
 
-const BASE = "https://blueprints.abucnasty.dev";
-const F = "megabasing/science/mall";
+const BASE = "https://vault.abucnasty.dev";
+const F = "blueprints/megabasing/science/mall";
 const u = (slots: string) => `${BASE}/${F}/${slots}.txt`;
 
 const bp = (label?: string) => ({ blueprint: { item: "blueprint", ...(label === undefined ? {} : { label }), entities: [] } });

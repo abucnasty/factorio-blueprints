@@ -5,8 +5,8 @@ Desktop only (Linux, Windows, macOS). Install git, git-lfs and
 in a folder outside OneDrive, iCloud or Dropbox:
 
 ```sh
-git clone https://github.com/abucnasty/factorio-blueprints.git
-cd factorio-blueprints
+git clone https://github.com/abucnasty/factorio-vault.git
+cd factorio-vault
 _tools/setup/setup-machine.sh
 ```
 

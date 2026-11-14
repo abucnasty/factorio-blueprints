@@ -7591,6 +7591,7 @@ function setNoteStatus(note, status) {
 // src/core/blueprint-folder.ts
 var BLUEPRINT_FILE = "blueprint.json";
 var NOTES_FILE = "README.md";
+var BLUEPRINTS_ROOT = "blueprints";
 function joinPath(...parts) {
   return parts.flatMap((p) => p.split("/")).filter((p) => p !== "").join("/");
 }
@@ -7602,7 +7603,8 @@ function baseName(path) {
   return path.slice(path.lastIndexOf("/") + 1);
 }
 function isScannedPath(path) {
-  return path.split("/").every((seg) => seg === "" || !/^[_.]/.test(seg));
+  const segs = joinPath(path).split("/");
+  return segs.length > 1 && segs[0] === BLUEPRINTS_ROOT && segs.every((seg) => !/^[_.]/.test(seg));
 }
 function selfAndAncestors(folder) {
   const out = [];
@@ -8093,7 +8095,8 @@ function versionHeldMessage(d) {
 }
 
 // src/core/links.ts
-var DEFAULT_LINK_BASE = "https://blueprints.abucnasty.dev";
+var DEFAULT_LINK_BASE = "https://vault.abucnasty.dev";
+var LEGACY_LINK_BASE = "https://blueprints.abucnasty.dev";
 function stringUrl(base, folder, slots = [], version) {
   const entry = slots.map((s) => `/${checkSlot(s)}`).join("");
   const at = version === void 0 || version === "" ? "" : `@${encodeSegment(checkLabel(version))}`;
@@ -8481,19 +8484,20 @@ async function refreshGeneratedBlock(host, folder) {
     return { status: "skipped", folder, reason: e instanceof Error ? e.message : String(e) };
   }
 }
-async function findBlueprintFolders(host, from = "", opts = {}) {
+async function findBlueprintFolders(host, from = BLUEPRINTS_ROOT, opts = {}) {
   const out = [];
   const walk = async (dir, inBook) => {
     const { files, folders } = await host.files.list(dir);
-    if (dir !== "" && files.includes(joinPath(dir, BLUEPRINT_FILE))) {
+    const scanned = isScannedPath(dir);
+    if (scanned && files.includes(joinPath(dir, BLUEPRINT_FILE))) {
       if (!inBook || opts.slotFolders) out.push(dir);
       return;
     }
-    const isBook = dir !== "" && files.includes(joinPath(dir, BOOK_FILE));
+    const isBook = scanned && files.includes(joinPath(dir, BOOK_FILE));
     if (isBook && (!inBook || opts.slotFolders)) out.push(dir);
     for (const d of folders) if (!/^[_.]/.test(baseName(d))) await walk(d, inBook || isBook);
   };
-  await walk(from, false);
+  if (await host.files.exists(from)) await walk(from, false);
   return out.sort();
 }
 async function refreshAllGeneratedBlocks(host) {
@@ -8508,7 +8512,7 @@ async function refreshAllGeneratedBlocks(host) {
       }
     }
   }
-  for (const folder of await findBlueprintFolders(host, "", { slotFolders: true })) results.push(await refreshGeneratedBlock(host, folder));
+  for (const folder of await findBlueprintFolders(host, BLUEPRINTS_ROOT, { slotFolders: true })) results.push(await refreshGeneratedBlock(host, folder));
   const changed = results.filter((r) => r.status === "changed").length;
   const unchanged = results.filter((r) => r.status === "unchanged").length;
   const skipped = results.filter((r) => r.status === "skipped");
@@ -9344,8 +9348,8 @@ function lastErrorLine(stderr) {
   const line = [...lines2].reverse().find((l) => /^render: /.test(l)) ?? lines2.at(-1) ?? "no output";
   return line.length > 300 ? line.slice(0, 297) + "…" : line;
 }
-function absolute(vaultPath, path) {
-  return `${vaultPath.replace(/[\\/]+$/, "")}/${path}`;
+function absolute(vaultPath2, path) {
+  return `${vaultPath2.replace(/[\\/]+$/, "")}/${path}`;
 }
 function reject5(host, reason) {
   host.ui.notice(reason, "error");
@@ -9463,13 +9467,15 @@ async function renderExpandedBook(host, loc, signal, node2) {
 async function chooseImportTarget(host, contextFolder) {
   const loc = await locate(host, contextFolder);
   if (loc?.kind === "blueprint") return { mode: "update", folder: loc.folder };
-  if (!isScannedPath(contextFolder)) {
+  const parent = joinPath(contextFolder);
+  if (parent === "" || parent === BLUEPRINTS_ROOT) return { mode: "create", parent: BLUEPRINTS_ROOT };
+  if (!isScannedPath(parent)) {
     return {
       mode: "refuse",
-      reason: `Blueprints cannot be created in "${contextFolder}": folders starting with "_" or "." are never scanned.`
+      reason: `Blueprints cannot be created in "${contextFolder}": they go in ${BLUEPRINTS_ROOT}/, outside folders starting with "_" or ".".`
     };
   }
-  return { mode: "create", parent: joinPath(contextFolder) };
+  return { mode: "create", parent };
 }
 async function importFromClipboard(host, contextFolder) {
   const { ui } = host;
@@ -10165,6 +10171,11 @@ var DEFAULT_SETTINGS = {
   templatePath: "_tools/templates/blueprint-notes.md",
   linkBase: DEFAULT_LINK_BASE
 };
+function readStoredSettings(saved) {
+  const s = { ...DEFAULT_SETTINGS, ...saved };
+  if (s.linkBase.trim().replace(/\/+$/, "") === LEGACY_LINK_BASE) s.linkBase = DEFAULT_LINK_BASE;
+  return s;
+}
 var LOCAL = {
   gitBinary: "factorio-blueprints-git-binary",
   factorioPath: "factorio-blueprints-factorio-path",
@@ -10534,7 +10545,7 @@ var FactorioBlueprintsPlugin = class extends import_obsidian4.Plugin {
     );
   }
   async loadSettings() {
-    this.settings = { ...DEFAULT_SETTINGS, ...await this.loadData() };
+    this.settings = readStoredSettings(await this.loadData());
   }
   async saveSettings() {
     await this.saveData(this.settings);

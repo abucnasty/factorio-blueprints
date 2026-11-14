@@ -51,12 +51,12 @@ describe("publishing from the plugin", () => {
   const hashOf = (text: string) => contentHash(readCanonicalJson(text));
   const recorded = [v("1.0", hashOf(bp("old")))];
   const setup = (content: string, version: string) =>
-    fakeHost({ files: { "cat/mall/blueprint.json": content, "cat/mall/README.md": note(version), "cat/mall/versions.json": writeVersions(recorded) } });
-  const ledgerOf = (host: ReturnType<typeof fakeHost>) => readVersions(host.vault.get("cat/mall/versions.json")!);
+    fakeHost({ files: { "blueprints/cat/mall/blueprint.json": content, "blueprints/cat/mall/README.md": note(version), "blueprints/cat/mall/versions.json": writeVersions(recorded) } });
+  const ledgerOf = (host: ReturnType<typeof fakeHost>) => readVersions(host.vault.get("blueprints/cat/mall/versions.json")!);
 
   test("new content and a new label: recorded with the commit that brought the content in", async () => {
     const host = setup(bp("new"), "1.1");
-    const r = await commitAndPublish(host, "cat/mall", "update Mall");
+    const r = await commitAndPublish(host, "blueprints/cat/mall", "update Mall");
     assert.equal(r.warn, false);
     assert.deepEqual(ledgerOf(host), [...recorded, { label: "1.1", date: "2026-11-12T10:00:00Z", hash: hashOf(bp("new")), commit: FAKE_COMMIT }]);
     assert.deepEqual(host.commits.map((c) => c.message), ["update Mall", "record Mall version 1.1"]);
@@ -64,7 +64,7 @@ describe("publishing from the plugin", () => {
 
   test("new content under the same label: committed, not recorded, and the author is told to bump the version", async () => {
     const host = setup(bp("new"), "1.0");
-    const r = await commitAndPublish(host, "cat/mall", "update Mall");
+    const r = await commitAndPublish(host, "blueprints/cat/mall", "update Mall");
     assert.equal(r.warn, true);
     assert.match(r.note, /content changed, bump `version` to publish/);
     assert.match(r.note, /version "1\.0" stays live/);
@@ -74,7 +74,7 @@ describe("publishing from the plugin", () => {
 
   test("only the label changed: the latest version is renamed in the same commit", async () => {
     const host = setup(bp("old"), "1.0.1");
-    await publishVersion(host, "cat/mall");
+    await publishVersion(host, "blueprints/cat/mall");
     assert.deepEqual(ledgerOf(host), [{ ...recorded[0]!, label: "1.0.1" }]);
     assert.deepEqual(host.commits.map((c) => c.message), ["publish Mall"]);
     assert.match(host.notices.at(-1)!.message, /Version "1\.0" is now "1\.0\.1"/);

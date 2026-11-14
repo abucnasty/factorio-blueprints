@@ -1,18 +1,23 @@
 // The catalog index: index.json in the factorio-blueprints-catalog R2
-// bucket, served at https://blueprints.abucnasty.dev/index.json. Built by
+// bucket, served at https://vault.abucnasty.dev/index.json. Built by
 // build-catalog.ts, read by the link Worker and the owner's website.
 // Types only and self-contained, so the Worker can import it without
 // pulling in the core.
 //
 // R2 keys in factorio-blueprints-catalog:
 //   index.json                         this file
-//   strings/<path>/<sha>.txt           the blueprint string of <path> at the
+//   blueprints/<path>/<sha>.txt        the blueprint string of <path> at the
 //                                      version whose commit is <sha>, for
 //                                      every version in its history
-//   strings/<path>/<sha>/<slot>.txt    the string of one entry of a book at
+//   blueprints/<path>/<sha>/<slot>.txt the string of one entry of a book at
 //                                      that version (slot path such as
 //                                      "3/1"), for every version marked
 //                                      `entries`
+//   strings/<path>/<sha>[/<slot>].txt  the same, as published before
+//                                      2026-11-14; kept, and read by the
+//                                      Worker when the blueprints/ key is
+//                                      missing (older versions' strings are
+//                                      never made again)
 //
 // Slot path: the slot numbers from the root book down to an entry, each
 // the entry's `index`, or its position in `blueprints` when it has none.
@@ -38,7 +43,7 @@ export interface CatalogIndex {
 }
 
 export interface CatalogEntry {
-  /** Blueprint folder or root book path from the repo root, e.g. "megabasing/modules/lead-follower-furnaces". */
+  /** Blueprint folder or root book path, relative to the vault's blueprints/ folder, e.g. "megabasing/modules/lead-follower-furnaces". */
   path: string;
 
   // README.md frontmatter, normalized by the core's readNotesMeta; unknown keys are dropped.
@@ -59,7 +64,7 @@ export interface CatalogEntry {
   status: "public" | "deprecated" | "unlisted";
   /** status === "deprecated", for readers from before status. */
   deprecated: boolean;
-  /** Old folder paths; the Worker redirects them here (versions are not followed across them). */
+  /** Old folder paths (relative to blueprints/, like `path`); the Worker redirects them here (versions are not followed across them). */
   previous_paths: string[];
 
   /** The current blueprint.json (for a root book, its assembled tree), as the core's describeBlueprint sees it. */
@@ -120,7 +125,7 @@ export interface CatalogVersion {
   subject: string;
   /**
    * True once the strings of this version's book entries
-   * (strings/<path>/<sha>/<slot>.txt) are published; a version without it
+   * (blueprints/<path>/<sha>/<slot>.txt, or strings/... before 2026-11-14) are published; a version without it
    * (any version in a schema 1 index) has only its root string. Set for
    * single blueprints too, which have no entries.
    */
@@ -137,7 +142,7 @@ export interface CatalogNode {
   label: string;
   /** Render file under renders/ (e.g. "3/1.jpg"), blueprints with an image only. */
   render?: string;
-  /** Repo path of the entry's own folder, for entries of a root book (expanded book). */
+  /** Path of the entry's own folder (relative to blueprints/, like `path`), for entries of a root book (expanded book). */
   folder?: string;
   /** Entries of a nested book. */
   children?: CatalogNode[];

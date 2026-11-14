@@ -22,12 +22,13 @@ import {
   readFrontmatter,
   writeCanonicalJson,
   writeCompactSortedJson,
+  BLUEPRINTS_ROOT,
 } from "../../src/core/index.ts";
 import { BASE, fakeHost, fixture } from "./helpers.ts";
 import type { FakeOptions } from "./helpers.ts";
 
 const BOOK = decodeBlueprintString(fixture("book-nested.txt")).value as { blueprint_book: { blueprints: Record<string, unknown>[] } };
-const R = "cat/mil";
+const R = "blueprints/cat/mil";
 const NOTE = '---\ntitle: Military\nauthors: [abucnasty, yuu]\nversion: "3"\n---\n\nMy own notes about the book.\n';
 const MANIFEST = JSON.stringify({
   schema: 1,
@@ -125,8 +126,8 @@ describe("expand book into folders", () => {
   });
 
   test("refuses anything that is not an unexpanded book", async () => {
-    const single = fakeHost({ files: { "a/b/blueprint.json": writeCanonicalJson(decodeBlueprintString(fixture("tiles.txt")).value) } });
-    assert.equal((await expandBookIntoFolders(single, "a/b")).action, "rejected");
+    const single = fakeHost({ files: { "blueprints/a/b/blueprint.json": writeCanonicalJson(decodeBlueprintString(fixture("tiles.txt")).value) } });
+    assert.equal((await expandBookIntoFolders(single, "blueprints/a/b")).action, "rejected");
     assert.match(single.notices[0]!.message, /holds a blueprint, not a book/);
     const host = await expanded();
     assert.equal((await expandBookIntoFolders(host, R)).action, "rejected");
@@ -146,13 +147,13 @@ describe("finding the folder", () => {
     });
     assert.deepStrictEqual(await locate(host, `${R}/1-inner-book`), { folder: `${R}/1-inner-book`, kind: "book", root: R, slots: [1] });
     assert.deepStrictEqual(await locate(host, R), { folder: R, kind: "book", root: R, slots: [] });
-    assert.equal(await locate(host, "cat"), undefined);
+    assert.equal(await locate(host, "blueprints/cat"), undefined);
   });
 
   test("lists: an expanded book is one item, its slot folders only with slotFolders", async () => {
     const host = await expanded();
     assert.deepStrictEqual(await findBlueprintFolders(host), [R]);
-    assert.equal((await findBlueprintFolders(host, "", { slotFolders: true })).length, 6);
+    assert.equal((await findBlueprintFolders(host, BLUEPRINTS_ROOT, { slotFolders: true })).length, 6);
   });
 });
 
@@ -288,13 +289,13 @@ describe("importing onto an expanded book", () => {
 
   test("a book pasted from the category folder finds the expanded book by its slug", async () => {
     const host = await expanded({ clipboard: fixture("book-nested.txt") });
-    await importFromClipboard(host, "cat");
+    await importFromClipboard(host, "blueprints/cat");
     // The slug of the book's label is not "mil", so this one is created as a new, unexpanded book.
-    assert.ok(host.vault.has("cat/military-science-pack-240-v3/blueprint.json"));
+    assert.ok(host.vault.has("blueprints/cat/military-science-pack-240-v3/blueprint.json"));
     const named = await expanded({ clipboard: fixture("book-nested.txt") });
-    named.vault.set("cat/military-science-pack-240-v3/book.json", named.vault.get(`${R}/book.json`)!);
-    named.folders.add("cat/military-science-pack-240-v3");
-    const out = await importFromClipboard(named, "cat");
+    named.vault.set("blueprints/cat/military-science-pack-240-v3/book.json", named.vault.get(`${R}/book.json`)!);
+    named.folders.add("blueprints/cat/military-science-pack-240-v3");
+    const out = await importFromClipboard(named, "blueprints/cat");
     assert.equal(out.action, "expanded-book");
   });
 
@@ -318,9 +319,9 @@ describe("importing onto an expanded book", () => {
 
   test("a book imported as new stays one blueprint.json", async () => {
     const host = fakeHost({ clipboard: fixture("book-nested.txt") });
-    await importFromClipboard(host, "cat");
-    assert.ok(host.vault.has("cat/military-science-pack-240-v3/blueprint.json"));
-    assert.ok(!host.vault.has("cat/military-science-pack-240-v3/book.json"));
+    await importFromClipboard(host, "blueprints/cat");
+    assert.ok(host.vault.has("blueprints/cat/military-science-pack-240-v3/blueprint.json"));
+    assert.ok(!host.vault.has("blueprints/cat/military-science-pack-240-v3/book.json"));
   });
 });
 
